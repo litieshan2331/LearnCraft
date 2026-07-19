@@ -1,0 +1,16 @@
+{
+  "name": "@learncraft/root",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.15.0",
+  "engines": {
+    "node": ">=20.9.0",
+    "pnpm": ">=11.15.0"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @learncraft/web dev",
+    "build:web": "pnpm --filter @learncraft/web build",
+    "lint:web": "pnpm --filter @learncraft/web lint",
+    "typecheck:web": "pnpm --filter @learncraft/web exec tsc --noEmit"
+  }
+}

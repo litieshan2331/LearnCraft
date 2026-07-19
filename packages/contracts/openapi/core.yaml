@@ -1,0 +1,612 @@
+# LearnCraft 第一阶段 HTTP 契约。
+# 本文件定义系统状态、认证、学习目标、AgentRun 和统一错误响应；不包含密钥、Session 原始 token 或 ORM 模型。
+openapi: 3.1.0
+info:
+  title: LearnCraft Core API
+  version: 0.1.0
+  description: LearnCraft Web/Core 与 Python Agent Worker 共用的 HTTP 契约。
+servers:
+  - url: /
+    description: 同域 Web 服务入口
+tags:
+  - name: 系统
+    description: 无需登录的服务健康与版本信息接口
+  - name: 认证
+    description: 邮箱密码与不透明 Session 的认证接口
+  - name: 学习目标
+    description: 当前用户的学习目标接口
+  - name: AgentRun
+    description: 长任务的安全状态快照接口
+  - name: 内部接口
+    description: 仅限私有网络服务间调用的接口
+paths:
+  /api/v1/health:
+    get:
+      tags: [系统]
+      summary: 获取 Web 服务健康状态
+      description: 当前阶段只报告 Web 进程与基础运行时状态；接入 Docker 和数据库后再补充依赖项就绪检查。
+      operationId: get_web_health
+      security: []
+      responses:
+        '200':
+          description: 服务可处理请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatusResponse'
+  /api/v1/version:
+    get:
+      tags: [系统]
+      summary: 获取 Web 服务版本信息
+      description: 返回可安全公开的构建版本和 Git 提交标识，不返回环境变量、密钥或内部连接信息。
+      operationId: get_web_version
+      security: []
+      responses:
+        '200':
+          description: 服务版本信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatusResponse'
+  /api/v1/auth/register:
+    post:
+      tags: [认证]
+      summary: 注册用户并创建 Session
+      operationId: register_user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 注册成功
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticatedUser'
+        '409':
+          $ref: '#/components/responses/EmailAlreadyExists'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/auth/login:
+    post:
+      tags: [认证]
+      summary: 登录并创建 Session
+      operationId: login_user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticatedUser'
+        '401':
+          $ref: '#/components/responses/InvalidCredentials'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/auth/logout:
+    post:
+      tags: [认证]
+      summary: 注销当前 Session
+      operationId: logout_user
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: 已注销
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/ClearedSessionCookie'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/me:
+    get:
+      tags: [认证]
+      summary: 获取当前登录用户
+      operationId: get_current_user
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/learning-goals:
+    post:
+      tags: [学习目标]
+      summary: 创建当前用户的学习目标
+      operationId: create_learning_goal
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalCreateRequest'
+      responses:
+        '201':
+          description: 学习目标已创建，等待请求前测
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/learning-goals/{goal_id}:
+    get:
+      tags: [学习目标]
+      summary: 获取当前用户的单个学习目标
+      operationId: get_learning_goal
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/GoalId'
+      responses:
+        '200':
+          description: 学习目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/agent-runs/{agent_run_id}:
+    get:
+      tags: [AgentRun]
+      summary: 获取当前用户可见的 AgentRun 状态
+      operationId: get_agent_run
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AgentRunId'
+      responses:
+        '200':
+          description: AgentRun 安全状态快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /internal/v1/agent-runs/{agent_run_id}/results:
+    post:
+      tags: [内部接口]
+      summary: Worker 回写已校验的 Agent 结果
+      description: 仅允许 Agent Worker 在私有网络中调用，不能映射到浏览器可访问的公网入口。
+      operationId: submit_agent_run_result
+      x-internal: true
+      security:
+        - internalServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/AgentRunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRunResultSubmission'
+      responses:
+        '204':
+          description: 结果已接收
+        '401':
+          $ref: '#/components/responses/InternalAuthenticationFailed'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: lc_session
+      description: 浏览器 HttpOnly Session Cookie；原始 token 不出现在响应 JSON 或日志中。
+    internalServiceToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Service-Token
+      description: 仅用于 Web 与 Agent Worker 的私有服务认证。
+  headers:
+    SessionCookie:
+      description: 不透明 Session Cookie。生产环境必须带 Secure 与 HttpOnly 属性。
+      schema:
+        type: string
+    ClearedSessionCookie:
+      description: 失效的 Session Cookie。
+      schema:
+        type: string
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 防止重复创建产生状态或模型成本的资源。
+      schema:
+        type: string
+        format: uuid
+    GoalId:
+      name: goal_id
+      in: path
+      required: true
+      description: 学习目标 ID。
+      schema:
+        type: string
+        format: uuid
+    AgentRunId:
+      name: agent_run_id
+      in: path
+      required: true
+      description: AgentRun ID。
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Unauthorized:
+      description: 未登录、Session 无效或已过期。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalAuthenticationFailed:
+      description: 内部服务身份校验失败。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: 资源不存在或当前用户无权读取。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: 请求字段不符合接口契约。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    EmailAlreadyExists:
+      description: 邮箱已被注册。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InvalidCredentials:
+      description: 邮箱或密码错误，不能暴露具体错误原因。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    IdempotencyConflict:
+      description: 同一幂等键与不同请求内容发生冲突。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: 请求频率超过当前限制。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ServiceStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [status, service, version, git_sha]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+          description: 服务当前是否可处理请求；数据库等依赖就绪检查接入后可返回 degraded。
+        service:
+          type: string
+          enum: [web, agent-worker]
+          description: 返回该响应的服务标识；当前两个 `/api/v1` 接口固定为 web。
+        version:
+          type: string
+          maxLength: 100
+          description: 应用版本，例如 0.1.0。
+        git_sha:
+          type: string
+          maxLength: 100
+          description: 构建对应的 Git 提交标识；本地未注入时可返回 unknown。
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, display_name, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        password:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 128
+          writeOnly: true
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 128
+          writeOnly: true
+    AuthenticatedUser:
+      type: object
+      additionalProperties: false
+      required: [id, email, display_name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+    CurrentUser:
+      type: object
+      additionalProperties: false
+      required: [id, email, display_name, profile_completed]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        profile_completed:
+          type: boolean
+    GoalCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [subject_key, title, description, desired_outcome]
+      properties:
+        subject_key:
+          type: string
+          enum: [python-311-basics]
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          minLength: 1
+        desired_outcome:
+          type: string
+          minLength: 1
+        target_date:
+          type: string
+          format: date
+        weekly_minutes_override:
+          type: integer
+          minimum: 30
+          maximum: 10080
+    Goal:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - subject_key
+        - title
+        - description
+        - desired_outcome
+        - profile_version
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        subject_key:
+          type: string
+          enum: [python-311-basics]
+        title:
+          type: string
+        description:
+          type: string
+        desired_outcome:
+          type: string
+        target_date:
+          type: string
+          format: date
+        weekly_minutes_override:
+          type: integer
+        profile_version:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum:
+            - draft
+            - assessment_pending
+            - assessment_in_progress
+            - planning
+            - active
+            - completed
+            - archived
+            - failed
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AgentRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - run_type
+        - status
+        - target_type
+        - target_id
+        - retry_count
+        - trace_id
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        run_type:
+          type: string
+          enum:
+            - assessment_generate
+            - assessment_evaluate
+            - plan_generate
+            - card_content_generate
+            - card_quiz_generate
+            - adaptation
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, cancelled, expired]
+        target_type:
+          type: string
+          maxLength: 50
+        target_id:
+          type: string
+          format: uuid
+        retry_count:
+          type: integer
+          minimum: 0
+        trace_id:
+          type: string
+          maxLength: 128
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        error:
+          $ref: '#/components/schemas/AgentRunError'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AgentRunError:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable]
+      properties:
+        code:
+          type: string
+          maxLength: 100
+        message:
+          type: string
+          description: 面向用户的安全错误摘要，不得含 Provider 原始响应、密钥或内部连接信息。
+        retryable:
+          type: boolean
+    AgentRunResultSubmission:
+      type: object
+      additionalProperties: false
+      required: [result_type, result, trace_id]
+      properties:
+        result_type:
+          type: string
+          enum:
+            - assessment_generate
+            - assessment_evaluate
+            - plan_generate
+            - card_content_generate
+            - card_quiz_generate
+            - adaptation
+        result:
+          type: object
+          additionalProperties: true
+          description: 第一阶段预留的结构化结果容器；在对应业务 schema 落地后收紧为判别联合。
+        output_schema_version:
+          type: string
+          maxLength: 100
+        trace_id:
+          type: string
+          maxLength: 128
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, trace_id]
+      properties:
+        code:
+          type: string
+          description: 稳定的机器可读错误码。
+        message:
+          type: string
+          description: 面向用户的安全中文提示。
+        trace_id:
+          type: string
+          description: 用于日志关联的追踪 ID，不包含敏感信息。
+        field_errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldValidationError'
+    FieldValidationError:
+      type: object
+      additionalProperties: false
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string

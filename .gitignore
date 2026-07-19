@@ -1,0 +1,39 @@
+# 环境变量与本地密钥：根目录应用配置与 infra 的 Compose 配置均保留示例文件。
+.env
+.env.*
+infra/.env
+infra/.env.*
+!*.env.example
+
+# Node.js / pnpm 依赖、缓存与构建产物。
+node_modules/
+.pnpm-store/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Python 虚拟环境、缓存、测试与构建产物。
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+build/
+dist/
+wheels/
+
+# 操作系统与编辑器产生的本地文件。
+.DS_Store
+Thumbs.db
+*.pem

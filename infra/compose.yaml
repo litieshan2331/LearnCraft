@@ -1,0 +1,97 @@
+name: ${COMPOSE_PROJECT_NAME:?copy .env.example to .env before starting Compose}
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      # 仅供本机 VS Code 数据库工具访问，避免暴露给局域网。
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks: [private]
+
+  minio:
+    # 仅用于本地 P0 开发；该固定旧镜像不能直接作为生产对象存储方案。
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    volumes:
+      - minio-data:/data
+    ports:
+      # 本机开发使用：9000 为 S3 API，9001 为 MinIO 管理控制台。
+      - "127.0.0.1:${MINIO_API_HOST_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+    networks: [private]
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/docker/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      GIT_SHA: ${GIT_SHA:-unknown}
+      AGENT_INTERNAL_URL: http://agent-worker:8000
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/v1/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [edge, private]
+
+  agent-worker:
+    build:
+      context: ..
+      dockerfile: infra/docker/agent-worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      GIT_SHA: ${GIT_SHA:-unknown}
+      CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # 仅供本机独立调试 Worker 接口，不能从局域网访问。
+      - "127.0.0.1:${AGENT_WORKER_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; response = urlopen('http://127.0.0.1:8000/health'); raise SystemExit(0 if response.status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [private, egress]
+
+networks:
+  edge:
+  # 本地 P0 调试服务通过显式 ports 绑定到 127.0.0.1。
+  # 是否暴露给宿主机仍仅由各服务的 ports 决定。
+  private: {}
+  egress:
+
+volumes:
+  postgres-data:
+  minio-data:

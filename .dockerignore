@@ -1,0 +1,30 @@
+# Git、IDE 与本机 Agent 状态不进入 Docker 构建上下文。
+.git
+.agents
+.codex
+
+# JavaScript 依赖、缓存与构建产物由镜像内重新创建。
+node_modules
+.pnpm-store
+apps/web/node_modules
+apps/web/.next
+apps/web/coverage
+apps/web/playwright-report
+apps/web/test-results
+
+# Python 虚拟环境与缓存由镜像内重新创建。
+apps/agent-worker/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+*.py[cod]
+
+# 本地密钥、日志和操作系统文件不进入镜像。
+.env
+.env.*
+infra/.env
+infra/.env.*
+*.log
+.DS_Store
+Thumbs.db

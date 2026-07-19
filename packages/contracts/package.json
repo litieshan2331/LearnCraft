@@ -1,0 +1,6 @@
+{
+  "name": "@learncraft/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LearnCraft 跨语言 API 与事件契约"
+}
