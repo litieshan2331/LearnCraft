@@ -51,7 +51,7 @@ paths:
   /api/v1/auth/register:
     post:
       tags: [认证]
-      summary: 注册用户并创建 Session
+      summary: 注册用户
       operationId: register_user
       security: []
       requestBody:
@@ -62,20 +62,21 @@ paths:
               $ref: '#/components/schemas/RegisterRequest'
       responses:
         '201':
-          description: 注册成功
-          headers:
-            Set-Cookie:
-              $ref: '#/components/headers/SessionCookie'
+          description: 注册成功；不会创建 Session 或设置 Cookie，用户需另行登录。
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthenticatedUser'
         '409':
           $ref: '#/components/responses/EmailAlreadyExists'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
         '422':
           $ref: '#/components/responses/ValidationError'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/AuthenticationRateLimitUnavailable'
   /api/v1/auth/login:
     post:
       tags: [认证]
@@ -100,10 +101,14 @@ paths:
                 $ref: '#/components/schemas/AuthenticatedUser'
         '401':
           $ref: '#/components/responses/InvalidCredentials'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
         '422':
           $ref: '#/components/responses/ValidationError'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/AuthenticationRateLimitUnavailable'
   /api/v1/auth/logout:
     post:
       tags: [认证]
@@ -119,6 +124,8 @@ paths:
               $ref: '#/components/headers/ClearedSessionCookie'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
   /api/v1/auth/me:
     get:
       tags: [认证]
@@ -320,6 +327,18 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     RateLimited:
       description: 请求频率超过当前限制。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InvalidOrigin:
+      description: 认证写请求的 Origin 不在允许的同域 Web 来源中。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AuthenticationRateLimitUnavailable:
+      description: Redis 认证限流服务不可用。为避免绕过防暴力破解限制，请求被安全拒绝。
       content:
         application/json:
           schema:

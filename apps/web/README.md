@@ -2,7 +2,7 @@
 
 `@learncraft/web` 是 LearnCraft 的 Web 应用。它基于 Next.js App Router 构建，后续会承载学习者界面，以及面向浏览器的 BFF/Core API。
 
-当前目录已建立 DDD 目录骨架，但仍保留 Next.js 的最小页面；认证、学习目标、路线和 Agent 调用等业务功能尚未开始实现。
+当前已完成认证 BFF、登录/注册前端页面与学习区的最小 Session 守卫；学习者画像、目标、路线和 Agent 调用等业务页面仍待实现。
 
 ## 开发环境
 
@@ -31,6 +31,9 @@ pnpm lint:web
 
 # 执行 TypeScript 类型检查
 pnpm typecheck:web
+
+# 根据 Drizzle schema 生成 SQL 迁移
+pnpm db:generate
 ```
 
 也可以只在本应用目录中执行：
@@ -45,8 +48,9 @@ pnpm --filter @learncraft/web dev
 apps/web/
 ├─ public/                 # 静态资源
 ├─ src/
-│  ├─ app/                 # Next.js 页面、布局与薄 Route Handler
-│  ├─ modules/             # 按限界上下文组织的 DDD 四层模块
+│  ├─ app/                 # 路由组、页面、布局与薄 Route Handler
+│  ├─ modules/             # 按限界上下文组织的 DDD 模块及其 presentation 层
+│  ├─ shared/              # 跨业务复用的无业务规则 UI、Hook、工具与类型
 │  └─ lib/                 # 数据库、Session、Outbox、日志等框架适配
 ├─ tests/                  # 单元、集成与端到端测试
 ├─ package.json            # Web 应用依赖与脚本

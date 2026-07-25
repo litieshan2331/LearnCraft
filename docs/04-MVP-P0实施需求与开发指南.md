@@ -56,13 +56,14 @@
 
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
-| P0-AUTH-001 | 用户可用邮箱、昵称、密码注册。 | 合法输入返回 `201`；重复邮箱返回 `409 EMAIL_ALREADY_EXISTS`；数据库仅保存 Argon2id 哈希。 |
+| P0-AUTH-001 | 用户可用邮箱、昵称、密码注册。 | 合法输入返回 `201` 且不设置 Session Cookie；重复邮箱返回 `409 EMAIL_ALREADY_EXISTS`；数据库仅保存 Argon2id 哈希。 |
 | P0-AUTH-002 | 用户可用邮箱和密码登录。 | 正确凭据返回 `200` 并设置 `HttpOnly`、`Secure`（生产）、`SameSite=Lax` Session Cookie；响应体不含密码、哈希或原始 session token。 |
 | P0-AUTH-003 | 用户可退出和使当前 Session 失效。 | 退出后 Cookie 被清除，服务器 Session 标记为撤销；再次访问私有 API 返回 `401`。 |
 | P0-AUTH-004 | 所有用户私有资源按 `owner_id` 鉴权。 | 用户 A 使用用户 B 的目标、路线、题目、代码运行或 AgentRun ID 请求时，统一返回 `404`（不泄露资源存在）。 |
 | P0-AUTH-005 | 认证入口具备基础防暴力破解能力。 | 注册/登录按 IP 与账号标识限流；连续失败有统一错误文案；日志不记录密码。 |
+| P0-AUTH-006 | Session 采用受限滑动续期。 | 闲置满 3 天失效；从创建起最长 15 天；仅在剩余不足 24 小时且距上次续期超过 12 小时时，续期并写库。 |
 
-**暂时需要做：**邮箱格式和密码强度校验（12–128 字符）、Argon2id 哈希、数据库 Session、CSRF 同源保护、服务端 owner 校验、登录/注册限流、Session 定期清理。
+**暂时需要做：**邮箱格式和密码强度校验（12–128 字符）、Argon2id 哈希、数据库 Session、CSRF 同源保护、服务端 owner 校验、基于 Redis 的登录/注册限流、Session 定期清理。
 
 **暂时不需要做：**邮箱验证、忘记密码、OAuth、Magic Link、MFA、设备管理、管理员/角色体系、面向移动 App 的 Bearer Token。`accounts.password` 不是推荐表设计：P0 将密码哈希放在 `users.password_hash`；未来若接 OAuth，`oauth_accounts` 专门保存第三方账号绑定。
 
@@ -102,7 +103,7 @@
 | P0-PLAN-003 | 路线依赖关系合法。 | 保存前校验节点数、阶段覆盖、前置无环和时长范围；不合法结果不能写入激活路线。 |
 | P0-PLAN-004 | 用户能查看路线并打开当前可学节点。 | 路线页能区分 `locked`、`available`、`in_progress`、`completed`、`needs_review`；首个可学节点可直接进入。 |
 | P0-PLAN-005 | 测验/代码结果触发显式规则调整。 | 仅使用通过简答评分置信度门槛的测验结果：≥80% 解锁下一节点；50–79% 标记复习建议；<50% 或连续代码失败插入一张补强卡；所有调整写入审计事件。 |
-| P0-PLAN-006 | 高分加速有边界。 | 100%、简答题评分置信度达标且代码通过时，只能跳过同阶段一张基础节点，且必须满足其余前置；页面展示调整理由。 |
+| P0-PLAN-006 | 高分加速有边界。 | 100% 且代码通过时，只能跳过同阶段一张基础节点，且必须满足其余前置；页面展示调整理由。 |
 
 **暂时需要做：**异步路线生成、DAG 校验、路线版本、简单可解释规则、节点状态展示和失败重试。
 
@@ -120,7 +121,7 @@
 
 **暂时需要做：**种子来源、对象存储 URI 元数据、分块、固定 embedding、FTS、精确向量检索、引用校验、卡片内容 schema，以及实战/调试 Demo 的结构化合同和发布前验证。
 
-**暂时不需要做：**用户上传、任意 URL 抓取、PDF/OCR/MinerU、视频转写、全文版权库、向量数据库迁移、多 embedding 版本共存。
+**暂时不需要做：**用户上传、任意 URL 抓取、PDF/OCR/MinerU、视频转写、全文版权库、Milvus 迁移、多 embedding 版本共存。检索实现必须只依赖 `VectorStore` 抽象，P0 由 pgvector 适配器承载。
 
 #### 实战 / 调试节点的可运行 Demo 合同
 
@@ -252,7 +253,7 @@ erDiagram
 
 ### 3.4 初始化约定
 
-下面 DDL 是 P0 的迁移蓝图。实现时按第 7 节的 migration 顺序拆到 `db/migrations/`，由 Drizzle 执行；不要把整段 SQL 在生产库手工粘贴运行。
+下面 DDL 是 P0 的迁移蓝图。当前空库基线已由 Drizzle 生成 `apps/web/src/lib/db/migrations/0000_initial_p0_schema.sql`，并在该文件中补充扩展、`agent` schema 与 trigger 的 raw SQL；不要把整段 SQL 在生产库手工粘贴运行。
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -293,8 +294,8 @@ CREATE TABLE public.auth_sessions (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     token_hash      char(64) NOT NULL UNIQUE, -- SHA-256(raw opaque token)
-    expires_at      timestamptz NOT NULL,
-    last_seen_at    timestamptz NOT NULL DEFAULT now(),
+    expires_at      timestamptz NOT NULL, -- 闲置有效期；最大值受 created_at + 15 天约束
+    last_seen_at    timestamptz NOT NULL DEFAULT now(), -- 最近一次被允许续期的时间
     revoked_at      timestamptz,
     ip_hash         char(64),
     user_agent      varchar(500),
@@ -597,8 +598,7 @@ CREATE TABLE public.content_documents (
 CREATE INDEX idx_content_documents_source_status
     ON public.content_documents(source_id, status);
 
--- {{EMBEDDING_DIMENSION}} 必须在生成 0005 migration 前替换为选定 Profile 的实际维度。
--- P0 采用固定维度，例如 vector(1536)；不可让每条记录各自选择维度。
+-- 已锁定 Profile siliconflow-bge-m3-v1，固定维度为 1024；不可让每条记录各自选择维度。
 CREATE TABLE public.content_chunks (
     id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     document_id           uuid NOT NULL REFERENCES public.content_documents(id) ON DELETE CASCADE,
@@ -607,7 +607,7 @@ CREATE TABLE public.content_chunks (
     search_tsv            tsvector GENERATED ALWAYS AS (
                             to_tsvector('simple', content)
                           ) STORED,
-    embedding             vector({{EMBEDDING_DIMENSION}}),
+    embedding             vector(1024),
     embedding_model       varchar(150),
     embedding_version     varchar(100),
     chunker_version       varchar(100) NOT NULL,
@@ -669,7 +669,7 @@ CREATE TABLE public.card_content_references (
 
 对于 `practice/debug` 卡片，`public_content_json` 保存用户可见的 `runnable_demo`、`call_sequence` 和 `annotated_result`；`runner_spec_json` 保存允许运行的 runtime、输入、期望输出与非敏感验证摘要；`generation_metadata` 保存生成/修复次数、验证 `code_run_id` 和 schema 版本。任何包含隐藏测试、内部 Runner 地址或密钥的信息都不能写入这三个对用户可读的字段。
 
-**向量检索决策：**首批资料较少时，以 `source_type / tag / language / verification_status` 过滤后，做 PostgreSQL FTS 和 `<=>` 余弦精确排序即可。此时不建立 HNSW，导入和重嵌入更简单，也不会出现近似召回质量难以解释的问题。达到以下任一条件后，才以离线检索集压测并评审 HNSW：`content_chunks >= 50,000`、检索 p95 超过 300 ms、或精确检索已影响用户等待时间。批准后执行类似以下的专用迁移（`CREATE INDEX CONCURRENTLY` 不能放在普通事务迁移中）：
+**向量检索决策：**检索工作流只能调用 `VectorStore` 抽象，不得出现 pgvector SQL 或 Milvus SDK。该端口可承载 dense 与 sparse 向量，但单次 `search` 只查询一种模态；`HybridRetriever` 分别获取 dense、sparse（未来）或 FTS 的排序列表，再以 RRF 融合。P0 的托管 BGE-M3 Embedding API 仅使用 dense 输出，因此以 `source_type / tag / language / verification_status` 过滤后，分别做 PostgreSQL FTS 和 `<=>` 余弦精确排序并融合即可；`tsvector` 是词法检索，不是 BGE-M3 学习型 sparse embedding。此时不建立 HNSW，导入和重嵌入更简单，也不会出现近似召回质量难以解释的问题。达到以下任一条件后，才以离线检索集压测并评审 HNSW：`content_chunks >= 50,000`、检索 p95 超过 300 ms、或精确检索已影响用户等待时间。只有当已确认的数据规模或吞吐目标仍无法由 pgvector 满足，且用户批准 backfill、双读评测、成本与回滚方案后，才实现 `MilvusVectorStore` 并切换。批准 HNSW 后执行类似以下的专用迁移（`CREATE INDEX CONCURRENTLY` 不能放在普通事务迁移中）：
 
 ```sql
 CREATE INDEX CONCURRENTLY idx_content_chunks_embedding_hnsw
@@ -831,18 +831,15 @@ FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 -- 其余表在同一迁移中按相同模式建立 trigger；不要依赖应用代码“记得更新”。
 ```
 
-推荐迁移拆分如下：
+当前初始库使用一个可审查的 `0000_initial_p0_schema`：其中包含 22 张表、`pgcrypto`/`citext`/`vector` 扩展、`agent` schema、索引、外键和 15 个 `updated_at` trigger，已在本地 Docker PostgreSQL 验证。因为当前数据库此前为空，合并首份迁移可保证跨表外键和约束一次性建立；上线后不得重写此文件，所有变更必须由新的增量迁移表达。
+
+原先规划的逻辑拆分保留为后续迁移的职责参考：
 
 ```text
-0001_extensions_and_schemas
-0002_identity_and_sessions
-0003_profile_goal_plan
-0004_assessment
-0005_content_and_pgvector
-0006_card_practice_adaptation
-0007_agent_runs_and_events
-0008_outbox_idempotency_indexes_triggers
-0009_langgraph_checkpoint_vendor_schema
+0001_<下一项增量变更>
+0002_<下一项增量变更>
+...
+00xx_langgraph_checkpoint_vendor_schema
 ```
 
 `0009` 必须锁定 `langgraph-checkpoint-postgres` 版本，并把该版本的官方 DDL 以 raw SQL 纳入迁移仓库。不要在每次应用启动时无条件调用 `PostgresSaver.setup()` 改动生产 schema。
@@ -893,7 +890,6 @@ Content-Type: application/json
 
 ```http
 HTTP/1.1 201 Created
-Set-Cookie: lc_session=<opaque-random-token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800
 
 {
   "id": "c7a1f6f9-5b06-4dc2-8ea5-8ffc3c8d4f69",
@@ -901,6 +897,8 @@ Set-Cookie: lc_session=<opaque-random-token>; HttpOnly; Secure; SameSite=Lax; Pa
   "display_name": "Stephy"
 }
 ```
+
+注册只创建账号，不创建 `auth_sessions` 记录，也不会返回 `Set-Cookie`；客户端必须再调用登录接口取得 Session。
 
 #### 登录、登出与当前用户
 
@@ -911,7 +909,7 @@ Content-Type: application/json
 { "email": "learner@example.com", "password": "a-long-unique-password" }
 
 HTTP/1.1 200 OK
-Set-Cookie: lc_session=<opaque-random-token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800
+Set-Cookie: lc_session=<opaque-random-token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=259200
 
 { "id": "c7a1f6f9-5b06-4dc2-8ea5-8ffc3c8d4f69", "email": "learner@example.com", "display_name": "Stephy" }
 
@@ -1145,8 +1143,12 @@ sequenceDiagram
     participant A as Python Agent Worker
     participant M as 托管模型 API
 
-    U->>W: 注册 / 登录
-    W->>DB: 创建用户 + Argon2id hash / 创建 Session
+    U->>W: 注册
+    W->>DB: 创建用户 + Argon2id hash
+    DB-->>W: 用户
+    W-->>U: 201 Created（不设置 Cookie）
+    U->>W: 登录
+    W->>DB: 校验用户 + 创建 Session
     DB-->>W: 用户与 Session
     W-->>U: Set-Cookie + 当前用户
     U->>W: 提交画像与学习目标
@@ -1485,14 +1487,14 @@ uv run pytest
 
 ### 步骤 4：锁定 embedding Profile 后创建 Drizzle Schema 与迁移
 
-这一步之前必须在 ADR/`.env.example` 确认三项值：`EMBEDDING_PROVIDER`、`EMBEDDING_MODEL`、`EMBEDDING_DIMENSION`。将实际维度替换第 3.6 节的 `{{EMBEDDING_DIMENSION}}`，之后生成 `0005_content_and_pgvector`；P0 不允许运行时随意修改它。
+这一步之前已在 ADR/`.env.example` 锁定五项值：`EMBEDDING_PROVIDER=SiliconFlow`、`EMBEDDING_MODEL=BAAI/bge-m3`、`EMBEDDING_DIMENSION=1024`、`EMBEDDING_METRIC=cosine`、`EMBEDDING_PROFILE_VERSION=siliconflow-bge-m3-v1`。首份迁移已使用 `vector(1024)`，P0 不允许运行时随意修改它。
 
 实施顺序：
 
-1. 在 `db/schema/` 按第 3.2 节的文件归属声明全部 22 张表与 relation；
+1. 已在 `apps/web/src/lib/db/schema/` 按第 3.2 节的文件归属声明全部 22 张表与 relation；
 2. 将扩展、schema、CHECK、partial index、trigger、HNSW（暂不创建）等 Drizzle 不擅长表达的部分放在 migration raw SQL；
-3. 依次生成并审查 `0001` 到 `0009` 迁移；
-4. 在空库执行迁移、seed 和 schema smoke test；
+3. 已生成并审查 `0000_initial_p0_schema`；后续所有变更使用新的增量迁移；
+4. 已在空库执行首份迁移并完成表、扩展、向量列、trigger 的 schema smoke test；下一步再加入 seed；
 5. 使用测试数据库重复运行迁移，验证不会出现第二套 Alembic 迁移或 `updated_at` 漏更新。
 
 Seed 必须包含：一名测试用户（仅测试环境）、Python 基础受控来源、至少一份文档、若干分块、对应 embedding、选择题 + 简答题的前测/随堂题模板、隐藏 rubric 与预期 AI 判分 fixture、可运行 Demo golden case、检索 golden set。真实用户密码和 Provider Key 永远不进入 seed 文件。
@@ -1501,14 +1503,14 @@ Seed 必须包含：一名测试用户（仅测试环境）、Python 基础受�
 
 认证实现的最小顺序：
 
-1. `register`：规范化 email，做 Zod 校验和限流，以 Argon2id 哈希密码，事务中插入 `users`、生成 32 字节随机 Session token、仅存其 SHA-256 到 `auth_sessions`；
+1. `register`：规范化 email，做 Zod 校验和限流，以 Argon2id 哈希密码后仅插入 `users`；不创建 `auth_sessions`，不返回 Cookie；
 2. `login`：按 email 取用户，使用恒定时间的 Argon2 验证；成功后创建新 Session，更新 `last_login_at`；失败时统一返回 `401 INVALID_CREDENTIALS`；
-3. `session`：每个请求从 Cookie 取 token 后 hash，查询未撤销且未过期 Session；滑动续期要有频率上限，避免每个 GET 都写库；
+3. `session`：每个请求从 Cookie 取 token 后 hash，查询未撤销且未过期 Session。初始闲置有效期为 3 天，绝对上限为 `created_at + 15 天`；仅当剩余有效期不足 24 小时且距 `last_seen_at` 超过 12 小时时，将 `expires_at` 延长为 `min(now + 3 天, created_at + 15 天)`，并更新 `last_seen_at`，避免每个 GET 都写库；
 4. `logout`：在事务中设置 `revoked_at`，清除 Cookie；
 5. `require_current_user()`：Route Handler 的唯一认证入口；所有后续 use case 只接收已鉴权的 `user_id`，不能相信客户端 body 中的 `owner_id`；
 6. 添加每天清理过期/撤销 Session 和过期 idempotency key 的维护任务。
 
-Argon2id 的参数从 OWASP 建议的最低基线起步：内存约 19 MiB、迭代次数 2、并行度 1；在部署规格上压测后只能向更安全或可承受的方向调整。生产 Cookie 必须带 `Secure`；跨站写请求要开启 CSRF 防护。
+Argon2id 的参数从 OWASP 建议的最低基线起步：内存约 19 MiB、迭代次数 2、并行度 1；在部署规格上压测后只能向更安全或可承受的方向调整。认证限流的共享状态只放 Redis，业务数据与 Session 事实源仍是 PostgreSQL。生产 Cookie 必须带 `Secure`；跨站写请求要开启 CSRF 防护。
 
 ### 步骤 6：实现核心领域用例与 Outbox
 
@@ -1567,10 +1569,12 @@ LLM_GENERATION_API_KEY=
 LLM_GENERATION_TIMEOUT_SECONDS=45
 LLM_GENERATION_MAX_OUTPUT_TOKENS=3000
 ASSESSMENT_AI_MIN_CONFIDENCE=0.70
-EMBEDDING_PROVIDER=approved-provider
-EMBEDDING_MODEL=approved-embedding-model
-EMBEDDING_DIMENSION=REPLACE_BEFORE_MIGRATION
-EMBEDDING_PROFILE_VERSION=2026-07-p0
+EMBEDDING_PROVIDER=SiliconFlow
+EMBEDDING_MODEL=BAAI/bge-m3
+EMBEDDING_DIMENSION=1024
+EMBEDDING_METRIC=cosine
+EMBEDDING_PROFILE_VERSION=siliconflow-bge-m3-v1
+SILICONFLOW_API_KEY=
 MODEL_RUN_MAX_COST_USD=0.05
 ```
 
@@ -1593,8 +1597,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -1611,16 +1613,13 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
     volumes:
       - minio-data:/data
-    ports:
-      - "127.0.0.1:${MINIO_API_HOST_PORT:-9000}:9000"
-      - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
     networks: [private]
 
   web:
     build:
       context: ..
       dockerfile: infra/docker/web.Dockerfile
-    env_file: .env
+    env_file: ../.env
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-learncraft}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-learncraft}
@@ -1638,7 +1637,7 @@ services:
       context: ..
       dockerfile: infra/docker/agent-worker.Dockerfile
     command: uv run learncraft-agent worker
-    env_file: .env
+    env_file: ../.env
     environment:
       CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
       AGENT_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-learncraft}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-learncraft}
@@ -1647,8 +1646,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "127.0.0.1:${AGENT_WORKER_HOST_PORT:-8000}:8000"
+    # 不映射端口；health 仅供 private 网络中的服务探测。
     networks: [private, egress]
 
   code-runner:
@@ -1656,7 +1654,7 @@ services:
       context: ..
       dockerfile: infra/docker/code-runner.Dockerfile
     restart: unless-stopped
-    env_file: .env
+    env_file: ../.env
     environment:
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:?set RUNNER_SHARED_SECRET in .env}
       RUNNER_DEFAULT_RUNTIME: python-3.11
@@ -1677,7 +1675,7 @@ services:
       context: ..
       dockerfile: infra/docker/web.Dockerfile
     command: pnpm db:migrate
-    env_file: .env
+    env_file: ../.env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-learncraft}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-learncraft}
     depends_on:
@@ -1703,15 +1701,14 @@ volumes:
 
 networks:
   edge: {}
-  # P0 本地调试允许 PostgreSQL 通过显式 ports 绑定到 127.0.0.1。
-  # 服务是否对宿主机开放由各自 ports 决定，而不是由该网络决定。
-  private: {}
+  private:
+    internal: true
   egress: {}
 ```
 
 这份 Compose 的安全和网络含义：
 
-- 本地 P0 中，Web、PostgreSQL、MinIO、Worker 与 Swagger UI 都仅绑定到本机环回地址，方便浏览器、VS Code 与接口工具独立调试；Runner 不发布宿主机端口。生产则由反向代理公开 Web，数据库、对象存储与 Worker 均不映射端口。
+- 只把 Web 和 Swagger UI 绑定到本机环回地址；PostgreSQL、MinIO、Worker、Runner 不发布端口；生产则由反向代理公开 Web。
 - `agent-worker` 额外挂载 `egress`，仅用于 HTTPS 调用托管模型 API；Runner 没有 egress，也不持有数据库或 Provider Key。
 - `code-runner` 的 Compose 配置只是第二层限制。**绝不**把 Docker socket、宿主机目录、云凭据或数据库 URL 传给它。真正运行用户代码的子进程/一次性容器仍必须再设置无网络、非 root、cgroup 限制、超时、文件大小限制和 seccomp/AppArmor/gVisor 等隔离。
 - `swagger-ui` 使用 `docs` profile，解决 Next.js 不会像 FastAPI 那样自动生成 Swagger UI 的问题：OpenAPI 是契约文件，Swagger UI 只是它的本地/测试环境展示器。
@@ -1719,8 +1716,8 @@ networks:
 初始化与启动顺序：
 
 ```powershell
-Copy-Item infra\.env.example infra\.env
-# 编辑 infra/.env：本地强密码、RUNNER_SHARED_SECRET、LLM_PROVIDER_MODE=fake
+Copy-Item .env.example .env
+# 编辑 .env：本地强密码、RUNNER_SHARED_SECRET、LLM_PROVIDER_MODE=fake
 
 docker compose -f infra/compose.yaml up --build -d postgres minio web agent-worker code-runner
 docker compose -f infra/compose.yaml --profile tools run --rm migrate
@@ -1738,7 +1735,7 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 
 1. `OutboxRepository`：领取、锁定、重试、死信状态；
 2. `AgentRunRepository`：保存运行、事件、重试次数、预算和 trace；
-3. `RetrieverPort`：先读已审核种子内容，执行 metadata 过滤 → FTS → 精确向量排序，返回可引用定位；
+3. `RetrieverPort`：先读已审核种子内容，分别经 `VectorStore` 做 dense 召回、经词法检索端口做 FTS 召回，再由 `HybridRetriever` 用 RRF 融合，返回可引用定位；P0 注入 `PgvectorVectorStore`，未来可替换为 `MilvusVectorStore`。若 Provider 可返回 sparse 向量，再增加一次 `VectorStore` sparse 召回；
 4. `PlanGraph`：输入规范化 → 生成 → Pydantic schema → 四阶段/DAG/时长校验 → Internal Core API；
 5. `CardContentGraph`：检索、生成、引用校验；对实战/调试节点执行 Demo schema → Runner 预运行 → 预期输出比对 → 失败修复/模板兜底后回写；`QuizGraph`：生成 5–8 题的选择题 + 简答题，并由 `assessment_evaluate` 以 rubric 评分；
 6. `RunnerClient`：Web 只调用 Runner 的受限协议，Runner 只返回结构化结果；
@@ -1840,7 +1837,7 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 - [ ] 全新 Docker volume 上 `migrate → seed → E2E` 一次成功。
 - [ ] 重复相同 Idempotency-Key 的建目标、生成路线、生成内容、代码运行不创建重复资源。
 - [ ] `updated_at` 通过数据库 trigger 更新；应用遗漏更新字段时测试能发现。
-- [ ] Web、PostgreSQL、MinIO、Worker、Swagger UI 仅绑定 `127.0.0.1`（本地）；Runner 没有宿主机端口映射，且所有服务均没有公网端口。
+- [ ] PostgreSQL、MinIO、Worker、Runner 均没有公网端口映射；只有 Web/Swagger 绑定 `127.0.0.1`（本地）。
 - [ ] 断开模型 API、停止 Worker、重启 Web 三种故障下，用户看到安全失败态并可重试；已完成数据不丢失。
 - [ ] Runner 未挂载 Docker socket、宿主目录或云凭据；恶意网络/资源耗尽样例被拒绝或终止。
 
@@ -1858,14 +1855,14 @@ P0 只有在以下条件同时满足时才算完成：
 
 ---
 
-## 9. 开工前仅剩的四个配置决策
+## 9. 开工前仅剩的两个配置决策
 
-不需要等这些决定才能先创建目录、契约、Fake Provider 和认证；但 **生成 `0005_content_and_pgvector` 迁移和进行真实模型联调前**，必须记录以下值：
+已锁定的 Embedding Profile 为 `SiliconFlow / BAAI/bge-m3 / 1024 / cosine / siliconflow-bge-m3-v1`；真实 API Key 仅写入本机 `.env` 或 Secret Manager。现在不需要再等待模型或向量维度决策；创建 `0005_content_and_pgvector` 时必须使用 `vector(1024)`。
+
+其余需要在对应实现前确认的决策如下：
 
 | 决策 | 建议的 P0 做法 | 影响点 |
 | --- | --- | --- |
-| 首个托管模型 Provider | 选择一家可提供稳定结构化生成和 embedding 的批准供应商；先只接一个。 | `ProviderAdapter`、Secret、费用预算、数据条款。 |
-| embedding 模型与维度 | 选一个固定模型，填入实际 `EMBEDDING_DIMENSION`，创建 migration 后不混用。 | `content_chunks.embedding`、seed、检索测试、健康检查。 |
 | Runner 隔离实现 | 本地可先用受限子进程/一次性容器验证；生产必须采用经逃逸测试的强隔离方案。 | 是否能安全启用在线运行。 |
 | 首个部署域名/HTTPS | staging 和 production 使用不同 Secret 与 Cookie 配置。 | Cookie `Secure`、CORS/CSRF、反向代理、回调 URL。 |
 

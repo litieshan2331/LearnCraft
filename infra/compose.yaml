@@ -21,6 +21,29 @@ services:
       start_period: 10s
     networks: [private]
 
+  redis:
+    # P0 仅用于认证限流；固定版本以避免本地环境随 latest 漂移。
+    image: redis:7.4.9-alpine
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    volumes:
+      - redis-data:/data
+    ports:
+      # 仅供本机 Redis Insight/CLI 调试，避免暴露给局域网。
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks: [private]
+
   minio:
     # 仅用于本地 P0 开发；该固定旧镜像不能直接作为生产对象存储方案。
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
@@ -46,10 +69,18 @@ services:
       NODE_ENV: production
       APP_VERSION: ${APP_VERSION:-0.1.0}
       GIT_SHA: ${GIT_SHA:-unknown}
+      APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN in .env}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:?set SESSION_COOKIE_SECURE in .env}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
       AGENT_INTERNAL_URL: http://agent-worker:8000
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - "127.0.0.1:${WEB_PORT:-3000}:3000"
@@ -71,6 +102,12 @@ services:
       GIT_SHA: ${GIT_SHA:-unknown}
       CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:?set EMBEDDING_PROVIDER in .env}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:?set EMBEDDING_MODEL in .env}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:?set EMBEDDING_DIMENSION in .env}
+      EMBEDDING_METRIC: ${EMBEDDING_METRIC:?set EMBEDDING_METRIC in .env}
+      EMBEDDING_PROFILE_VERSION: ${EMBEDDING_PROFILE_VERSION:?set EMBEDDING_PROFILE_VERSION in .env}
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,4 +131,5 @@ networks:
 
 volumes:
   postgres-data:
+  redis-data:
   minio-data:

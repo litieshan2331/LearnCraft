@@ -2,7 +2,7 @@
 
 > 本文件只描述领域边界、代码目录和依赖规则。建议采用“Next.js BFF/界面 + Python LangGraph Agent Worker”的模块化单体形态：业务聚合由 `apps/web` 统一持有，Agent 只负责工作流编排和工具调用。这样既保留 Next.js 的前后端一体体验，也避免 TypeScript 与 Python 各自实现一套学习领域模型。
 >
-> 文档状态：待评审｜日期：2026-07-18
+> 文档状态：实施中｜更新日期：2026-07-25
 >
 > 配套文档：[技术栈选型](./01-技术栈选型.md) · [MVP PRD](./03-MVP-PRD.md)
 
@@ -46,21 +46,26 @@ Agent 通过 Anti-Corruption Layer（ACL）调用 Core API/应用服务；不能
 
 ## 2. 当前仓库主结构
 
-下图以当前**已实际创建**的目录为准，聚焦 Web 与 Agent Worker 的 DDD 大框架；省略 `__init__.py`、README、依赖目录和配置文件。尚未开始实现的页面、Route Handler、数据库迁移、Docker 与脚本不提前列入。
+下图以当前**已实际创建**的目录为准，聚焦 Web 与 Agent Worker 的 DDD 大框架；省略 `__init__.py`、README、依赖目录和配置文件。数据库 schema 与首份 Drizzle 迁移已经创建；Identity 已实现注册、登录、登出、当前用户 BFF 接口，以及首页、登录、注册和受会话保护的 onboarding 占位页。其余业务限界上下文仍保持目录骨架。
 
 ```text
 learncraft/
 ├─ apps/
 │  ├─ web/                                  # Next.js UI + BFF/Core API
+│  │  ├─ drizzle.config.ts                   # Drizzle Kit 配置（schema 与迁移输出）
 │  │  ├─ src/
-│  │  │  ├─ app/
-│  │  │  │  └─ api/v1/                      # 薄 Route Handler 入口（尚未实现具体接口）
+│  │  │  ├─ app/                            # Next.js App Router；只组织页面、布局和 BFF 路由
+│  │  │  │  ├─ (public)/                    # 公共页路由组：当前为首页 `/`
+│  │  │  │  ├─ (auth)/                      # 认证页路由组：`/login`、`/register`
+│  │  │  │  ├─ (learn)/                     # 登录后的学习区路由组：当前为 `/onboarding`
+│  │  │  │  └─ api/v1/                      # 薄 Route Handler：health、version、auth 等 BFF 接口
 │  │  │  ├─ modules/                        # Web 限界上下文
 │  │  │  │  ├─ identity/                    # 邮箱密码、Session、当前用户
 │  │  │  │  │  ├─ domain/
 │  │  │  │  │  ├─ application/
 │  │  │  │  │  ├─ infrastructure/
-│  │  │  │  │  └─ interfaces/
+│  │  │  │  │  ├─ interfaces/               # Zod 请求 schema、HTTP 输入/输出适配
+│  │  │  │  │  └─ presentation/             # React 表单、会话守卫、同源 BFF client
 │  │  │  │  ├─ profile/                     # 学习者画像与偏好
 │  │  │  │  │  ├─ domain/
 │  │  │  │  │  ├─ application/
@@ -91,9 +96,13 @@ learncraft/
 │  │  │  │  │  ├─ application/
 │  │  │  │  │  ├─ infrastructure/
 │  │  │  │  │  └─ interfaces/
-│  │  │  │  └─ shared/kernel/               # 极小共享内核
+│  │  │  │  ├─ shared/kernel/               # 极小共享内核
+│  │  │  │  └─ shared/ui/                   # 无业务归属的可复用 React UI（如 Brand）
 │  │  │  └─ lib/                            # Web 通用框架适配
 │  │  │     ├─ db/
+│  │  │     │  ├─ client.ts                  # 懒加载 PostgreSQL/Drizzle 客户端
+│  │  │     │  ├─ schema/                    # 22 张 P0 表、外键、索引、CHECK 与关系
+│  │  │     │  └─ migrations/                # 0000 初始 SQL 与 Drizzle meta 快照
 │  │  │     ├─ session/
 │  │  │     ├─ outbox/
 │  │  │     └─ logger/
@@ -144,23 +153,28 @@ learncraft/
       └─ python/
 ```
 
-### 2.1 Web BC 当前四层骨架
+### 2.1 Web BC 当前分层
 
-当前 `identity`、`profile`、`planning`、`assessment`、`content`、`practice` 与 `agent-run` 都已实际创建相同的四层目录：
+`identity` 已在四层 DDD 骨架之外增加 `presentation/`，承载认证 UI；`profile`、`planning`、`assessment`、`content`、`practice` 与 `agent-run` 当前仍保持四层目录骨架：
 
 ```text
 apps/web/src/modules/<bounded-context>/
 ├─ domain/                 # 聚合、实体、值对象、领域服务、repository interface
 ├─ application/            # command/query、事务边界、用例编排、port
 ├─ infrastructure/         # Drizzle repository、Outbox、Worker/Runner adapter
-└─ interfaces/             # Zod、Session 提取、HTTP presenter
+├─ interfaces/             # Zod、Session 提取、HTTP presenter
+└─ presentation/           # 仅 Identity 当前使用：React 组件、BFF client、页面会话守卫
 ```
 
-目前这一层级是目录骨架，尚未提前创建具体聚合或 repository 文件。开始实现某个用例时，再在对应层内按需要创建 `repositories/`、`services/`、`commands/`、`dto/`、`ports/`、`persistence/` 等子目录；不要为了“目录完整”创建没有归属的空业务文件。
+除 Identity 外，这一层级仍是目录骨架，尚未提前创建具体聚合或 repository 文件。开始实现某个用例时，再在对应层内按需要创建 `repositories/`、`services/`、`commands/`、`dto/`、`ports/`、`persistence/` 等子目录；不要为了“目录完整”创建没有归属的空业务文件。
 
-`shared/kernel` 只放跨 Web 上下文稳定且无业务归属的原语。React Server Components 和 Route Handler 只能调用 `application` 的 facade，不直接访问数据库。
+`shared/kernel` 只放跨 Web 上下文稳定且无业务归属的原语；`shared/ui` 只放无业务归属的 React 组件。React Server Components 和 Route Handler 只能调用 `application` 的 facade，不直接访问数据库。
 
-### 2.2 Python Agent Worker：FastAPI 目录与 DDD 的对应关系
+### 2.2 前端路由与展示层（A 方案）
+
+`app/` 使用 App Router route groups 只划分布局和页面区域，括号名称不出现在 URL 中：`(public)` 对应公开首页，`(auth)` 对应 `/login` 和 `/register`，`(learn)` 对应需要会话的学习页面。业务组件不放在 `app/` 内，而放在所属 BC 的 `presentation/`；本次落地的 `identity/presentation/` 包含表单、注销按钮、会话守卫和同源 BFF client。这样将来为 Planning 增加路线页时，只需新增 `modules/planning/presentation/`，不把业务逻辑散落到路由目录。
+
+### 2.3 Python Agent Worker：FastAPI 目录与 DDD 的对应关系
 
 Python Worker 使用你熟悉的 `core / schemas / services / repositories / models` 命名，但它们只服务于 **Agent 编排与资料处理**；用户、学习路线、题目和练习等核心业务仍由 `apps/web/src/modules/*` 持有。
 
@@ -203,7 +217,7 @@ Provider API key、模型名称、并发/超时、单次预算与 fallback 策�
 
 若未来明确把所有数据库迁移的所有权转给 Python，再启用 Alembic，并同时停用 Drizzle 迁移；这是架构决策，不是简单多加一个文件夹。
 
-### 2.3 表/投影归属（建议）
+### 2.4 表/投影归属（建议）
 
 ```text
 identity_*                 -> Identity/Profile

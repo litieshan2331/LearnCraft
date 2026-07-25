@@ -11,6 +11,10 @@
     "dev:web": "pnpm --filter @learncraft/web dev",
     "build:web": "pnpm --filter @learncraft/web build",
     "lint:web": "pnpm --filter @learncraft/web lint",
-    "typecheck:web": "pnpm --filter @learncraft/web exec tsc --noEmit"
+    "test:web": "pnpm --filter @learncraft/web test",
+    "typecheck:web": "pnpm --filter @learncraft/web exec tsc --noEmit",
+    "db:generate": "pnpm --filter @learncraft/web db:generate",
+    "db:migrate": "pnpm --filter @learncraft/web db:migrate",
+    "db:check": "pnpm --filter @learncraft/web db:check"
   }
 }
