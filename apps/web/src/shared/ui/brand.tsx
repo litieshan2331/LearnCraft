@@ -7,19 +7,13 @@
 
 import Link from "next/link";
 
-interface BrandProps {
-  inverse?: boolean;
-}
-
-export function Brand({ inverse = false }: BrandProps) {
-  const textColor = inverse ? "text-white" : "text-slate-950";
-
+export function Brand() {
   return (
     <Link aria-label="前往 LearnCraft 首页" className="inline-flex items-center gap-2.5" href="/">
-      <span aria-hidden className="grid size-8 place-items-center rounded-lg bg-cyan-300 text-sm font-black text-slate-950 shadow-sm shadow-cyan-300/30">
+      <span aria-hidden className="grid size-7 place-items-center border border-foreground font-mono text-xs font-medium">
         L
       </span>
-      <span className={`text-lg font-bold tracking-tight ${textColor}`}>LearnCraft</span>
+      <span className="font-heading text-xl font-medium tracking-[0.01em]">LearnCraft</span>
     </Link>
   );
 }

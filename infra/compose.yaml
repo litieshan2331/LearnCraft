@@ -27,7 +27,7 @@ services:
     command:
       - sh
       - -c
-      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD" --databases 1
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}

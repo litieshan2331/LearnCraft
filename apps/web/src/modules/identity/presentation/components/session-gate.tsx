@@ -38,8 +38,8 @@ export function SessionGate({ children }: Readonly<{ children: React.ReactNode }
 
   if (isChecking) {
     return (
-      <main className="grid min-h-screen place-items-center bg-slate-100 px-6 text-center">
-        <p className="text-sm font-medium text-slate-600">正在确认登录状态…</p>
+      <main className="grid min-h-screen place-items-center bg-background px-6 text-center">
+        <p className="text-sm text-muted-foreground">正在确认登录状态…</p>
       </main>
     );
   }

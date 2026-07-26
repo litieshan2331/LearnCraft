@@ -52,7 +52,9 @@ SILICONFLOW_API_KEY=你的密钥
 
 ## Redis 限流
 
-Redis 使用 `infra/.env` 中的 `REDIS_PASSWORD` 启动并启用 AOF 持久化。需要可视化查看时，可在 Redis Insight 中填写 `127.0.0.1`、`REDIS_HOST_PORT` 与该密码。Redis 中只保存短期限流计数，不保存用户密码、Session 原始 Token、学习业务数据或模型密钥。认证策略为：注册按 IP 每小时 3 次，登录按“邮箱 + IP”每 15 分钟 5 次；Redis 不可用时，认证接口返回 `503 AUTH_RATE_LIMIT_UNAVAILABLE`，不会退回到内存限流。
+Redis 使用 `infra/.env` 中的 `REDIS_PASSWORD` 启动并启用 AOF 持久化。Compose 通过 `--databases 1` 只启用 **DB 0**，Web 连接也显式选择 DB 0；不能用不同 DB 区分业务。需要可视化查看时，可在 Redis Insight 中填写 `127.0.0.1`、`REDIS_HOST_PORT`、数据库 `0` 与该密码。
+
+业务使用稳定的键前缀隔离：`ratelimit:<策略>:<主体哈希>`（当前已实现，例如 `ratelimit:login:<sha256>`）、`session:<userId>:<tokenId>`（预留）和 `cache:<资源>:<id>`（预留）。主体仍使用 SHA-256 指纹，避免邮箱或 IP 明文出现在 Redis Insight。当前认证 Session 的权威数据仍在 PostgreSQL，尚未创建任何 `session:` Redis 键；Redis 中只保存短期限流计数，不保存用户密码、Session 原始 Token、学习业务数据或模型密钥。认证策略为：注册按 IP 每小时 3 次，登录按“邮箱 + IP”每 15 分钟 5 次；Redis 不可用时，认证接口返回 `503 AUTH_RATE_LIMIT_UNAVAILABLE`，不会退回到内存限流。
 
 本地直连 Docker 时若没有 `X-Forwarded-For` 或 `X-Real-IP`，限流会使用共享的 `unknown` 来源指纹；本地单人开发可以接受。生产环境的反向代理必须剥离客户端伪造的这两个请求头，并写入真实客户端 IP，否则攻击者可能借伪造来源绕过按 IP 限流。
 

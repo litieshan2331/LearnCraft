@@ -30,7 +30,7 @@ export function LogoutButton() {
 
   return (
     <button
-      className="text-slate-600 transition hover:text-slate-950 disabled:opacity-50"
+      className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
       disabled={isSubmitting}
       onClick={handleLogout}
       type="button"

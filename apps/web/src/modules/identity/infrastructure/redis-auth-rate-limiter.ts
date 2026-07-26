@@ -24,6 +24,9 @@ local ttl = redis.call('TTL', KEYS[1])
 return { count, ttl }
 `;
 
+// LearnCraft 约定 Redis 只使用 DB 0；业务隔离完全依赖键前缀，便于后续接入 Sentinel。
+const REDIS_DATABASE = 0;
+
 let redisClientPromise: ReturnType<typeof connectRedis> | undefined;
 
 export class RedisAuthenticationRateLimiter implements AuthenticationRateLimiter {
@@ -64,6 +67,7 @@ function connectRedis() {
   const password = getRequiredEnvironmentVariable("REDIS_PASSWORD");
   const port = getRedisPort();
   const client = createClient({
+    database: REDIS_DATABASE,
     socket: {
       host,
       port,
@@ -79,9 +83,9 @@ function connectRedis() {
   return client.connect();
 }
 
-function createRateLimitKey(policy: RateLimitPolicy, subject: string): string {
+export function createRateLimitKey(policy: RateLimitPolicy, subject: string): string {
   const subjectHash = createHash("sha256").update(subject).digest("hex");
-  return `learncraft:auth-rate-limit:${policy.name}:${subjectHash}`;
+  return `ratelimit:${policy.name}:${subjectHash}`;
 }
 
 function getRedisPort(): number {

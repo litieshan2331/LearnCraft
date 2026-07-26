@@ -98,6 +98,7 @@ learncraft/
 │  │  │  │  │  └─ interfaces/
 │  │  │  │  ├─ shared/kernel/               # 极小共享内核
 │  │  │  │  └─ shared/ui/                   # 无业务归属的可复用 React UI（如 Brand）
+│  │  │  │     └─ primitives/               # shadcn 源码：Button、Input、Field、Alert 等
 │  │  │  └─ lib/                            # Web 通用框架适配
 │  │  │     ├─ db/
 │  │  │     │  ├─ client.ts                  # 懒加载 PostgreSQL/Drizzle 客户端
@@ -168,7 +169,7 @@ apps/web/src/modules/<bounded-context>/
 
 除 Identity 外，这一层级仍是目录骨架，尚未提前创建具体聚合或 repository 文件。开始实现某个用例时，再在对应层内按需要创建 `repositories/`、`services/`、`commands/`、`dto/`、`ports/`、`persistence/` 等子目录；不要为了“目录完整”创建没有归属的空业务文件。
 
-`shared/kernel` 只放跨 Web 上下文稳定且无业务归属的原语；`shared/ui` 只放无业务归属的 React 组件。React Server Components 和 Route Handler 只能调用 `application` 的 facade，不直接访问数据库。
+`shared/kernel` 只放跨 Web 上下文稳定且无业务归属的原语；`shared/ui` 只放无业务归属的 React 组件，其中 `shared/ui/primitives` 存放 shadcn/ui 生成并由仓库维护的基础组件。React Server Components 和 Route Handler 只能调用 `application` 的 facade，不直接访问数据库。
 
 ### 2.2 前端路由与展示层（A 方案）
 

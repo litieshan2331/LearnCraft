@@ -8,12 +8,17 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { AlertCircle, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { register, AuthenticationApiError, type RegisterRequest } from "../api/auth-client";
 import { registerRequestSchema } from "../../interfaces/auth-schemas";
+import { Alert, AlertDescription } from "@/shared/ui/primitives/alert";
+import { Button } from "@/shared/ui/primitives/button";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/shared/ui/primitives/field";
+import { Input } from "@/shared/ui/primitives/input";
 
 export function RegisterForm() {
   const router = useRouter();
@@ -35,60 +40,60 @@ export function RegisterForm() {
   }
 
   return (
-    <form className="space-y-5" noValidate onSubmit={form.handleSubmit(onSubmit)}>
-      <FormError message={submitError} />
-      <label className="block">
-        <span className="text-sm font-medium text-slate-800">昵称</span>
-        <input
+    <form noValidate onSubmit={form.handleSubmit(onSubmit)}>
+      <FieldGroup className="gap-5">
+        {submitError ? (
+          <Alert className="rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+            <AlertCircle aria-hidden className="size-4" />
+            <AlertDescription className="text-[#8b3f35]">{submitError}</AlertDescription>
+          </Alert>
+        ) : null}
+        <Field data-invalid={Boolean(form.formState.errors.display_name)}>
+          <FieldLabel htmlFor="register-display-name">昵称</FieldLabel>
+          <Input
           autoComplete="nickname"
-          className={inputClassName}
+          aria-invalid={Boolean(form.formState.errors.display_name)}
+          className="h-12 rounded-none bg-card px-3.5"
+          id="register-display-name"
           placeholder="例如：小林"
           type="text"
           {...form.register("display_name")}
-        />
-        <FieldError message={form.formState.errors.display_name?.message} />
-      </label>
-      <label className="block">
-        <span className="text-sm font-medium text-slate-800">邮箱</span>
-        <input
+          />
+          <FieldError errors={[form.formState.errors.display_name]} />
+        </Field>
+        <Field data-invalid={Boolean(form.formState.errors.email)}>
+          <FieldLabel htmlFor="register-email">邮箱</FieldLabel>
+          <Input
           autoComplete="email"
-          className={inputClassName}
+          aria-invalid={Boolean(form.formState.errors.email)}
+          className="h-12 rounded-none bg-card px-3.5"
+          id="register-email"
           placeholder="you@example.com"
           type="email"
           {...form.register("email")}
-        />
-        <FieldError message={form.formState.errors.email?.message} />
-      </label>
-      <label className="block">
-        <span className="text-sm font-medium text-slate-800">密码</span>
-        <input
+          />
+          <FieldError errors={[form.formState.errors.email]} />
+        </Field>
+        <Field data-invalid={Boolean(form.formState.errors.password)}>
+          <FieldLabel htmlFor="register-password">密码</FieldLabel>
+          <Input
           autoComplete="new-password"
-          className={inputClassName}
+          aria-invalid={Boolean(form.formState.errors.password)}
+          className="h-12 rounded-none bg-card px-3.5"
+          id="register-password"
           placeholder="至少 12 个字符"
           type="password"
           {...form.register("password")}
-        />
-        <FieldError message={form.formState.errors.password?.message} />
-      </label>
-      <button
-        className="flex min-h-12 w-full items-center justify-center rounded-xl bg-slate-950 px-5 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={form.formState.isSubmitting}
-        type="submit"
-      >
-        {form.formState.isSubmitting ? "正在创建账号…" : "创建账号"}
-      </button>
+          />
+          <FieldError errors={[form.formState.errors.password]} />
+        </Field>
+        <Button className="h-12 w-full rounded-none text-base font-medium" disabled={form.formState.isSubmitting} type="submit">
+          {form.formState.isSubmitting ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : null}
+          {form.formState.isSubmitting ? "正在创建账号…" : "创建账号"}
+        </Button>
+      </FieldGroup>
     </form>
   );
-}
-
-const inputClassName = "mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-cyan-600 focus:ring-4 focus:ring-cyan-100";
-
-function FieldError({ message }: { message: string | undefined }) {
-  return message ? <span className="mt-1.5 block text-sm text-rose-700">{message}</span> : null;
-}
-
-function FormError({ message }: { message: string | null }) {
-  return message ? <p aria-live="polite" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-800">{message}</p> : null;
 }
 
 function applyAuthenticationError(
