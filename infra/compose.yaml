@@ -44,6 +44,29 @@ services:
       start_period: 5s
     networks: [private]
 
+  celery-redis:
+    # Celery Broker 与认证限流 Redis 分离；两者各自仅启用 DB 0，并通过键前缀区分内部用途。
+    image: redis:7.4.9-alpine
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$CELERY_REDIS_PASSWORD" --databases 1
+    restart: unless-stopped
+    environment:
+      CELERY_REDIS_PASSWORD: ${CELERY_REDIS_PASSWORD:?set CELERY_REDIS_PASSWORD in .env}
+    volumes:
+      - celery-redis-data:/data
+    ports:
+      # Celery 本身不是 HTTP 服务；此端口仅供本机 Redis Insight/CLI 调试队列使用。
+      - "127.0.0.1:${CELERY_REDIS_HOST_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$CELERY_REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks: [private]
+
   minio:
     # 仅用于本地 P0 开发；该固定旧镜像不能直接作为生产对象存储方案。
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
@@ -75,7 +98,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
-      AGENT_INTERNAL_URL: http://agent-worker:8000
+      AGENT_INTERNAL_URL: http://agent-api:8000
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
     depends_on:
       postgres:
@@ -92,7 +115,7 @@ services:
       start_period: 20s
     networks: [edge, private]
 
-  agent-worker:
+  agent-api:
     build:
       context: ..
       dockerfile: infra/docker/agent-worker.Dockerfile
@@ -102,12 +125,6 @@ services:
       GIT_SHA: ${GIT_SHA:-unknown}
       CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:?set EMBEDDING_PROVIDER in .env}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:?set EMBEDDING_MODEL in .env}
-      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:?set EMBEDDING_DIMENSION in .env}
-      EMBEDDING_METRIC: ${EMBEDDING_METRIC:?set EMBEDDING_METRIC in .env}
-      EMBEDDING_PROFILE_VERSION: ${EMBEDDING_PROFILE_VERSION:?set EMBEDDING_PROFILE_VERSION in .env}
-      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,6 +139,78 @@ services:
       start_period: 15s
     networks: [private, egress]
 
+  agent-dispatcher:
+    build:
+      context: ..
+      dockerfile: infra/docker/agent-worker.Dockerfile
+    command: ["learncraft-agent-dispatcher"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CELERY_BROKER_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
+      CELERY_QUEUE_NAME: ${CELERY_QUEUE_NAME:-agent.run}
+      CELERY_REDIS_KEY_PREFIX: ${CELERY_REDIS_KEY_PREFIX:-learncraft:celery:}
+      CELERY_VISIBILITY_TIMEOUT_SECONDS: ${CELERY_VISIBILITY_TIMEOUT_SECONDS:-660}
+      CELERY_TASK_SOFT_TIME_LIMIT_SECONDS: ${CELERY_TASK_SOFT_TIME_LIMIT_SECONDS:-480}
+      CELERY_TASK_TIME_LIMIT_SECONDS: ${CELERY_TASK_TIME_LIMIT_SECONDS:-600}
+      CELERY_TASK_MAX_RETRIES: ${CELERY_TASK_MAX_RETRIES:-3}
+      CELERY_RETRY_BACKOFF_SECONDS: ${CELERY_RETRY_BACKOFF_SECONDS:-10}
+      CELERY_RETRY_BACKOFF_MAX_SECONDS: ${CELERY_RETRY_BACKOFF_MAX_SECONDS:-300}
+      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-1}
+      OUTBOX_DISPATCHER_ID: ${OUTBOX_DISPATCHER_ID:-agent-dispatcher-local}
+      OUTBOX_POLL_INTERVAL_SECONDS: ${OUTBOX_POLL_INTERVAL_SECONDS:-1}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
+      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-900}
+      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-10}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      celery-redis:
+        condition: service_healthy
+    stop_grace_period: 30s
+    networks: [private]
+
+  agent-celery-worker:
+    build:
+      context: ..
+      dockerfile: infra/docker/agent-worker.Dockerfile
+    command:
+      - celery
+      - -A
+      - learncraft_agent.core.celery_app:celery_app
+      - worker
+      - --loglevel=INFO
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CELERY_BROKER_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
+      CELERY_QUEUE_NAME: ${CELERY_QUEUE_NAME:-agent.run}
+      CELERY_REDIS_KEY_PREFIX: ${CELERY_REDIS_KEY_PREFIX:-learncraft:celery:}
+      CELERY_VISIBILITY_TIMEOUT_SECONDS: ${CELERY_VISIBILITY_TIMEOUT_SECONDS:-660}
+      CELERY_TASK_SOFT_TIME_LIMIT_SECONDS: ${CELERY_TASK_SOFT_TIME_LIMIT_SECONDS:-480}
+      CELERY_TASK_TIME_LIMIT_SECONDS: ${CELERY_TASK_TIME_LIMIT_SECONDS:-600}
+      CELERY_TASK_MAX_RETRIES: ${CELERY_TASK_MAX_RETRIES:-3}
+      CELERY_RETRY_BACKOFF_SECONDS: ${CELERY_RETRY_BACKOFF_SECONDS:-10}
+      CELERY_RETRY_BACKOFF_MAX_SECONDS: ${CELERY_RETRY_BACKOFF_MAX_SECONDS:-300}
+      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-1}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:?set EMBEDDING_PROVIDER in .env}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:?set EMBEDDING_MODEL in .env}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:?set EMBEDDING_DIMENSION in .env}
+      EMBEDDING_METRIC: ${EMBEDDING_METRIC:?set EMBEDDING_METRIC in .env}
+      EMBEDDING_PROFILE_VERSION: ${EMBEDDING_PROFILE_VERSION:?set EMBEDDING_PROFILE_VERSION in .env}
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
+      CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      celery-redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    stop_grace_period: 11m
+    networks: [private, egress]
+
 networks:
   edge:
   # 本地 P0 调试服务通过显式 ports 绑定到 127.0.0.1。
@@ -132,4 +221,5 @@ networks:
 volumes:
   postgres-data:
   redis-data:
+  celery-redis-data:
   minio-data:

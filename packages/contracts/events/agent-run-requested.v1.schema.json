@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://learncraft.local/contracts/events/agent-run-requested.v1.schema.json",
+  "title": "AgentRunRequested v1",
+  "description": "Web writes this minimal AgentRun task payload to PostgreSQL Outbox before the Dispatcher sends it to Celery.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agent_run_id", "trace_id", "task_version"],
+  "properties": {
+    "agent_run_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Database AgentRun UUID and Celery task identifier."
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Trace identifier shared by Web, Dispatcher, Worker, and LangGraph."
+    },
+    "task_version": {
+      "const": 1,
+      "description": "Queue payload version. Incompatible changes require a new version."
+    }
+  }
+}

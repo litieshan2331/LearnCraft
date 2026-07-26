@@ -2,7 +2,7 @@
 
 > 本文件只描述领域边界、代码目录和依赖规则。建议采用“Next.js BFF/界面 + Python LangGraph Agent Worker”的模块化单体形态：业务聚合由 `apps/web` 统一持有，Agent 只负责工作流编排和工具调用。这样既保留 Next.js 的前后端一体体验，也避免 TypeScript 与 Python 各自实现一套学习领域模型。
 >
-> 文档状态：实施中｜更新日期：2026-07-25
+> 文档状态：实施中｜更新日期：2026-07-26
 >
 > 配套文档：[技术栈选型](./01-技术栈选型.md) · [MVP PRD](./03-MVP-PRD.md)
 
@@ -114,14 +114,15 @@ learncraft/
 │  └─ agent-worker/                         # FastAPI + LangGraph Agent Worker
 │     ├─ alembic/                           # P0 仅保留 Drizzle 所有权说明，不运行 Alembic
 │     ├─ src/learncraft_agent/
-│     │  ├─ core/                           # 运行时配置、日志、安全与依赖注入
+│     │  ├─ core/                           # 运行时配置、Celery 应用、日志、安全与依赖注入
 │     │  ├─ interfaces/
-│     │  │  └─ http/
+│     │  │  ├─ http/
 │     │  │     ├─ routers/                  # /health、内部 AgentRun 路由
 │     │  │     └─ schemas/                  # HTTP Pydantic DTO
+│     │  │  └─ celery/                      # Celery 消息消费适配器与任务入口
 │     │  ├─ application/
-│     │  │  ├─ commands/                   # Agent 命令与处理器
-│     │  │  ├─ dto/                        # application/workflow Pydantic DTO
+│     │  │  ├─ commands/                   # Agent 命令与处理器（含 AgentRun 执行入口）
+│     │  │  ├─ dto/                        # application/workflow/队列 Pydantic DTO
 │     │  │  ├─ ports/                      # Core API、LLM、检索、执行器等抽象
 │     │  │  └─ services/                   # RunService、ModelGateway 等用例服务
 │     │  ├─ domain/                        # 仅 Agent 自有的领域概念
@@ -136,10 +137,11 @@ learncraft/
 │     │  │  ├─ document_parsers/           # MinerU 等文档解析 adapter
 │     │  │  ├─ retrieval/                  # pgvector 或 Core API 检索 adapter
 │     │  │  ├─ persistence/
+│     │  │  │  ├─ database.py              # asyncpg SQLAlchemy 会话工厂
 │     │  │  │  ├─ models/                  # SQLAlchemy：仅 AgentRun / AgentRunEvent
 │     │  │  │  └─ repositories/            # repository 的 SQLAlchemy 实现
 │     │  │  ├─ checkpoint/                 # LangGraph Checkpointer adapter
-│     │  │  ├─ queue/                      # PostgreSQL Outbox / 队列 adapter
+│     │  │  ├─ queue/                      # Outbox Dispatcher → Celery Broker adapter
 │     │  │  └─ observability/              # 日志、指标与追踪 adapter
 │     │  └─ prompts/                       # 版本化 Prompt 模板
 │     └─ tests/
@@ -149,7 +151,7 @@ learncraft/
 └─ packages/
    └─ contracts/                           # Web 与 Worker 的跨语言契约
       ├─ openapi/core.yaml
-      ├─ events/
+      ├─ events/                           # AgentRunRequested v1 等 JSON Schema
       ├─ ts/
       └─ python/
 ```
@@ -257,7 +259,7 @@ agent_runs/agent_checkpoints/outbox_events   -> Agent/平台基础设施
 提交代码 -> POST /api/v1/executions（受限 runner） -> ExecutionCompleted
 ```
 
-MVP 可先用 PostgreSQL outbox 轮询或内部 HTTP 调 Agent；接口和 `AgentRun` 状态机保持异步契约，未来替换 Redis Streams/SQS 不影响领域层。
+MVP 已使用 PostgreSQL Outbox + 独立 Dispatcher + Celery Redis Broker。Web 只在同一事务中创建 `AgentRun` 和 Outbox；Dispatcher 负责可靠投递，Celery Worker 负责执行。`AgentRun` 状态机保持异步契约，未来替换 Broker（例如托管 Redis/Sentinel 或 SQS）不影响领域层。
 
 ## 5. 演进路线
 

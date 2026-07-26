@@ -4,6 +4,7 @@
 infra/.env
 infra/.env.*
 !*.env.example
+!infra/.env.production.example
 
 # Node.js / pnpm 依赖、缓存与构建产物。
 node_modules/

@@ -1,0 +1,124 @@
+# LearnCraft 生产应用编排。
+# 服务：Web、Agent API、PostgreSQL Outbox Dispatcher 与 Celery Worker。
+# 外部依赖：PostgreSQL、认证 Redis、Celery Redis Broker 与对象存储均由环境变量提供，不在此文件创建。
+
+name: ${COMPOSE_PROJECT_NAME:-learncraft-production}
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: infra/docker/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_VERSION: ${APP_VERSION:?set APP_VERSION in .env.production}
+      GIT_SHA: ${GIT_SHA:?set GIT_SHA in .env.production}
+      APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN in .env.production}
+      SESSION_COOKIE_SECURE: "true"
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
+      REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST in .env.production}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env.production}
+      AGENT_INTERNAL_URL: http://agent-api:8000
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env.production}
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/v1/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [edge, private]
+
+  agent-api:
+    build:
+      context: ..
+      dockerfile: infra/docker/agent-worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_VERSION: ${APP_VERSION:?set APP_VERSION in .env.production}
+      GIT_SHA: ${GIT_SHA:?set GIT_SHA in .env.production}
+      CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env.production}
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; response = urlopen('http://127.0.0.1:8000/health'); raise SystemExit(0 if response.status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [private, egress]
+
+  agent-dispatcher:
+    build:
+      context: ..
+      dockerfile: infra/docker/agent-worker.Dockerfile
+    command: ["learncraft-agent-dispatcher"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?set CELERY_BROKER_URL in .env.production}
+      CELERY_BROKER_MASTER_NAME: ${CELERY_BROKER_MASTER_NAME:-}
+      CELERY_QUEUE_NAME: ${CELERY_QUEUE_NAME:-agent.run}
+      CELERY_REDIS_KEY_PREFIX: ${CELERY_REDIS_KEY_PREFIX:-learncraft:celery:}
+      CELERY_VISIBILITY_TIMEOUT_SECONDS: ${CELERY_VISIBILITY_TIMEOUT_SECONDS:-660}
+      CELERY_TASK_SOFT_TIME_LIMIT_SECONDS: ${CELERY_TASK_SOFT_TIME_LIMIT_SECONDS:-480}
+      CELERY_TASK_TIME_LIMIT_SECONDS: ${CELERY_TASK_TIME_LIMIT_SECONDS:-600}
+      CELERY_TASK_MAX_RETRIES: ${CELERY_TASK_MAX_RETRIES:-3}
+      CELERY_RETRY_BACKOFF_SECONDS: ${CELERY_RETRY_BACKOFF_SECONDS:-10}
+      CELERY_RETRY_BACKOFF_MAX_SECONDS: ${CELERY_RETRY_BACKOFF_MAX_SECONDS:-300}
+      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-1}
+      OUTBOX_DISPATCHER_ID: ${OUTBOX_DISPATCHER_ID:-agent-dispatcher-production}
+      OUTBOX_POLL_INTERVAL_SECONDS: ${OUTBOX_POLL_INTERVAL_SECONDS:-1}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
+      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-900}
+      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-10}
+    stop_grace_period: 30s
+    networks: [private]
+
+  agent-celery-worker:
+    build:
+      context: ..
+      dockerfile: infra/docker/agent-worker.Dockerfile
+    command:
+      - celery
+      - -A
+      - learncraft_agent.core.celery_app:celery_app
+      - worker
+      - --loglevel=INFO
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?set CELERY_BROKER_URL in .env.production}
+      CELERY_BROKER_MASTER_NAME: ${CELERY_BROKER_MASTER_NAME:-}
+      CELERY_QUEUE_NAME: ${CELERY_QUEUE_NAME:-agent.run}
+      CELERY_REDIS_KEY_PREFIX: ${CELERY_REDIS_KEY_PREFIX:-learncraft:celery:}
+      CELERY_VISIBILITY_TIMEOUT_SECONDS: ${CELERY_VISIBILITY_TIMEOUT_SECONDS:-660}
+      CELERY_TASK_SOFT_TIME_LIMIT_SECONDS: ${CELERY_TASK_SOFT_TIME_LIMIT_SECONDS:-480}
+      CELERY_TASK_TIME_LIMIT_SECONDS: ${CELERY_TASK_TIME_LIMIT_SECONDS:-600}
+      CELERY_TASK_MAX_RETRIES: ${CELERY_TASK_MAX_RETRIES:-3}
+      CELERY_RETRY_BACKOFF_SECONDS: ${CELERY_RETRY_BACKOFF_SECONDS:-10}
+      CELERY_RETRY_BACKOFF_MAX_SECONDS: ${CELERY_RETRY_BACKOFF_MAX_SECONDS:-300}
+      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-1}
+      CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env.production}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:?set EMBEDDING_PROVIDER in .env.production}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:?set EMBEDDING_MODEL in .env.production}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:?set EMBEDDING_DIMENSION in .env.production}
+      EMBEDDING_METRIC: ${EMBEDDING_METRIC:?set EMBEDDING_METRIC in .env.production}
+      EMBEDDING_PROFILE_VERSION: ${EMBEDDING_PROFILE_VERSION:?set EMBEDDING_PROFILE_VERSION in .env.production}
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:?set SILICONFLOW_API_KEY in .env.production}
+    depends_on:
+      web:
+        condition: service_healthy
+    stop_grace_period: 11m
+    networks: [private, egress]
+
+networks:
+  edge:
+  private:
+  egress:

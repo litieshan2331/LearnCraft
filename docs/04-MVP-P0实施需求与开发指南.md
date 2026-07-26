@@ -815,7 +815,7 @@ CREATE INDEX idx_idempotency_keys_expiry
     ON public.idempotency_keys(expires_at);
 ```
 
-`outbox_events` 的最小可靠投递流程为：同一数据库事务中完成核心聚合变更和 `INSERT outbox_events`；Worker 使用 `SELECT ... FOR UPDATE SKIP LOCKED` 领取事件，创建/推进 `agent.agent_runs`，再经内部 Core API 持久化结构化业务结果。`outbox_events` 是跨上下文基础设施例外，不是 Worker 可以任意修改核心表的通行证。
+`outbox_events` 的最小可靠投递流程为：同一数据库事务中完成核心聚合变更、创建 `agent.agent_runs` 和 `INSERT outbox_events`；独立 `agent-dispatcher` 使用 `SELECT ... FOR UPDATE SKIP LOCKED` 领取 `agent.run.requested`，投递到 Celery 后回写状态。Celery Worker 仅推进 `agent.agent_runs` 与 `agent.agent_run_events`，再经内部 Core API 持久化结构化业务结果。Dispatcher 在“已发送、未回写”间中断时允许重复投递，`agent_run_id` 同时作为 Celery `task_id` 与幂等边界。`outbox_events` 是跨上下文基础设施例外，不是 Worker 可以任意修改核心表的通行证。
 
 对于 `short_answer`，`answer_key_json` 保存隐藏参考答案，`rubric_json` 保存按点给分规则；Worker 的 `assessment_evaluate` 使用固定 ModelProfile 返回受 Pydantic 校验的 `{score, feedback, evidence_tags, confidence}`。评分 Profile、Prompt/Rubric 版本、置信度和判定证据写入 `grading_metadata_json`。结构化输出失败、Provider 故障或置信度低于策略阈值时，Attempt 进入 `grading_failed`，允许用户重试，但不能据此解锁、跳过或插入路线节点。
 
