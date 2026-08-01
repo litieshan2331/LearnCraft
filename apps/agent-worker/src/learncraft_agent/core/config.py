@@ -1,7 +1,7 @@
 """Agent Worker 运行时配置。
 
 类：
-- Settings：读取 Agent API 的服务标识、已锁定的 Embedding Profile 与 Provider 密钥。
+- Settings：读取 Agent API 的服务标识、已锁定的 Embedding Profile、Provider 密钥与用户凭据加密配置。
 - QueueSettings：读取 Dispatcher 与 Celery Worker 的 PostgreSQL、Broker、超时和重试配置。
 
 函数：
@@ -53,6 +53,15 @@ class Settings(BaseSettings):
         validation_alias="SILICONFLOW_API_KEY",
         repr=False,
     )
+    credential_encryption_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="CREDENTIAL_ENCRYPTION_KEY",
+        repr=False,
+    )
+    credential_encryption_key_version: str = Field(
+        default="v1",
+        validation_alias="CREDENTIAL_ENCRYPTION_KEY_VERSION",
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -60,10 +69,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator("siliconflow_api_key", mode="before")
+    @field_validator("siliconflow_api_key", "credential_encryption_key", mode="before")
     @classmethod
-    def empty_siliconflow_api_key_to_none(cls, value: object) -> object:
-        """把 Compose 注入的空 API Key 统一为未配置状态。"""
+    def empty_secret_to_none(cls, value: object) -> object:
+        """把 Compose 注入的空密钥统一为未配置状态。"""
         if isinstance(value, str) and not value.strip():
             return None
         return value

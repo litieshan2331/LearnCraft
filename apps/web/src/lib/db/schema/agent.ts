@@ -28,6 +28,7 @@ import {
   updatedAtColumn,
 } from "./_common";
 import { users } from "./identity";
+import { userModelConnections } from "./model-connection";
 
 export const agentSchema = pgSchema("agent");
 
@@ -47,6 +48,10 @@ export const agentRuns = agentSchema.table("agent_runs", {
   inputSchemaVersion: varchar("input_schema_version", { length: 100 }).notNull(),
   outputSchemaVersion: varchar("output_schema_version", { length: 100 }),
   requestedModelProfile: varchar("requested_model_profile", { length: 100 }).notNull(),
+  modelConnectionId: uuid("model_connection_id").references(() => userModelConnections.id, {
+    onDelete: "set null",
+  }),
+  requestedModelId: varchar("requested_model_id", { length: 255 }),
   actualModelProfile: varchar("actual_model_profile", { length: 100 }),
   fallbackReason: varchar("fallback_reason", { length: 255 }),
   inputTokens: integer("input_tokens").notNull().default(0),
@@ -72,8 +77,8 @@ export const agentRuns = agentSchema.table("agent_runs", {
   check(
     "ck_agent_runs_type",
     sql`${table.runType} in (
-      'assessment_generate', 'assessment_evaluate', 'plan_generate',
-      'card_content_generate', 'card_quiz_generate', 'adaptation'
+      'assessment_generate', 'plan_generate',
+      'card_content_generate', 'adaptation'
     )`,
   ),
   check(

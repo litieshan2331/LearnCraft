@@ -4,7 +4,7 @@
  * 导出：
  * - assertAllowedWriteOrigin：校验写请求 Origin 是否在已批准 Web 来源内。
  * - getAuthenticationRequestMetadata：提取并哈希客户端 IP 与 User-Agent。
- * - authenticationErrorResponse、validationErrorResponse：生成统一安全错误响应。
+ * - apiErrorResponse、authenticationErrorResponse、validationErrorResponse：生成统一安全错误响应。
  */
 
 import { createHash, randomUUID } from "node:crypto";
@@ -48,37 +48,37 @@ export function validationErrorResponse(error: z.ZodError): NextResponse {
     message: issue.message,
   }));
 
-  return errorResponse(422, "VALIDATION_ERROR", "请求参数不符合要求。", fieldErrors);
+  return apiErrorResponse(422, "VALIDATION_ERROR", "请求参数不符合要求。", fieldErrors);
 }
 
 export function malformedJsonResponse(): NextResponse {
-  return errorResponse(422, "VALIDATION_ERROR", "请求体必须是合法的 JSON 对象。", [
+  return apiErrorResponse(422, "VALIDATION_ERROR", "请求体必须是合法的 JSON 对象。", [
     { field: "body", message: "请求体不是合法 JSON。" },
   ]);
 }
 
 export function authenticationErrorResponse(error: unknown): NextResponse {
   if (!(error instanceof AuthenticationError)) {
-    return errorResponse(500, "INTERNAL_ERROR", "服务暂时不可用，请稍后重试。");
+    return apiErrorResponse(500, "INTERNAL_ERROR", "服务暂时不可用，请稍后重试。");
   }
 
   switch (error.code) {
     case "EMAIL_ALREADY_EXISTS":
-      return errorResponse(409, error.code, "该邮箱已被注册。");
+      return apiErrorResponse(409, error.code, "该邮箱已被注册。");
     case "INVALID_CREDENTIALS":
-      return errorResponse(401, error.code, "邮箱或密码错误。");
+      return apiErrorResponse(401, error.code, "邮箱或密码错误。");
     case "UNAUTHORIZED":
-      return errorResponse(401, error.code, "登录状态无效或已过期。");
+      return apiErrorResponse(401, error.code, "登录状态无效或已过期。");
     case "INVALID_ORIGIN":
-      return errorResponse(403, error.code, "请求来源不被允许。");
+      return apiErrorResponse(403, error.code, "请求来源不被允许。");
     case "RATE_LIMITED":
-      return errorResponse(429, error.code, "请求过于频繁，请稍后再试。", undefined, error.retryAfterSeconds);
+      return apiErrorResponse(429, error.code, "请求过于频繁，请稍后再试。", undefined, error.retryAfterSeconds);
     case "AUTH_RATE_LIMIT_UNAVAILABLE":
-      return errorResponse(503, error.code, "认证限流服务暂时不可用，请稍后重试。");
+      return apiErrorResponse(503, error.code, "认证限流服务暂时不可用，请稍后重试。");
   }
 }
 
-function errorResponse(
+export function apiErrorResponse(
   status: number,
   code: string,
   message: string,

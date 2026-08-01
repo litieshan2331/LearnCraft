@@ -1,7 +1,7 @@
 # LearnCraft MVP P0 实施需求与开发指南
 
-> 版本：v0.1（待评审）  
-> 日期：2026-07-18  
+> 版本：v0.2（待评审）
+> 日期：2026-08-01
 > 配套文档：[技术栈选型](./01-技术栈选型.md) · [DDD 项目目录](./02-DDD项目目录.md) · [MVP PRD](./03-MVP-PRD.md)
 
 ## 1. 文档目的、P0 边界与已锁定决策
@@ -15,7 +15,7 @@
 
 ### 1.1 P0 的一句话目标
 
-一位用户能够注册登录，填写 Python 学习目标，完成前测，获得一条包含“概念 → 语法 → 实战 → 调试”的学习路线；点击卡片取得带来源的学习内容，在线运行受限 Python 代码，完成随堂测验后按明确规则解锁、复习或插入补强卡。
+一位用户能够注册登录，填写 Python 学习目标并完成前测，获得一条包含“概念 → 语法 → 实战 → 调试”的学习路线；点击卡片取得带来源的学习内容，并通过独立 CodeRun 接口在线运行受限 Python 代码；完成整条路线后，再通过后测获得掌握、复习或提高下一路线难度的建议。
 
 ### 1.2 P0 产品与技术边界
 
@@ -23,19 +23,19 @@
 | --- | --- | --- |
 | 试点主题 | 仅 `python-311-basics`，中文桌面端 | 先验证闭环，不把内容、评测和 Runner 复杂度乘以多语言。 |
 | 学习目标 | 每个目标一条当前激活路线；路线 6–12 个节点 | 足够展示个性化和四阶段，避免路线编辑器。 |
-| 前测与随堂测验 | 均为 5–8 题；选择题 + 简答题；简答题由 AI 按评分 rubric 判定 | 两类测验使用同一题型、题量和评分契约；模型调用失败时不能静默给分。 |
+| 前测与路线后测 | 前测由用户选择 10–20 题（默认推荐 12 题），后测由用户选择 5–10 题（推荐 5–8 题）；均为单选题 | 提交后可立即确定性评分；前测提供“正常/困难”卡片且按题序逐步提高难度。 |
 | 知识来源 | 内置、人工审核的官方文档/视频链接和种子文档 | P0 不允许用户上传 PDF、任意 URL 抓取或 MinerU 解析。 |
 | 检索 | PostgreSQL FTS + pgvector 余弦精确检索；返回可追溯引用 | 小规模内容先获得确定性和易维护性；压测后才加 HNSW。 |
 | 在线代码 | Python 3.11、预置依赖、无网络、限时限资源；实战/调试节点先展示 AI 生成且 Runner 已验证的 Demo | 代码执行是高风险能力，不能把宿主机或任意依赖暴露给用户。 |
-| 模型 | 一个批准的托管生成 Provider + 一个固定 embedding Profile；由 Worker 选择 | 不部署 vLLM/Ollama，不提供用户选模型、BYOK 或任意 base URL。 |
-| 异步任务 | 规划、内容/Demo 生成、自动出题、AI 简答评分和调整均通过 `AgentRun` 异步执行 | 模型调用有延迟和失败，需要可重试、可观察、可恢复。 |
+| 模型 | 用户自带 OpenAI-compatible 生成连接 + 一个固定 embedding Profile；Worker 按任务解析已选连接 | 不部署 vLLM/Ollama；用户承担生成 Provider 费用，平台免费提供学习流程、检索与运行能力。P0 允许任意 Base URL，SSRF 防护列为 P1。 |
+| 异步任务 | 规划、内容/Demo 生成和自动出题通过 `AgentRun` 异步执行；单选题评分同步完成 | 模型调用有延迟和失败，需要可重试、可观察、可恢复；确定性评分不需要排队。 |
 
 ### 1.3 P0 已作出的实现决策
 
 1. **架构：**Next.js App Router 负责 UI、BFF、认证与核心学习领域；Python FastAPI + LangGraph 仅负责 Agent 编排、模型调用、检索和受控工具。Python 不复制学习路线、题目等业务聚合。
 2. **认证：**P0 使用“邮箱 + 密码 + 数据库不透明 Session + HttpOnly Cookie”。密码用 Argon2id 哈希；浏览器不接收 JWT。这样本地开发不依赖 OAuth 或邮件供应商，也不会把长期令牌暴露给前端。OAuth、Magic Link、找回密码和移动端 Token 放 P1。
 3. **迁移所有权：**`db/migrations/` 中的 Drizzle 迁移是 P0 唯一建表入口。`apps/agent-worker/alembic/` 保留说明文件，但 **P0 不执行 Alembic**，否则会出现两个迁移工具竞争同一数据库的问题。
-4. **模型供应商：**`ModelGateway` 是 `agent-worker` 内的应用服务，不是 Docker 容器。Provider API Key 只进入 Worker 的 Secret/环境变量，绝不进入 `NEXT_PUBLIC_*`、浏览器、数据库业务表、日志或代码 Runner。
+4. **用户模型连接：**`ModelGateway` 是 `agent-worker` 内的应用服务，不是 Docker 容器。用户可保存 OpenAI-compatible Base URL、API Key 和模型名；Key 由 Web 以 AES-256-GCM 加密持久化，浏览器只可写入/覆盖，Outbox、日志和 AgentRun 仅记录连接 ID/模型名。`CREDENTIAL_ENCRYPTION_KEY` 只进入 Web 与 Worker 的 Secret/环境变量。
 5. **向量索引：**P0 先不建 ANN 索引。固定 embedding Profile、内容量和检索评测集后，只有在检索 p95 或数据量达到阈值时，才用 HNSW 作为首个 ANN 方案；不引入独立向量数据库。
 6. **代码 Runner：**Docker Compose 是本地编排工具，不是用户不可信代码的安全边界。上线前必须验证一次性沙箱的断网、非 root、只读根文件系统、资源限制和逃逸测试；未达到标准时，P0 关闭“运行”按钮而不是冒险上线。
 
@@ -43,7 +43,7 @@
 
 - 社区、社群、评论、关注、排行榜、成就、全局学习进度条、学习报告；
 - 多课程、多编程语言、任意文件/网页导入、视频转写、自动抓取互联网；
-- 用户自选模型/供应商/API Key、本地模型、vLLM、Ollama；
+- 本地模型、vLLM、Ollama、自动的跨 Provider 费用优化或平台代付生成费用；
 - 多租户组织、付费订阅、管理员后台、人工教师批改；
 - 多人协作、通用聊天助手、长期记忆、自动向外部系统发布；
 - 任意 `pip install`、网络访问、持久磁盘、GPU 或长任务代码执行。
@@ -84,13 +84,13 @@
 
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
-| P0-ASSESS-001 | 为目标生成或选择一套 5–8 题前测。 | 每套同时包含选择题和简答题（至少各 1 题）；模型生成失败时可降级到受控题库。 |
+| P0-ASSESS-001 | 为目标生成或选择一套前测。 | 用户可选择 10–20 题，默认推荐 12 题；只包含单选题；模型生成失败时可降级到受控题库。 |
 | P0-ASSESS-002 | 用户可以保存作答并提交前测。 | 刷新不丢答案；重复点击提交不创建两条 Attempt；提交后的答案不可直接修改。 |
-| P0-ASSESS-003 | 系统自动评分并给出薄弱点标签。 | 选择题由规则判分；简答题由 AI 根据隐藏参考答案和 rubric 返回结构化分数、反馈、证据标签与置信度；正确答案/rubric 不通过公开 API 返回。 |
+| P0-ASSESS-003 | 系统自动评分并给出薄弱点标签。 | 服务端按隐藏答案确定性评分并返回结构化分数、反馈和薄弱点标签；正确答案不通过公开 API 返回。 |
 | P0-ASSESS-004 | 前测结果驱动后续路线生成。 | 评分完成后目标状态进入 `planning`，创建一条可追踪的 `plan_generate` AgentRun。 |
 | P0-ASSESS-005 | 异常状态可恢复。 | 题目生成/评分失败显示失败原因类别与“重试”入口，不产生重复费用或重复题目。 |
 
-**暂时需要做：**选择题 + 简答题、5–8 题统一题目 schema、选择题规则判分、简答题 AI rubric 判分、受控题库兜底、答题幂等与答案/评分依据隐藏。
+**暂时需要做：**10–20 题单选前测、`normal`/`hard` 难度卡片、按题序逐步提高难度、确定性评分、受控题库兜底、答题幂等与隐藏答案。
 
 **暂时不需要做：**长篇作文/开放项目报告的主观阅卷、人工批改、限时监考、题库运营后台、跨目标能力雷达图。
 
@@ -102,8 +102,8 @@
 | P0-PLAN-002 | 每个节点有可展示的学习信息。 | 节点至少含标题、目标、难度、预计分钟、前置节点、完成标准、安排理由和状态。 |
 | P0-PLAN-003 | 路线依赖关系合法。 | 保存前校验节点数、阶段覆盖、前置无环和时长范围；不合法结果不能写入激活路线。 |
 | P0-PLAN-004 | 用户能查看路线并打开当前可学节点。 | 路线页能区分 `locked`、`available`、`in_progress`、`completed`、`needs_review`；首个可学节点可直接进入。 |
-| P0-PLAN-005 | 测验/代码结果触发显式规则调整。 | 仅使用通过简答评分置信度门槛的测验结果：≥80% 解锁下一节点；50–79% 标记复习建议；<50% 或连续代码失败插入一张补强卡；所有调整写入审计事件。 |
-| P0-PLAN-006 | 高分加速有边界。 | 100% 且代码通过时，只能跳过同阶段一张基础节点，且必须满足其余前置；页面展示调整理由。 |
+| P0-PLAN-005 | 后测/代码结果产生显式建议。 | 整条路线完成后的后测 ≥80% 标记为掌握；50–79% 标记复习建议；<50% 或连续代码失败，为下一次学习建议补强主题；所有建议写入审计事件。 |
+| P0-PLAN-006 | 高分建议有边界。 | 后测 100% 且相关代码通过时，只能建议下一条路线选用“困难”难度；不得跳过或改写当前路线节点，页面展示理由。 |
 
 **暂时需要做：**异步路线生成、DAG 校验、路线版本、简单可解释规则、节点状态展示和失败重试。
 
@@ -155,7 +155,7 @@
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
 | P0-RUN-001 | 实战/调试节点由 AI 生成可运行 Demo。 | AI 输出 Python 3.11 源码、输入、期望输出、调用顺序与逐步注释结果；发布给用户前必须在受限 Runner 成功执行。 |
-| P0-RUN-002 | Runner 异步执行受限代码。 | 返回 `queued/running/succeeded/failed/timeout/rejected`；重复请求依赖 Idempotency-Key 不产生第二次执行。 |
+| P0-RUN-002 | CodeRun 作为独立 HTTP 接口异步执行受限代码。 | 在 `goal_id + plan_node_id` 卡片上下文内创建并返回 `queued/running/succeeded/failed/timeout/rejected`；不依赖 LangGraph 工作流；重复请求依赖 Idempotency-Key 不产生第二次执行。 |
 | P0-RUN-003 | 运行环境默认隔离。 | 执行进程为非 root、无网络、无宿主机挂载、临时目录、CPU/内存/进程数/输出大小/墙钟时间均有限额。 |
 | P0-RUN-004 | 用户可见并理解运行结果。 | 页面展示 Demo/用户代码的 stdout、stderr、退出码、测试摘要与耗时，并将实际运行结果映射到调用顺序和逐步注释；不泄露主机路径、环境变量、Token 或内部异常栈。 |
 
@@ -163,16 +163,16 @@
 
 **暂时不需要做：**任意语言、包安装、网络请求、文件持久化、多人共享运行环境、GPU、长任务、Notebook。
 
-### 2.7 随堂测验、完成规则与适应性
+### 2.7 路线后测、完成规则与适应性
 
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
-| P0-QUIZ-001 | 每张卡可生成 5–8 道随堂题，题型与前测一致。 | 每套同时包含选择题和简答题（至少各 1 题），但题目内容绑定当前节点学习目标；无法生成时走受控模板。 |
-| P0-QUIZ-002 | 提交后获得评分与解释。 | 选择题规则判分；简答题由 AI rubric 判分并返回总分、逐题反馈、薄弱点和置信度；低置信度/校验失败时不触发路线调整。 |
-| P0-QUIZ-003 | 节点完成条件明确。 | 默认条件为测验 ≥80%、所有简答题 AI 评分通过置信度门槛，且有代码任务时隐藏测试通过；不满足时允许继续练习而不丢历史结果。 |
-| P0-QUIZ-004 | 调整规则可审计。 | 每一次解锁、补强、复习、跳过都记录触发证据、策略版本和结果。 |
+| P0-POST-001 | 整条路线完成后生成后测。 | 用户可选择 5–10 题，推荐 5–8 题；只包含单选题，且 `plan_id` 必填、`plan_node_id` 为空；无法生成时走受控模板。 |
+| P0-POST-002 | 提交后获得评分与解释。 | 服务端确定性评分并返回总分、逐题反馈和薄弱点；隐藏答案不外泄。 |
+| P0-POST-003 | 路线完成条件明确。 | 所有节点完成后可发起后测；后测 ≥80% 标记为掌握；有代码任务时其 CodeRun 必须成功；不满足时允许复习和重测，不丢历史结果。 |
+| P0-POST-004 | 后续建议可审计。 | 每一次掌握、复习或提高下一路线难度的建议都记录触发证据、策略版本和结果。 |
 
-**暂时需要做：**与前测共用的选择题 + AI 简答题评分合同、自动出题/模板兜底、评分置信度门槛、完成条件、规则驱动调整、用户可见理由。
+**暂时需要做：**前测与后测共用的单选题和确定性评分合同、自动出题/模板兜底、题量边界、完成条件、规则驱动建议、用户可见理由。
 
 **暂时不需要做：**完整学习报告、徽章/积分、同伴对比、复杂知识追踪算法、教师审批。
 
@@ -180,14 +180,14 @@
 
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
-| P0-AGENT-001 | 每项长任务有 AgentRun。 | 前测/随堂题生成、简答题 AI 评分、路线生成、内容/Demo 生成与验证、适应性调整都返回 `agent_run_id` 与状态。 |
-| P0-AGENT-002 | ModelGateway 按任务角色选择白名单 ModelProfile。 | 前端不能提交 provider/model/base URL/key；运行记录 requested/actual profile、模型版本、超时、重试、token 与费用估算。 |
+| P0-AGENT-001 | 每项模型长任务有 AgentRun。 | 前测/后测出题、路线生成、内容/Demo 生成与验证都返回 `agent_run_id` 与状态；确定性评分和 CodeRun 状态查询不创建 AgentRun。 |
+| P0-AGENT-002 | ModelGateway 使用用户选择的 OpenAI-compatible 连接。 | 用户可在模型设置保存 Base URL/API Key/模型名，账户默认可被目标、前测/后测出题和 AI Demo 生成覆盖；Key 加密保存且不进入响应、日志、Outbox 或 AgentRun。运行记录连接 ID、模型名、超时、重试、token 与费用估算。 |
 | P0-AGENT-003 | 模型输出通过结构化校验和业务校验。 | Pydantic/JSON Schema 失败可有限次重试，之后回退模板或失败；无效路线/题目/AI 评分/Demo/引用不得写库或触发路线调整。 |
 | P0-AGENT-004 | Worker 故障可定位和恢复。 | `trace_id` 可贯穿 Web、Outbox、Worker、模型调用和 Runner；失败有错误类别、可重试标识和安全的用户文案。 |
 
-**暂时需要做：**一个真实 Provider Adapter、一个 Fake Adapter、模型 profile 白名单、超时/预算/重试、结构化输出、AgentRun 事件、健康检查。
+**暂时需要做：**OpenAI-compatible Adapter、用户模型连接设置、AES-256-GCM 凭据加密、账户默认和任务级覆盖、Fake Adapter、超时/预算/重试、结构化输出、AgentRun 事件、健康检查。
 
-**暂时不需要做：**用户模型选择、跨 Provider 智能路由、微调、模型网关独立服务、LangSmith 强依赖、自托管推理。
+**暂时不需要做：**自动跨 Provider 智能路由、微调、模型网关独立服务、LangSmith 强依赖、自托管推理，以及 P1 的自定义 Base URL SSRF 受控出网层。
 
 ---
 
@@ -206,19 +206,20 @@
 | 版本不可覆盖 | 路线、卡片内容、题目和 Attempt 都带版本/快照；重新生成和重试不能覆盖历史结果。 |
 | 幂等写入 | 所有会创建费用、任务或执行的写 API 接收 `Idempotency-Key`，并保存请求哈希与原始响应。 |
 | Embedding 固定 | P0 一个数据库只接受一个固定 embedding Profile/维度。切换模型要走新迁移和完整重嵌入，不能静默混用向量维度。 |
-| 敏感数据最小化 | 不保存 Provider API Key；不记录明文密码、原始 session token、隐藏答案、完整 prompt 或未脱敏的模型响应。 |
+| 敏感数据最小化 | 用户 Provider API Key 仅以 AES-256-GCM 密文、IV、认证标签和密钥版本存储；不记录明文密码、原始 session token、隐藏答案、完整 prompt 或未脱敏的模型响应。 |
 | 自动更新时间 | `updated_at DEFAULT now()` 不会自动更新；所有含 `updated_at` 的表通过数据库 trigger 统一维护。 |
 
 ### 3.2 Schema、表数量与模型归属
 
-P0 共 **22 张 LearnCraft 应用/基础设施表**：`public` schema 20 张，`agent` schema 2 张。LangGraph PostgreSQL checkpointer 的官方表不算入这 22 张；它由锁定版本的 `langgraph-checkpoint-postgres` 官方迁移创建，不能手写一个“类似的” ORM 表替代。
+P0 共 **23 张 LearnCraft 应用/基础设施表**：`public` schema 21 张，`agent` schema 2 张。LangGraph PostgreSQL checkpointer 的官方表不算入这 23 张；它由锁定版本的 `langgraph-checkpoint-postgres` 官方迁移创建，不能手写一个“类似的” ORM 表替代。
 
 | Schema | 表 | 写入所有者 | ORM/Schema 文件 | 用途 |
 | --- | --- | --- | --- | --- |
 | public | `users`、`auth_sessions` | Web Identity | `db/schema/identity.ts` | 邮箱密码账号和数据库 Session。 |
+| public | `user_model_connections` | Web Model Connection | `db/schema/model-connection.ts` | 用户自带 OpenAI-compatible Base URL、默认模型及 AES-256-GCM 加密凭据。 |
 | public | `learner_profiles` | Web Profile | `db/schema/profile.ts` | 学习者画像。 |
 | public | `learning_goals`、`learning_plans`、`plan_nodes`、`plan_node_prerequisites`、`adaptation_events` | Web Planning | `db/schema/planning.ts` | 目标、路线、节点、依赖和调整审计。 |
-| public | `assessments`、`assessment_items`、`assessment_attempts`、`assessment_answers` | Web Assessment | `db/schema/assessment.ts` | 前测、随堂测、答案与评分快照。 |
+| public | `assessments`、`assessment_items`、`assessment_attempts`、`assessment_answers` | Web Assessment | `db/schema/assessment.ts` | 前测、路线后测、答案与评分快照。 |
 | public | `content_sources`、`content_documents`、`content_chunks`、`card_contents`、`card_content_references` | Web Content | `db/schema/content.ts` | 受控资料、FTS/向量、卡片内容/引用，以及实战/调试 Demo 合同与验证摘要。 |
 | public | `code_runs` | Web Practice | `db/schema/practice.ts` | 受限代码执行任务和结果。 |
 | public | `outbox_events`、`idempotency_keys` | Web Shared Infrastructure | `db/schema/integration.ts` | 可靠投递和 HTTP 写操作幂等。 |
@@ -233,6 +234,8 @@ erDiagram
     USERS ||--|| LEARNER_PROFILES : has
     USERS ||--o{ AUTH_SESSIONS : opens
     USERS ||--o{ LEARNING_GOALS : owns
+    USERS ||--o{ USER_MODEL_CONNECTIONS : configures
+    USER_MODEL_CONNECTIONS ||--o{ LEARNING_GOALS : overrides
     LEARNING_GOALS ||--o{ LEARNING_PLANS : versions
     LEARNING_PLANS ||--o{ PLAN_NODES : contains
     PLAN_NODES ||--o{ PLAN_NODE_PREREQUISITES : depends_on
@@ -248,6 +251,7 @@ erDiagram
     PLAN_NODES ||--o{ CODE_RUNS : executes
     LEARNING_PLANS ||--o{ ADAPTATION_EVENTS : adjusts
     USERS ||--o{ AGENT_RUNS : owns
+    USER_MODEL_CONNECTIONS ||--o{ AGENT_RUNS : selected_for
     AGENT_RUNS ||--o{ AGENT_RUN_EVENTS : emits
 ```
 
@@ -289,6 +293,38 @@ CREATE TABLE public.users (
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now()
 );
+
+-- 用户生成模型连接。encrypted_api_key、api_key_iv、api_key_auth_tag 均为 Base64 文本；
+-- 明文 API Key 只在创建/更新请求到达 Web 后短暂存在，绝不写入数据库、日志或异步消息。
+CREATE TABLE public.user_model_connections (
+    id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id               uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    display_name           varchar(80) NOT NULL,
+    protocol               varchar(40) NOT NULL DEFAULT 'openai_compatible'
+                           CHECK (protocol = 'openai_compatible'),
+    base_url               text NOT NULL CHECK (length(btrim(base_url)) > 0),
+    default_model_id       varchar(255) NOT NULL CHECK (length(btrim(default_model_id)) > 0),
+    encrypted_api_key      text NOT NULL,
+    api_key_iv             text NOT NULL,
+    api_key_auth_tag       text NOT NULL,
+    encryption_key_version varchar(50) NOT NULL,
+    status                 varchar(20) NOT NULL DEFAULT 'active'
+                           CHECK (status IN ('active', 'invalid', 'revoked')),
+    is_default             boolean NOT NULL DEFAULT false,
+    last_verified_at       timestamptz,
+    last_error_code        varchar(100),
+    created_at             timestamptz NOT NULL DEFAULT now(),
+    updated_at             timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT uq_user_model_connections_owner_name
+        UNIQUE (owner_id, display_name)
+);
+
+CREATE UNIQUE INDEX uq_user_model_connections_owner_default
+    ON public.user_model_connections(owner_id)
+    WHERE is_default;
+
+CREATE INDEX idx_user_model_connections_owner_status
+    ON public.user_model_connections(owner_id, status, updated_at DESC);
 
 CREATE TABLE public.auth_sessions (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -339,6 +375,7 @@ CREATE TABLE public.learning_goals (
                               weekly_minutes_override IS NULL
                               OR weekly_minutes_override BETWEEN 30 AND 10080
                             ),
+    model_connection_id     uuid REFERENCES public.user_model_connections(id) ON DELETE SET NULL,
     profile_version         integer NOT NULL CHECK (profile_version >= 1),
     status                  varchar(30) NOT NULL DEFAULT 'draft'
                             CHECK (status IN (
@@ -452,7 +489,10 @@ CREATE TABLE public.assessments (
     plan_id               uuid REFERENCES public.learning_plans(id) ON DELETE CASCADE,
     plan_node_id          uuid REFERENCES public.plan_nodes(id) ON DELETE CASCADE,
     kind                  varchar(30) NOT NULL
-                          CHECK (kind IN ('diagnostic', 'card_quiz')),
+                          CHECK (kind IN ('diagnostic', 'post_test', 'card_quiz')),
+    requested_question_count integer,
+    difficulty            varchar(20) NOT NULL DEFAULT 'normal'
+                          CHECK (difficulty IN ('normal', 'hard')),
     version               integer NOT NULL DEFAULT 1 CHECK (version >= 1),
     status                varchar(30) NOT NULL DEFAULT 'generating'
                           CHECK (status IN (
@@ -470,9 +510,16 @@ CREATE TABLE public.assessments (
     created_at            timestamptz NOT NULL DEFAULT now(),
     updated_at            timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT ck_assessment_scope CHECK (
-      (kind = 'diagnostic' AND plan_node_id IS NULL)
+      (kind = 'diagnostic' AND plan_id IS NULL AND plan_node_id IS NULL)
+      OR
+      (kind = 'post_test' AND plan_id IS NOT NULL AND plan_node_id IS NULL)
       OR
       (kind = 'card_quiz' AND plan_node_id IS NOT NULL)
+    ),
+    CONSTRAINT ck_assessments_question_count CHECK (
+      (kind = 'diagnostic' AND requested_question_count BETWEEN 10 AND 20)
+      OR (kind = 'post_test' AND requested_question_count BETWEEN 5 AND 10)
+      OR (kind = 'card_quiz' AND requested_question_count IS NULL)
     )
 );
 
@@ -484,13 +531,13 @@ CREATE TABLE public.assessment_items (
     assessment_id         uuid NOT NULL REFERENCES public.assessments(id) ON DELETE CASCADE,
     ordinal               integer NOT NULL CHECK (ordinal >= 1),
     item_type             varchar(30) NOT NULL
-                          CHECK (item_type IN ('single_choice', 'short_answer')),
+                          CHECK (item_type = 'single_choice'),
     prompt                text NOT NULL,
     options_json          jsonb NOT NULL DEFAULT '[]'::jsonb,
-    answer_key_json       jsonb NOT NULL, -- 选择题答案或简答题参考答案；只允许评分服务端读取
+    answer_key_json       jsonb NOT NULL, -- 单选题正确选项；只允许评分服务端读取
     grading_mode          varchar(30) NOT NULL
-                          CHECK (grading_mode IN ('deterministic', 'ai_rubric')),
-    rubric_json           jsonb NOT NULL DEFAULT '{}'::jsonb, -- 简答题 AI 评分维度、分档与禁止事项
+                          CHECK (grading_mode = 'deterministic'),
+    rubric_json           jsonb NOT NULL DEFAULT '{}'::jsonb, -- 历史兼容列；P0 单选题不写入、不读取 rubric
     explanation           text NOT NULL,
     skill_tags            text[] NOT NULL DEFAULT '{}',
     max_score             numeric(8,2) NOT NULL CHECK (max_score > 0),
@@ -498,16 +545,10 @@ CREATE TABLE public.assessment_items (
     created_at            timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT uq_assessment_items_ordinal UNIQUE (assessment_id, ordinal),
     CONSTRAINT ck_assessment_item_grading_mode CHECK (
-      (item_type = 'single_choice'
-       AND grading_mode = 'deterministic'
-       AND jsonb_typeof(options_json) = 'array'
-       AND jsonb_array_length(options_json) >= 2)
-      OR
-      (item_type = 'short_answer'
-       AND grading_mode = 'ai_rubric'
-       AND jsonb_typeof(options_json) = 'array'
-       AND options_json = '[]'::jsonb
-       AND rubric_json <> '{}'::jsonb)
+      item_type = 'single_choice'
+      AND grading_mode = 'deterministic'
+      AND jsonb_typeof(options_json) = 'array'
+      AND jsonb_array_length(options_json) >= 2
     )
 );
 
@@ -546,7 +587,7 @@ CREATE TABLE public.assessment_answers (
     feedback              text,
     weakness_tags         text[] NOT NULL DEFAULT '{}',
     grading_metadata_json jsonb NOT NULL DEFAULT '{}'::jsonb,
-                          -- AI 简答题保存 profile/prompt/rubric 版本、置信度与结构化判定证据；不保存密钥
+                          -- 保存确定性评分器版本和题目/答案快照标识；不保存密钥或隐藏答案
     graded_at             timestamptz,
     created_at            timestamptz NOT NULL DEFAULT now(),
     updated_at            timestamptz NOT NULL DEFAULT now(),
@@ -719,8 +760,8 @@ CREATE TABLE agent.agent_runs (
     owner_id                uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     run_type                varchar(40) NOT NULL
                             CHECK (run_type IN (
-                              'assessment_generate', 'assessment_evaluate', 'plan_generate',
-                              'card_content_generate', 'card_quiz_generate', 'adaptation'
+                              'assessment_generate', 'plan_generate',
+                              'card_content_generate', 'adaptation'
                             )),
     status                  varchar(20) NOT NULL DEFAULT 'queued'
                             CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'expired')),
@@ -733,6 +774,8 @@ CREATE TABLE agent.agent_runs (
     input_schema_version    varchar(100) NOT NULL,
     output_schema_version   varchar(100),
     requested_model_profile varchar(100) NOT NULL,
+    model_connection_id     uuid REFERENCES public.user_model_connections(id) ON DELETE SET NULL,
+    requested_model_id      varchar(255),
     actual_model_profile    varchar(100),
     fallback_reason         varchar(255),
     input_tokens            integer NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
@@ -817,11 +860,11 @@ CREATE INDEX idx_idempotency_keys_expiry
 
 `outbox_events` 的最小可靠投递流程为：同一数据库事务中完成核心聚合变更、创建 `agent.agent_runs` 和 `INSERT outbox_events`；独立 `agent-dispatcher` 使用 `SELECT ... FOR UPDATE SKIP LOCKED` 领取 `agent.run.requested`，投递到 Celery 后回写状态。Celery Worker 仅推进 `agent.agent_runs` 与 `agent.agent_run_events`，再经内部 Core API 持久化结构化业务结果。Dispatcher 在“已发送、未回写”间中断时允许重复投递，`agent_run_id` 同时作为 Celery `task_id` 与幂等边界。`outbox_events` 是跨上下文基础设施例外，不是 Worker 可以任意修改核心表的通行证。
 
-对于 `short_answer`，`answer_key_json` 保存隐藏参考答案，`rubric_json` 保存按点给分规则；Worker 的 `assessment_evaluate` 使用固定 ModelProfile 返回受 Pydantic 校验的 `{score, feedback, evidence_tags, confidence}`。评分 Profile、Prompt/Rubric 版本、置信度和判定证据写入 `grading_metadata_json`。结构化输出失败、Provider 故障或置信度低于策略阈值时，Attempt 进入 `grading_failed`，允许用户重试，但不能据此解锁、跳过或插入路线节点。
+P0 的 `assessment_items` 仅允许 `single_choice`：`answer_key_json` 保存隐藏正确选项，服务端同步完成确定性评分，并在 `grading_metadata_json` 保存评分器与题目/答案版本标识。`rubric_json` 是为避免破坏旧迁移而保留的历史兼容列，P0 不读取或写入它。`assessment_evaluate` 与 `card_quiz_generate` 已从 AgentRun 类型中移除，任何 P0 路径均不得创建这两类任务。
 
 ### 3.8 `updated_at` Trigger 与迁移顺序
 
-所有包含 `updated_at` 的表必须挂触发器：`users`、`auth_sessions`、`learner_profiles`、`learning_goals`、`learning_plans`、`plan_nodes`、`assessments`、`assessment_attempts`、`assessment_answers`、`content_sources`、`content_documents`、`card_contents`、`code_runs`、`agent.agent_runs`、`idempotency_keys`。
+所有包含 `updated_at` 的表必须挂触发器：`users`、`auth_sessions`、`user_model_connections`、`learner_profiles`、`learning_goals`、`learning_plans`、`plan_nodes`、`assessments`、`assessment_attempts`、`assessment_answers`、`content_sources`、`content_documents`、`card_contents`、`code_runs`、`agent.agent_runs`、`idempotency_keys`。
 
 ```sql
 CREATE TRIGGER trg_users_touch_updated_at
@@ -831,7 +874,7 @@ FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 -- 其余表在同一迁移中按相同模式建立 trigger；不要依赖应用代码“记得更新”。
 ```
 
-当前初始库使用一个可审查的 `0000_initial_p0_schema`：其中包含 22 张表、`pgcrypto`/`citext`/`vector` 扩展、`agent` schema、索引、外键和 15 个 `updated_at` trigger，已在本地 Docker PostgreSQL 验证。因为当前数据库此前为空，合并首份迁移可保证跨表外键和约束一次性建立；上线后不得重写此文件，所有变更必须由新的增量迁移表达。
+当前初始库使用一个可审查的 `0000_initial_p0_schema`：其中包含 22 张表、`pgcrypto`/`citext`/`vector` 扩展、`agent` schema、索引、外键和 15 个 `updated_at` trigger，已在本地 Docker PostgreSQL 验证。`0003_user_model_connections` 以增量方式新增第 23 张表、目标/AgentRun 选择快照字段与第 16 个 trigger；上线后不得重写历史迁移，所有变更必须由新的增量迁移表达。
 
 原先规划的逻辑拆分保留为后续迁移的职责参考：
 
@@ -851,6 +894,7 @@ FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 | P1 | `oauth_accounts`、`email_verification_tokens`、`password_reset_tokens` | OAuth/Magic Link、邮箱验证与安全找回密码。 |
 | P1 | `content_ingestion_jobs`、`content_source_access`、`content_chunk_embeddings` | 用户资料导入、MinerU、私有资料授权、多版本重嵌入。 |
 | P1 | `model_usage_ledger`、`plan_change_sets`、`data_deletion_jobs` | 用户成本/配额、路线回退、数据删除编排。 |
+| P1 | `model_connection_verification_events`、`egress_policy_audits` | 自定义 Base URL 的 SSRF 受控出网、DNS/重定向复核和连接验证审计。 |
 | P2 | `organizations`、`organization_members`、`roles` | 多租户组织与权限。 |
 | P2 | `progress_snapshots`、`learning_reports`、`achievements` | 进度条、学习报告和成就投影。 |
 | P2 | `posts`、`comments`、`reactions`、`groups` | 社区/社群。 |
@@ -930,7 +974,44 @@ HTTP/1.1 200 OK
 
 > **为什么不按示例返回 JWT？**LearnCraft P0 是同域 Web 应用，Next.js BFF 用 HttpOnly Cookie 可以避免前端 JavaScript 持有长期访问令牌。服务器只保存随机 token 的哈希，泄露数据库也不能直接重放 Session。以后做移动端/第三方 API 时，再单独设计短期 Access Token + Refresh Token 流程，而不是现在混入浏览器登录。
 
-### 4.3 画像、目标与前测 API
+### 4.3 模型连接 API
+
+模型连接为当前账户私有资源，支持一个账户默认连接。`api_key` 是仅写字段：创建时必须提供，更新时仅在替换 Key 时提供，任何成功或失败响应都不会回传它或其密文。P0 允许自定义 HTTP/HTTPS Base URL，但实际 Worker 出网必须等 P1 SSRF 受控出网层完成后才可启用。
+
+| 方法与路径 | 用途 | 成功响应 |
+| --- | --- | --- |
+| `GET /api/v1/model-connections` | 列出当前用户的安全连接摘要 | `200` `{ items: ModelConnection[] }` |
+| `POST /api/v1/model-connections` | 加密保存连接，可同时设为账户默认 | `201` `ModelConnection` |
+| `PATCH /api/v1/model-connections/{model_connection_id}` | 修改名称、Base URL、默认模型或替换 API Key | `200` `ModelConnection` |
+| `POST /api/v1/model-connections/{model_connection_id}/default` | 设置账户默认连接 | `200` `ModelConnection` |
+| `DELETE /api/v1/model-connections/{model_connection_id}` | 删除连接，解除可选目标/运行记录关联 | `204` |
+
+```http
+POST /api/v1/model-connections
+Content-Type: application/json
+
+{
+  "display_name": "我的 DeepSeek",
+  "base_url": "https://api.deepseek.com",
+  "api_key": "仅在本次请求发送的密钥",
+  "default_model_id": "deepseek-chat",
+  "set_as_default": true
+}
+
+HTTP/1.1 201 Created
+
+{
+  "id": "model-connection-uuid",
+  "display_name": "我的 DeepSeek",
+  "protocol": "openai_compatible",
+  "base_url": "https://api.deepseek.com",
+  "default_model_id": "deepseek-chat",
+  "status": "active",
+  "is_default": true
+}
+```
+
+### 4.4 画像、目标与前测 API
 
 | 方法与路径 | 用途 | 成功响应 |
 | --- | --- | --- |
@@ -939,7 +1020,7 @@ HTTP/1.1 200 OK
 | `POST /api/v1/learning-goals` | 创建 Python 基础目标 | `201` Goal |
 | `GET /api/v1/learning-goals/{goal_id}` | 读取目标及当前状态 | `200` Goal |
 | `POST /api/v1/learning-goals/{goal_id}/diagnostic-assessments` | 请求前测生成 | `202` `{ assessment_id, agent_run_id, status }` |
-| `GET /api/v1/assessments/{assessment_id}` | 读取题目或结果 | `200`；进行中不包含 `answer_key_json`、`rubric_json` 或 AI 评分内部元数据 |
+| `GET /api/v1/assessments/{assessment_id}` | 读取题目或结果 | `200`；进行中不包含 `answer_key_json`、`rubric_json` 或评分内部元数据 |
 | `POST /api/v1/assessments/{assessment_id}/attempts` | 创建/恢复一次作答 | `201` Attempt |
 | `PUT /api/v1/assessment-attempts/{attempt_id}/answers/{item_id}` | 保存单题答案 | `200` Answer 摘要 |
 | `POST /api/v1/assessment-attempts/{attempt_id}/submit` | 提交并评分 | `202` `{ attempt_id, agent_run_id, status: "queued" }` |
@@ -957,7 +1038,8 @@ Content-Type: application/json
   "description": "我会一点 JavaScript，但没有 Python 基础。",
   "desired_outcome": "能理解变量、函数、列表和错误，并完成一个小项目。",
   "target_date": "2026-08-01",
-  "weekly_minutes_override": 300
+  "weekly_minutes_override": 300,
+  "model_connection_id": "model-connection-uuid"
 }
 
 HTTP/1.1 201 Created
@@ -969,14 +1051,16 @@ HTTP/1.1 201 Created
 }
 ```
 
-#### 前测 / 随堂测验共用题目与提交合同
+#### 前测 / 路线后测共用题目与提交合同
 
-`diagnostic`（前测）与 `card_quiz`（随堂测验）使用同一套公开题目和作答 API：每套 5–8 题，至少一题 `single_choice` 和一题 `short_answer`。两者的区别只在题目范围：前测覆盖学习目标，随堂测验覆盖当前节点；**不是把前测原题重复给用户**。
+`diagnostic`（前测）与 `post_test`（路线后测）共用单选题公开题目和作答 API。前测由用户选择 10–20 题（默认推荐 12），并指定 `normal` 或 `hard`；`normal` 从基础到进阶逐步提升，`hard` 在相同题序上整体提高基线。路线后测要求 `plan_id`，由用户选择 5–10 题（推荐 5–8），覆盖已完成路线的关键目标。两者都不向浏览器返回隐藏答案。
 
 ```json
 {
   "id": "assessment-uuid",
   "kind": "diagnostic",
+  "requested_question_count": 12,
+  "difficulty": "normal",
   "status": "ready",
   "items": [
     {
@@ -989,13 +1073,6 @@ HTTP/1.1 201 Created
         { "id": "C", "text": "()" }
       ],
       "max_score": 1
-    },
-    {
-      "id": "short-answer-item-uuid",
-      "item_type": "short_answer",
-      "prompt": "用 1–3 句话解释函数参数与返回值分别解决什么问题。",
-      "answer_constraints": { "min_chars": 20, "max_chars": 500 },
-      "max_score": 4
     }
   ]
 }
@@ -1011,26 +1088,25 @@ Content-Type: application/json
     {
       "item_id": "choice-item-uuid",
       "answer": { "selected_option_id": "B" }
-    },
-    {
-      "item_id": "short-answer-item-uuid",
-      "answer": { "text": "参数把外部数据传给函数，返回值把函数处理后的结果交回调用者。" }
     }
   ]
 }
 
-HTTP/1.1 202 Accepted
+HTTP/1.1 200 OK
 
 {
   "attempt_id": "attempt-uuid",
-  "agent_run_id": "assessment-evaluate-run-uuid",
-  "status": "grading"
+  "status": "graded",
+  "score_percent": 100,
+  "weakness_tags": []
 }
 ```
 
-AI 判分完成后的公开结果只返回分数、反馈、薄弱点和置信度；不会返回隐藏参考答案、rubric、系统提示词或模型密钥。只有所有简答题通过结构校验并达到置信度阈值，结果才可驱动路线调整。
+确定性评分的公开结果只返回分数、反馈和薄弱点；不会返回隐藏参考答案、评分内部元数据、系统提示词或模型密钥。路线后测结果可用于生成下一路线的复习或提高难度建议。
 
-### 4.4 路线与卡片内容 API
+`model_connection_id` 是可选的目标级覆盖值。服务端必须先按当前 `owner_id` 验证该连接处于 `active` 状态；缺省时，在真正创建生成任务时解析账户默认连接。
+
+### 4.5 路线与卡片内容 API
 
 | 方法与路径 | 用途 | 成功响应 |
 | --- | --- | --- |
@@ -1039,7 +1115,7 @@ AI 判分完成后的公开结果只返回分数、反馈、薄弱点和置信�
 | `GET /api/v1/plan-nodes/{node_id}` | 读取节点详情 | `200` Node |
 | `POST /api/v1/plan-nodes/{node_id}/card-contents` | 请求/重试生成卡片 | `202` `{ card_content_id, agent_run_id, status }` |
 | `GET /api/v1/card-contents/{card_content_id}` | 读取已完成卡片 | `200`；`practice/debug` 卡含已验证 Demo、调用顺序和注释结果；不含隐藏测试/评分依据 |
-| `POST /api/v1/plan-nodes/{node_id}/quiz-assessments` | 请求随堂题 | `202` `{ assessment_id, agent_run_id, status }` |
+| `POST /api/v1/learning-plans/{plan_id}/post-test-assessments` | 路线所有节点完成后请求后测 | `202` `{ assessment_id, agent_run_id, status }` |
 
 路线生成示例：
 
@@ -1088,11 +1164,11 @@ HTTP/1.1 202 Accepted
 
 该 `validation` 由系统在内容发布前产生，不能由模型自行声称“可运行”而跳过 Runner。
 
-### 4.5 代码实践、Agent 状态与内部 API
+### 4.6 代码实践、Agent 状态与内部 API
 
 | 方法与路径 | 用途 | 成功响应 |
 | --- | --- | --- |
-| `POST /api/v1/plan-nodes/{node_id}/code-runs` | 提交受限 Python 代码 | `202` `{ code_run_id, status: "queued" }` |
+| `POST /api/v1/plan-nodes/{node_id}/code-runs` | 在学习卡片上下文提交受限 Python 代码；独立于 LangGraph | `202` `{ code_run_id, status: "queued" }` |
 | `GET /api/v1/code-runs/{code_run_id}` | 查询运行结果 | `200` stdout/stderr/test summary/resource usage |
 | `GET /api/v1/agent-runs/{agent_run_id}` | 查询长任务快照 | `200` 状态、进度摘要、错误类别、trace ID |
 | `GET /api/v1/agent-runs/{agent_run_id}/events` | 可选 SSE 订阅/重放 | `200 text/event-stream`；支持 `Last-Event-ID` |
@@ -1116,12 +1192,12 @@ HTTP/1.1 202 Accepted
 { "code_run_id": "d098af18-8839-488a-a8b8-476b867e8e86", "status": "queued" }
 ```
 
-### 4.6 API 需要先写入的契约
+### 4.7 API 需要先写入的契约
 
 `packages/contracts/openapi/core.yaml` 是 Web 与 Worker 的唯一跨语言 HTTP 契约来源。P0 至少定义：
 
-- Auth、Profile、Goal、Assessment、Plan、Node、CardContent、CodeRun、AgentRun 的 request/response schema；
-- `AssessmentItem`（`single_choice` / `short_answer` 判别联合）、`AssessmentGrade`、`RunnableDemoSpec`、`DemoValidationResult`、`CallSequenceStep` 与 `AnnotatedResultStep` schema；
+- Auth、ModelConnection、Profile、Goal、Assessment、Plan、Node、CardContent、CodeRun、AgentRun 的 request/response schema；
+- `AssessmentItem`（仅 `single_choice`）、`AssessmentGrade`、`RunnableDemoSpec`、`DemoValidationResult`、`CallSequenceStep` 与 `AnnotatedResultStep` schema；
 - `AgentRunRequested`、`PlanGenerated`、`CardContentGenerated`、`CodeRunFinished` 的事件信封 JSON Schema；
 - 统一错误、分页（如需要）、`trace_id` 和幂等冲突响应；
 - internal endpoint 的服务认证要求与所有权边界。
@@ -1141,7 +1217,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant O as Outbox
     participant A as Python Agent Worker
-    participant M as 托管模型 API
+    participant M as 用户配置的模型 Provider
 
     U->>W: 注册
     W->>DB: 创建用户 + Argon2id hash
@@ -1151,21 +1227,21 @@ sequenceDiagram
     W->>DB: 校验用户 + 创建 Session
     DB-->>W: 用户与 Session
     W-->>U: Set-Cookie + 当前用户
-    U->>W: 提交画像与学习目标
-    W->>DB: 保存 Profile、Goal(status=assessment_pending)
+    U->>W: 保存模型连接或选择账户默认
+    W->>DB: 加密保存连接（不写入 Outbox）
+    U->>W: 提交画像与学习目标（可覆盖模型连接）
+    W->>DB: 保存 Profile、Goal(status=assessment_pending, model_connection_id?)
     U->>W: 请求前测
     W->>DB: 创建 Assessment(generating) + Outbox(event)
     O-->>A: 领取 assessment.generate
-    A->>M: 生成 5–8 题（选择题 + 简答题）
+    A->>M: 生成用户指定的 10–20 题单选前测
     M-->>A: 结构化题目
-    A->>A: Pydantic + 题型/隐藏答案/rubric 校验
+    A->>A: Pydantic + 单选题/隐藏答案/题量/难度校验
     A->>W: Internal API 回写题目
     W->>DB: Assessment(status=ready)
     U->>W: 作答并提交
-    W->>DB: Attempt + Answers + Outbox(event)
-    O-->>A: 领取 assessment.evaluate
-    A->>A: 选择题规则评分 + 简答题 AI rubric 评分/置信度校验
-    A->>W: Internal API 回写评分结果
+    W->>DB: Attempt + Answers
+    W->>W: 按隐藏答案确定性评分
     W->>DB: Goal(status=planning) + Outbox(plan.generate)
     O-->>A: 领取 plan.generate
     A->>M: 生成路线 JSON
@@ -1214,17 +1290,18 @@ flowchart TD
     F --> G{超时/资源超限?}
     G -->|是| H[timeout + 回收环境]
     G -->|否| I[保存 stdout/stderr/隐藏测试摘要]
-    I --> J[用户提交 5–8 题随堂测验]
-    J --> K[选择题规则评分 + 简答题 AI rubric 评分]
-    K --> Q{简答题评分结构有效且置信度达标?}
-    Q -->|否| R[保留答案，提示重试/复习；不调整路线]
-    Q -->|是| L{测验 >= 80% 且代码通过?}
-    L -->|是| M[节点 completed + 解锁下一节点]
-    L -->|否，50-79%| N[节点 needs_review]
-    L -->|否，<50% 或连续失败| O[插入 reinforcement 节点]
-    M --> P[记录 AdaptationEvent]
-    N --> P
-    O --> P
+    I --> J[节点完成；按前置关系解锁下一节点]
+    J --> K{整条路线所有节点完成?}
+    K -->|否| A
+    K -->|是| L[用户选择 5–10 题路线后测]
+    L --> M[服务端按隐藏答案确定性评分]
+    M --> N{后测 >= 80% 且相关代码通过?}
+    N -->|是| O[路线标记掌握]
+    N -->|否，50-79%| P[建议复习并允许重测]
+    N -->|否，<50% 或连续失败| Q[建议下一路线补强主题]
+    O --> R[记录 AdaptationEvent]
+    P --> R
+    Q --> R
 ```
 
 ### 5.4 AgentRun 状态机
@@ -1491,13 +1568,13 @@ uv run pytest
 
 实施顺序：
 
-1. 已在 `apps/web/src/lib/db/schema/` 按第 3.2 节的文件归属声明全部 22 张表与 relation；
+1. 已在 `apps/web/src/lib/db/schema/` 按第 3.2 节的文件归属声明全部 23 张表与 relation；其中 `0003_user_model_connections` 为用户模型连接及目标/AgentRun 选择快照的增量迁移；
 2. 将扩展、schema、CHECK、partial index、trigger、HNSW（暂不创建）等 Drizzle 不擅长表达的部分放在 migration raw SQL；
 3. 已生成并审查 `0000_initial_p0_schema`；后续所有变更使用新的增量迁移；
 4. 已在空库执行首份迁移并完成表、扩展、向量列、trigger 的 schema smoke test；下一步再加入 seed；
 5. 使用测试数据库重复运行迁移，验证不会出现第二套 Alembic 迁移或 `updated_at` 漏更新。
 
-Seed 必须包含：一名测试用户（仅测试环境）、Python 基础受控来源、至少一份文档、若干分块、对应 embedding、选择题 + 简答题的前测/随堂题模板、隐藏 rubric 与预期 AI 判分 fixture、可运行 Demo golden case、检索 golden set。真实用户密码和 Provider Key 永远不进入 seed 文件。
+Seed 必须包含：一名测试用户（仅测试环境）、Python 基础受控来源、至少一份文档、若干分块、对应 embedding、10–20 题前测与 5–10 题路线后测的单选题模板、隐藏答案和确定性评分 fixture、可运行 Demo golden case、检索 golden set。真实用户密码和 Provider Key 永远不进入 seed 文件。
 
 ### 步骤 5：完成认证与会话，再开始私有业务 API
 
@@ -1518,38 +1595,38 @@ Argon2id 的参数从 OWASP 建议的最低基线起步：内存约 19 MiB、迭
 
 1. Profile：创建/更新画像、版本递增；
 2. Goal：创建 Python 目标、检查画像已经完成、状态流转；
-3. Assessment：创建前测/随堂测验容器，校验 5–8 题且两题型齐全；选择题规则评分、简答题以 `assessment_evaluate` AgentRun 按隐藏 rubric 评分，隐藏答案/rubric 不外泄；
+3. Assessment：创建前测/路线后测容器；前测校验 10–20 题及 `normal`/`hard`，后测校验 5–10 题及 `plan_id`；仅写入单选题，服务端按隐藏答案确定性评分且不外泄；
 4. Planning：创建路线请求、DAG 验证、激活一条版本、节点解锁策略；
 5. Content：创建卡片内容请求、内容版本、引用校验；实战/调试卡必须保存 AI Demo、调用顺序、注释结果与预运行验证摘要；
-6. Practice：创建 CodeRun、只接受允许的 runtime 和长度受限的代码；为 AI Demo 提供发布前预运行验证；
+6. Practice：创建独立 CodeRun、只接受允许的 runtime 和长度受限的代码；请求必须携带学习卡片上下文的 `goal_id + plan_node_id`；为 AI Demo 提供发布前预运行验证；
 7. Shared：在同一事务写 Outbox 与 IdempotencyKey，确保失败回滚时两者都不残留。
 
-在此阶段 Worker 先接 `FakeModelGateway`，使“前测 → 路线 → 内容 → 题目”的 API 流可以稳定自动化测试，不消耗任何真实 Provider 额度。
+在此阶段 Worker 先接 `FakeModelGateway`，使“前测出题 → 路线 → 内容/Demo → 后测出题”的 API 流可以稳定自动化测试，不消耗任何真实 Provider 额度。
 
-### 步骤 7：实现 ModelGateway 与一个真实 Provider Adapter
+### 步骤 7：实现 ModelGateway 与 OpenAI-compatible Provider Adapter
 
-P0 只接入 **一个**生成 Provider 和 **一个**固定 embedding Profile。先定义稳定 port，再接具体 SDK：
+P0 的**生成模型**由用户配置 OpenAI-compatible 连接（例如支持该协议的 DeepSeek、Qwen 等）；Embedding 仍固定为一个平台 Profile。先定义稳定 port，再接 OpenAI-compatible Adapter：
 
 ```text
 LangGraph workflow
-  → ModelGateway.generate(task_role, input, budget)
+  → ModelGateway.generate(task_role, input, budget, model_connection_id?)
   → LLM Port / Embedding Port
-  → ProviderAdapter（LangChain integration）
-  → 托管模型 API
+  → OpenAICompatibleAdapter（LangChain integration）
+  → 用户已配置的 Base URL
 ```
 
-ModelGateway 至少维护以下不可由用户修改的 Profile：
+`ModelGateway` 解析模型的优先级为：**任务级显式选择** → **学习目标 `model_connection_id`** → **账户默认连接**。每个 AgentRun 固化连接 ID 与请求模型名；即使之后修改默认连接，历史任务也不会被静默改写。删除连接后关联外键设为 `NULL`，历史记录保留模型名称与运行摘要，但不会保留 API Key。
+
+ModelGateway 至少维护以下任务规则；其中模型连接可由用户覆盖，预算、结构化 schema、超时和重试策略仍由平台控制：
 
 | `task_role` | Profile 内容 | P0 规则 |
 | --- | --- | --- |
-| `assessment_generate` | 模型、最大输出 token、超时、选择题 + 简答题 schema | 5–8 题、每类至少 1 题；失败走受控题库。 |
-| `assessment_evaluate` | 模型、隐藏参考答案/rubric、答案长度上限、评分 schema | 只为简答题输出分数、反馈、证据标签和置信度；失败/低置信度不调整路线。 |
-| `plan_generate` | 模型、预算、路线 schema、重试次数 | 必须通过四阶段/DAG 校验。 |
-| `card_content_generate` | 模型、预算、引用与 Demo schema | 只使用 RetrieverPort 返回的受控资料；实战/调试 Demo 必须经 Runner 预运行成功。 |
-| `card_quiz_generate` | 模型、选择题 + 简答题 schema、预算 | 5–8 题，评分合同与前测一致；失败走模板。 |
+| `assessment_generate` | 用户选择的模型连接、最大输出 token、超时、单选题 schema | 前测 10–20 题或后测 5–10 题；可任务级切换模型；校验题量、难度和至少两个选项；失败走受控题库。 |
+| `plan_generate` | 目标/账户默认模型连接、预算、路线 schema、重试次数 | 创建目标时可覆盖账户默认；必须通过四阶段/DAG 校验。 |
+| `card_content_generate` | 用户选择的模型连接、预算、引用与 Demo schema | AI Demo 生成可任务级切换模型；只使用 RetrieverPort 返回的受控资料，实战/调试 Demo 必须经 Runner 预运行成功。 |
 | `embedding` | 固定模型、维度、版本 | 和迁移/健康检查/检索集完全一致。 |
 
-简答题评分的调用必须把“用户答案”作为不可信数据字段，而不是可执行指令：固定系统提示、隐藏 rubric 与用户答案分层传入；答案长度受限；不启用工具、检索或外网；只接受符合 Pydantic `AssessmentGrade` schema 的 JSON。`confidence` 仅作为规则门槛的一部分，不能代替 rubric、分数范围和结构校验。
+单选作答始终是不可信输入：服务端只将其与隐藏答案比较，不将其拼入模型提示词、工具调用或检索请求。评分器必须校验选项属于当前题目，且只接受符合 Pydantic `AssessmentGrade` schema 的确定性结果。
 
 推荐环境变量形状：
 
@@ -1562,10 +1639,10 @@ WEB_DATABASE_URL=postgresql://learncraft:change-me-locally@postgres:5432/learncr
 AGENT_DATABASE_URL=postgresql+asyncpg://learncraft_agent:change-me-locally@postgres:5432/learncraft?options=-csearch_path%3Dagent,public
 INTERNAL_SERVICE_SECRET=replace-with-a-long-random-secret
 
-# 模型：真实密钥只写本机 .env / Secret Manager，不提交 .env.example
-LLM_GENERATION_PROVIDER=approved-provider
-LLM_GENERATION_MODEL=approved-generation-model
-LLM_GENERATION_API_KEY=
+# 用户模型凭据的加密主密钥：只写本机 .env / Secret Manager，不提交 .env.example。
+# 值为 Base64 编码的 32 字节随机值；Web 与执行模型调用的 Worker 均需持有同一版本。
+CREDENTIAL_ENCRYPTION_KEY=
+CREDENTIAL_ENCRYPTION_KEY_VERSION=local-v1
 LLM_GENERATION_TIMEOUT_SECONDS=45
 LLM_GENERATION_MAX_OUTPUT_TOKENS=3000
 ASSESSMENT_AI_MIN_CONFIDENCE=0.70
@@ -1578,7 +1655,7 @@ SILICONFLOW_API_KEY=
 MODEL_RUN_MAX_COST_USD=0.05
 ```
 
-Provider 选型只用以下门槛判断：能否稳定提供结构化输出/工具调用，中文与 Python 内容质量，embedding 维度和价格是否可预测，数据处理条款是否可接受。先通过 Fake Adapter 的单元/契约测试，再在 staging 用一条真实测试目标做 smoke test；生产代码不得把 Provider 名称、base URL、Key 或模型名暴露给用户。
+用户自行选择生成 Provider 时，界面必须清晰展示连接名、Base URL 和模型名，但 API 响应永远不返回 API Key 密文、IV、认证标签或主密钥。先通过 Fake Adapter 的单元/契约测试，再在 staging 用一条真实测试目标做 smoke test。P0 仅对 Base URL 做格式校验，尚未发起校验请求；**在允许 Worker 对任意用户 Base URL 出网前，P1 必须实现受控出网与 SSRF 防护**：仅允许 HTTPS/批准端口、拒绝 loopback/私网/link-local/云 metadata 地址、DNS 解析后复核与防重绑定、重定向逐跳复核、审计和限流。
 
 ### 步骤 8：加入 Docker Compose（本地一键联调）
 
@@ -1727,7 +1804,7 @@ docker compose -f infra/compose.yaml ps
 docker compose -f infra/compose.yaml logs -f web agent-worker
 ```
 
-第一次真实 Provider 联调前，把 `LLM_PROVIDER_MODE` 从 `fake` 改为批准 Provider，并在本机 `.env` 或部署 Secret Manager 写入 Key；`.env.example` 始终只保留空值/占位符。
+第一次真实 Provider 联调前，在被 Git 忽略的 `infra/.env` 或部署 Secret Manager 中写入 `CREDENTIAL_ENCRYPTION_KEY`，再通过已登录用户的模型连接 API 保存测试连接。`.env.example` 始终只保留空值/占位符；用户 API Key 不应成为 Compose 环境变量、Celery 消息或日志字段。
 
 ### 步骤 9：实现 Worker、检索和 Runner 的最小可用闭环
 
@@ -1737,8 +1814,8 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 2. `AgentRunRepository`：保存运行、事件、重试次数、预算和 trace；
 3. `RetrieverPort`：先读已审核种子内容，分别经 `VectorStore` 做 dense 召回、经词法检索端口做 FTS 召回，再由 `HybridRetriever` 用 RRF 融合，返回可引用定位；P0 注入 `PgvectorVectorStore`，未来可替换为 `MilvusVectorStore`。若 Provider 可返回 sparse 向量，再增加一次 `VectorStore` sparse 召回；
 4. `PlanGraph`：输入规范化 → 生成 → Pydantic schema → 四阶段/DAG/时长校验 → Internal Core API；
-5. `CardContentGraph`：检索、生成、引用校验；对实战/调试节点执行 Demo schema → Runner 预运行 → 预期输出比对 → 失败修复/模板兜底后回写；`QuizGraph`：生成 5–8 题的选择题 + 简答题，并由 `assessment_evaluate` 以 rubric 评分；
-6. `RunnerClient`：Web 只调用 Runner 的受限协议，Runner 只返回结构化结果；
+5. `CardContentGraph`：检索、生成、引用校验；对实战/调试节点执行 Demo schema → Runner 预运行 → 预期输出比对 → 失败修复/模板兜底后回写；`AssessmentGraph`：按指定题量生成单选前测或路线后测，评分仍在 Web 侧确定性完成；
+6. `RunnerClient`：CodeRun 是独立 HTTP 用例，Web 通过受限协议调用 Runner，Runner 只返回结构化结果；AI Demo 生成可使用轻量 AgentRun，但实际运行不属于 LangGraph 工作流；
 7. `AdaptationPolicy`：用纯 TypeScript 领域规则消费评分和 CodeRun 结果，产生 `adaptation_events`，不要让 LLM 决定解锁权限。
 
 ### 步骤 10：完成 Swagger、日志和可观察性
@@ -1755,27 +1832,27 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 
 | 顺序 | 操作 | 必须观察到的证据 |
 | --- | --- | --- |
-| 1 | `docker compose up` 后执行 migration/seed | PostgreSQL 有 `public`、`agent` schema；22 张应用表、vector extension、健康检查均成功。 |
+| 1 | `docker compose up` 后执行 migration/seed | PostgreSQL 有 `public`、`agent` schema；23 张应用表、vector extension、健康检查均成功。 |
 | 2 | 注册并登录测试用户 | `users.password_hash` 不是明文；浏览器仅有 HttpOnly Cookie；`GET /auth/me` 成功。 |
 | 3 | 写画像、创建目标 | 数据行 `owner_id` 正确；重复 Idempotency-Key 返回同一 Goal。 |
-| 4 | 请求前测 | Assessment/AgentRun/Outbox 状态由 `generating/queued` 变为 `ready/succeeded`；题目共 5–8 题且同时有选择题、简答题；事件序号连续。 |
-| 5 | 提交答案 | Attempt 只产生一条；选择题规则评分、简答题 AI rubric 评分均可追踪；浏览器响应没有 `answer_key_json`/`rubric_json`；低置信度不进入 `planning`。 |
+| 4 | 请求前测 | Assessment/AgentRun/Outbox 状态由 `generating/queued` 变为 `ready/succeeded`；用户选定 10–20 题、仅有单选题、难度符合 `normal`/`hard` 与逐步提升规则；事件序号连续。 |
+| 5 | 提交答案 | Attempt 只产生一条；服务端确定性评分可追踪；浏览器响应没有 `answer_key_json`；评分完成后进入 `planning`。 |
 | 6 | 等待路线生成 | Plan 有 6–12 节点、四阶段、无环依赖；首节点为 `available`；模型输出校验失败时走模板/失败态。 |
 | 7 | 请求实战/调试卡内容 | `card_contents` 和 `card_content_references` 同时存在；Demo 已预运行成功，调用顺序/注释结果与 stdout 一致，每个引用可定位到种子资料。 |
 | 8 | 运行正常、超时、恶意三段代码 | 分别得到 succeeded、timeout、rejected/failed；Runner 无网络、无宿主路径泄露且资源被回收。 |
-| 9 | 提交随堂测验并触发不同分数 | 随堂测验同样为 5–8 道选择题 + 简答题；80%、60%、40% 三组高置信度结果分别验证解锁、复习、补强，低置信度不调整路线。 |
+| 9 | 完成路线并提交后测 | 用户选择 5–10 道单选后测（推荐 5–8）；80%、60%、40% 三组确定性结果分别验证掌握、复习、下一路线补强建议，且审计事件包含触发依据。 |
 | 10 | 用户 B 访问用户 A 的所有资源 | 一律 `404`；日志有 trace，不泄露 A 的标题、状态或内容。 |
-| 11 | 切换为真实 Provider 做一次 smoke | 数据库记录 actual profile/模型版本/费用；Key 不出现在响应、日志或容器 inspect 输出。 |
+| 11 | 保存测试模型连接并做一次真实 Provider smoke | 数据库记录连接 ID、请求模型名、实际模型版本/费用；Key 不出现在响应、日志、Celery 消息或容器 inspect 输出。 |
 
 ### 步骤 12：测试与 CI 最小门槛
 
 | 层级 | 运行位置 | P0 必测内容 |
 | --- | --- | --- |
-| Unit | Node/Python 进程 | 领域状态机、DAG、选择题/AI 简答题评分、置信度门槛、适应策略、预算策略、Zod/Pydantic schema。 |
+| Unit | Node/Python 进程 | 领域状态机、DAG、单选题确定性评分、题量/难度边界、适应策略、预算策略、Zod/Pydantic schema。 |
 | Repository integration | 临时 PostgreSQL + pgvector | 迁移、trigger、约束、owner filter、Outbox 锁、向量/FTS 检索。 |
-| Contract | Web 与 Worker | `core.yaml` 生成物、选择题/简答题判别联合、AI 评分、RunnableDemoSpec、internal 请求/响应、事件 JSON Schema。 |
-| E2E | Compose + Fake Provider | 注册到路线、已验证 Demo、代码、两类题型测验、调整的完整闭环。 |
-| Security regression | Compose/staging | 越权、会话撤销、限流、答案/rubric 泄露、简答题 Prompt Injection、Runner 断网/资源耗尽。 |
+| Contract | Web 与 Worker | `core.yaml` 生成物、单选题合同、确定性评分、RunnableDemoSpec、internal 请求/响应、事件 JSON Schema。 |
+| E2E | Compose + Fake Provider | 注册到路线、已验证 Demo、独立 CodeRun、前测与路线后测、建议的完整闭环。 |
+| Security regression | Compose/staging | 越权、会话撤销、限流、隐藏答案泄露、Runner 断网/资源耗尽。 |
 | Staging smoke | 真实 Provider | 一条固定目标、固定资料、成本上限内的真实模型与 embedding 调用。 |
 
 合并前最低 CI 流水线：`lint → typecheck → unit → migration on empty DB → repository integration → contract → E2E(fake provider) → image build/scan`。真实 Provider smoke 不放在每个 Pull Request 中，改为受保护环境的定时/发布前任务，并设单次费用上限。
@@ -1791,12 +1868,12 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 | 主闭环 | 新用户可从注册到完成至少一张学习卡的测验/代码实践；路线由前测结果生成。 | 不发布；不能用截图或手工改库代替。 |
 | 路线质量 | 每条激活路线 6–12 节点、覆盖四阶段、无环、节点状态合法。 | 阻断该路线激活，回退模板或提示重试。 |
 | 内容可信度 | 卡片中的来源引用可映射到受控资料；模型推断显式标记。 | 不展示无效/伪造引用内容。 |
-| AI 简答判分 | 简答题按隐藏 rubric 产生结构化分数、反馈、证据与置信度；低置信度/失败不触发路线规则。 | 保留作答并提示重试，不猜测性给分。 |
+| 测验确定性评分 | 前测 10–20 题、后测 5–10 题均为单选题；题量与范围受数据库约束，评分只使用隐藏答案且公开响应不泄露答案。 | 保留作答并提示重试，不猜测性给分。 |
 | Demo 完整性 | 实战/调试卡的 AI Demo 已在 Runner 成功预运行；调用顺序、注释结果和实际输出可对应。 | 不展示为“可运行 Demo”，改走修复/模板或失败态。 |
 | 用户隔离 | 越权访问所有私有资源均为 `404`；owner filter 有 repository test。 | 最高优先级安全缺陷，禁止上线。 |
 | 密码与会话 | 密码仅 Argon2id 哈希；Session token 仅以哈希入库；Cookie 安全属性符合环境。 | 禁止上线。 |
 | Agent 可靠性 | 所有长任务有 AgentRun、幂等键、错误分类、状态查询；失败不静默。 | 降级模板或禁用相应入口。 |
-| 模型密钥 | 只在 Worker Secret；不出现在 Git、浏览器、日志、API、Runner 或数据库业务表。 | 立即轮换密钥并阻断发布。 |
+| 模型密钥 | `CREDENTIAL_ENCRYPTION_KEY` 仅在 Web/Worker Secret；用户 API Key 仅以 AES-256-GCM 密文、IV、认证标签和版本入库，不出现在 Git、浏览器响应、日志、Celery 消息或 Runner。 | 立即轮换受影响用户 Key 与主密钥并阻断发布。 |
 | 代码安全 | Runner 的无网络、非 root、资源限制、临时空间和逃逸回归测试通过。 | 先关闭在线执行，只上线静态代码示例。 |
 | 数据库 | 空库可完整迁移/seed；迁移可重复检查；只有 Drizzle 一条迁移路径。 | 修复迁移，不允许人工补表。 |
 | 可观察性 | 任意用户请求可从 `trace_id` 追到 Web、Outbox、AgentRun 和 Runner/Provider 摘要。 | 不发布涉及异步模型任务的能力。 |
@@ -1815,20 +1892,21 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 #### 学习闭环
 
 - [ ] 填完画像后，能够创建 `python-311-basics` 目标；不支持主题被 `422` 拒绝。
-- [ ] 前测与随堂测验均展示 5–8 题，且各自至少有一题选择题和一题简答题；提交前无法通过 API 拿到正确答案或 rubric。
-- [ ] 选择题由规则评分；简答题的 AI 评分返回分数、反馈、证据标签和置信度，低置信度/结构化失败不会触发路线调整。
+- [ ] 前测由用户选择 10–20 题且只有单选题；“正常/困难”难度正确生效，题序逐步提高难度；提交前无法通过 API 拿到正确答案。
+- [ ] 完成路线后，后测由用户选择 5–10 题（推荐 5–8）且只有单选题；服务端确定性评分返回分数、反馈和薄弱点，不泄露答案。
 - [ ] 前测完成后生成一条四阶段、6–12 节点的路线，首节点为 `available`。
 - [ ] 点击首节点后能看到目标、解释、示例、练习、提示和资料引用；实战/调试节点另有已验证的 AI Demo、调用顺序和逐步注释结果。
 - [ ] 每条资料引用可点击或展示来源 URL/定位；失效来源不会被标记为已验证。
 - [ ] 已验证 Demo 的调用顺序、注释结果、预期 stdout 与 Runner 实际 stdout 一致；成功代码、语法错误代码、超时代码的结果和用户文案均正确。
-- [ ] 80%、60%、40% 测验结果分别触发解锁、复习、补强，且 `adaptation_events` 留有证据。
+- [ ] 路线后测 80%、60%、40% 的确定性结果分别触发掌握、复习、下一路线补强建议，且 `adaptation_events` 留有证据。
 
 #### Agent、模型与检索
 
 - [ ] 每项异步操作立即返回可查询的 `agent_run_id`，页面有 queued/running/succeeded/failed 状态。
 - [ ] Fake Provider 能完成所有 E2E；没有 Key 时本地启动不失败。
-- [ ] staging 的真实 Provider smoke 不超过设定 token/金额/超时预算。
-- [ ] `agent_runs` 记录实际 Profile、模型版本、token、估算费用、重试和错误类别，不记录 API Key/完整 prompt。
+- [ ] 模型连接列表、创建、更新、删除和设为默认接口均只返回安全摘要；缺少加密主密钥时创建/更新返回 503，不允许明文降级。
+- [ ] staging 的真实 Provider smoke 不超过设定 token/金额/超时预算；在 P1 SSRF 受控出网完成前，不对任意 Base URL 启用 Worker 实际调用。
+- [ ] `agent_runs` 记录连接 ID、请求/实际模型版本、token、估算费用、重试和错误类别，不记录 API Key/完整 prompt。
 - [ ] 检索结果在 seed golden set 上达到团队设定的最低 `recall@k` 与引用正确率，并保留评测结果。
 - [ ] P0 不存在 HNSW 索引；达到压测门槛前不以“感觉慢”为由过早优化。
 
@@ -1846,7 +1924,7 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 P0 只有在以下条件同时满足时才算完成：
 
 1. 第 2 节所有“暂时需要做”的需求均有实现、测试和演示证据；
-2. 第 3 节 22 张应用表、扩展、迁移、seed、trigger 与备份/恢复演练可复现；
+2. 第 3 节 23 张应用表、扩展、迁移、seed、trigger 与备份/恢复演练可复现；
 3. 第 4 节公开 API 均进入 OpenAPI，并通过至少一条契约测试；
 4. 第 5 节三个核心流程可在 Compose 环境从 UI 跑通；
 5. 第 7 节的 Fake Provider E2E 与 staging 真实 Provider smoke 都通过；
@@ -1866,13 +1944,11 @@ P0 只有在以下条件同时满足时才算完成：
 | Runner 隔离实现 | 本地可先用受限子进程/一次性容器验证；生产必须采用经逃逸测试的强隔离方案。 | 是否能安全启用在线运行。 |
 | 首个部署域名/HTTPS | staging 和 production 使用不同 Secret 与 Cookie 配置。 | Cookie `Secure`、CORS/CSRF、反向代理、回调 URL。 |
 
-其余选择已经在本文固定：Next.js + Python Worker、PostgreSQL + pgvector、Drizzle 单一迁移、邮箱密码 Session、Docker Compose、无本地模型、无用户模型选择。
+其余选择已经在本文固定：Next.js + Python Worker、PostgreSQL + pgvector、Drizzle 单一迁移、邮箱密码 Session、Docker Compose、无本地模型、用户自带 OpenAI-compatible 生成模型连接、固定平台 Embedding Profile。
 
 ## 10. 实施参考
 
-- [uv 项目初始化与依赖同步](https://docs.astral.sh/uv/concepts/projects/init/)：`uv init`、lockfile、`.venv` 和 `uv sync` 的官方用法。
 - [Next.js App Router 安装文档](https://nextjs.org/docs/app/getting-started/installation)：当前 Node.js 要求与 `create-next-app` 选项。
 - [Docker Compose profiles](https://docs.docker.com/reference/compose-file/profiles/)：将 Swagger UI、迁移等开发工具置于可选 profile。
 - [pgvector 官方文档](https://github.com/pgvector/pgvector)：精确近邻查询、HNSW 与 IVFFlat 的取舍和索引语法。
-- [Swagger UI 安装与配置](https://swagger.io/docs/open-source-tools/swagger-ui/usage/installation/)：使用 OpenAPI 文件托管独立 Swagger UI。
 - [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)：Argon2id 密码存储建议。

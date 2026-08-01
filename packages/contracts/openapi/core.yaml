@@ -15,8 +15,10 @@ tags:
     description: 邮箱密码与不透明 Session 的认证接口
   - name: 学习目标
     description: 当前用户的学习目标接口
+  - name: 模型连接
+    description: 用户自带 OpenAI-compatible API 的加密连接设置；响应永不包含 API Key。
   - name: AgentRun
-    description: 长任务的安全状态快照接口
+    description: 长任务的安全状态快照与协作式取消接口
   - name: 内部接口
     description: 仅限私有网络服务间调用的接口
 paths:
@@ -190,6 +192,145 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/v1/model-connections:
+    get:
+      tags: [模型连接]
+      summary: 获取当前用户的模型连接列表
+      operationId: list_model_connections
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 不含 API Key 的模型连接列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelConnectionList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [模型连接]
+      summary: 加密保存一个 OpenAI-compatible 模型连接
+      description: P0 接受用户自定义 HTTP 或 HTTPS Base URL；SSRF 主机限制将在 P1 补充。API Key 仅可写入，响应和日志不会返回该字段。
+      operationId: create_model_connection
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelConnectionCreateRequest'
+      responses:
+        '201':
+          description: 已加密保存模型连接
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelConnection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '409':
+          description: 当前用户的连接名称重复
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          description: 凭据加密主密钥尚未配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/model-connections/{model_connection_id}:
+    patch:
+      tags: [模型连接]
+      summary: 更新当前用户的模型连接
+      operationId: update_model_connection
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ModelConnectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelConnectionUpdateRequest'
+      responses:
+        '200':
+          description: 已更新；若提交 API Key，会加密覆盖旧凭据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelConnection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 当前用户的连接名称重复
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          description: 凭据加密主密钥尚未配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [模型连接]
+      summary: 删除当前用户的模型连接
+      operationId: delete_model_connection
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ModelConnectionId'
+      responses:
+        '204':
+          description: 已删除；目标和历史任务的可选关联会置空。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/model-connections/{model_connection_id}/default:
+    post:
+      tags: [模型连接]
+      summary: 设置账户默认模型连接
+      operationId: set_default_model_connection
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ModelConnectionId'
+      responses:
+        '200':
+          description: 已设置账户默认连接
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelConnection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/agent-runs/{agent_run_id}:
     get:
       tags: [AgentRun]
@@ -210,6 +351,35 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/agent-runs/{agent_run_id}/cancel:
+    post:
+      tags: [AgentRun]
+      summary: 协作式取消当前用户的 AgentRun
+      description: 仅能取消 `queued` 或 `running` 任务。系统立即持久化 `cancelled` 状态，Worker 会在当前工作流边界检查该状态并停止后续步骤；不能强制中断已经发出的模型 Provider 请求。重复取消已取消任务返回当前状态快照。
+      operationId: cancel_agent_run
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AgentRunId'
+      responses:
+        '200':
+          description: 已接受取消请求，或任务此前已取消
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/AgentRunNotCancellable'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /internal/v1/agent-runs/{agent_run_id}/results:
     post:
       tags: [内部接口]
@@ -282,6 +452,14 @@ components:
       schema:
         type: string
         format: uuid
+    ModelConnectionId:
+      name: model_connection_id
+      in: path
+      required: true
+      description: 当前用户的模型连接 ID。
+      schema:
+        type: string
+        format: uuid
   responses:
     Unauthorized:
       description: 未登录、Session 无效或已过期。
@@ -321,6 +499,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     IdempotencyConflict:
       description: 同一幂等键与不同请求内容发生冲突。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AgentRunNotCancellable:
+      description: AgentRun 已成功、失败或过期，不能再取消。
       content:
         application/json:
           schema:
@@ -452,6 +636,10 @@ components:
           type: integer
           minimum: 30
           maximum: 10080
+        model_connection_id:
+          type: string
+          format: uuid
+          description: 可选的目标级模型连接覆盖；未提供时，在实际生成任务中使用账户默认连接。
     Goal:
       type: object
       additionalProperties: false
@@ -483,6 +671,10 @@ components:
           format: date
         weekly_minutes_override:
           type: integer
+        model_connection_id:
+          type: string
+          format: uuid
+          nullable: true
         profile_version:
           type: integer
           minimum: 1
@@ -524,10 +716,8 @@ components:
           type: string
           enum:
             - assessment_generate
-            - assessment_evaluate
             - plan_generate
             - card_content_generate
-            - card_quiz_generate
             - adaptation
         status:
           type: string
@@ -538,6 +728,16 @@ components:
         target_id:
           type: string
           format: uuid
+        model_connection_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 本次任务实际选择的用户模型连接；不包含 API Key。
+        requested_model_id:
+          type: string
+          maxLength: 255
+          nullable: true
+          description: 本次任务请求的模型名；Worker 会记录实际使用情况，但不记录 API Key。
         retry_count:
           type: integer
           minimum: 0
@@ -558,6 +758,108 @@ components:
         updated_at:
           type: string
           format: date-time
+    ModelConnectionCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [display_name, base_url, api_key, default_model_id]
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        base_url:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: 用户提供的 OpenAI-compatible Base URL。P0 不做 SSRF 主机限制；P1 将补充出网策略。
+        api_key:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          writeOnly: true
+          description: 仅接受写入；服务端 AES-256-GCM 加密后持久化，任何响应都不会返回它。
+        default_model_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        set_as_default:
+          type: boolean
+          default: true
+    ModelConnectionUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        base_url:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        api_key:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          writeOnly: true
+        default_model_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+    ModelConnection:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - display_name
+        - protocol
+        - base_url
+        - default_model_id
+        - status
+        - is_default
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        protocol:
+          type: string
+          enum: [openai_compatible]
+        base_url:
+          type: string
+        default_model_id:
+          type: string
+        status:
+          type: string
+          enum: [active, invalid, revoked]
+        is_default:
+          type: boolean
+        last_verified_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error_code:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ModelConnectionList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelConnection'
     AgentRunError:
       type: object
       additionalProperties: false
@@ -580,10 +882,8 @@ components:
           type: string
           enum:
             - assessment_generate
-            - assessment_evaluate
             - plan_generate
             - card_content_generate
-            - card_quiz_generate
             - adaptation
         result:
           type: object

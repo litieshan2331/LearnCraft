@@ -11,6 +11,7 @@ import { sql } from "drizzle-orm";
 
 import { createdAtColumn, updatedAtColumn } from "./_common";
 import { users } from "./identity";
+import { userModelConnections } from "./model-connection";
 
 export const learnerProfiles = pgTable("learner_profiles", {
   userId: uuid("user_id")
@@ -48,6 +49,9 @@ export const learningGoals = pgTable("learning_goals", {
   desiredOutcome: text("desired_outcome").notNull(),
   targetDate: date("target_date", { mode: "string" }),
   weeklyMinutesOverride: integer("weekly_minutes_override"),
+  modelConnectionId: uuid("model_connection_id").references(() => userModelConnections.id, {
+    onDelete: "set null",
+  }),
   profileVersion: integer("profile_version").notNull(),
   status: varchar("status", { length: 30 }).notNull().default("draft"),
   metadataJson: jsonb("metadata_json").notNull().default({}),

@@ -5,9 +5,10 @@
 ```text
 modules/
 ├─ identity/                # 账号、密码、Session
+├─ model-connection/        # 用户 OpenAI-compatible 连接与加密 API Key
 ├─ profile/                 # 学习者画像与偏好
 ├─ planning/                # 目标、路线、节点和调整
-├─ assessment/              # 前测、随堂题、作答和评分
+├─ assessment/              # 前测、路线后测、作答和确定性评分
 ├─ content/                 # 受控资料、检索、卡片内容
 ├─ practice/                # 代码运行与 Runner 适配
 ├─ agent-run/               # AgentRun、Outbox 投递与状态读取

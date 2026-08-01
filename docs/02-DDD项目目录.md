@@ -13,7 +13,8 @@
 | Identity & Learner Profile（身份与学习者画像） | 支撑 | 用户、技术栈/目标/可用时间、内容偏好、难度偏好 | 必须 |
 | Learning Planning（学习规划） | 核心 | 学习目标、路线图、四阶段节点、节点状态和依赖 | 必须 |
 | Learning Content（学习内容与知识库） | 核心 | 受控资料目录、URL/文档导入、解析、切块、摘要、向量索引、内容包 | 必须（P0 用人工审核资料；URL/Markdown/PDF 受控入口为 P1） |
-| Assessment（前测与随堂题） | 核心 | 题目、答题、评分、掌握度，驱动路线调整 | 必须（前测/随堂均为 5–8 题：选择题 + 简答题；简答题由 AI 按 rubric 判分） |
+| Model Connection（用户模型连接） | 支撑 | 用户 OpenAI-compatible Base URL、加密 API Key、账户默认模型和任务选择快照 | 必须（P0 仅保存/格式校验；任意 Base URL 的实际出网须等 P1 SSRF 受控出网层） |
+| Assessment（前测与后测） | 核心 | 单选题、答题、确定性评分、掌握度，驱动路线调整 | 必须（前测 10–20 题、路线后测 5–10 题；用户选择 `normal`/`hard`，不含简答题） |
 | Practice Execution（代码实践执行） | 核心差异化 | 代码片段、运行任务、日志/结果、超时与安全策略 | MVP 只做受限 Python 3.11 Demo；实战/调试节点的 AI Demo 必须预运行验证并带调用顺序/注释结果；其他语言后置，生产沙箱必须独立 |
 | Agent Orchestration（Agent 编排） | 通用技术上下文 | LangGraph 工作流、运行状态、重试、检查点、提示词版本、工具调用 | 必须，但不拥有学习业务聚合 |
 | Progress & Report（进度与报告） | 支撑 | 进度条、学习报告、成就 | V1.1+，由领域事件消费 |
@@ -24,7 +25,7 @@
 - **LearnerProfile**（聚合根）：`LearnerId`、目标岗位/技术栈、当前水平、每周可用时间、`ContentPreference`。发布 `LearnerProfileCompleted`。
 - **LearningPlan**（聚合根）：`PlanId`、`LearnerId`、目标、版本、状态；内部 `PlanNode` 实体包含阶段（`concept/syntax/practice/debug`）、顺序、前置节点、预计时长、状态。发布 `LearningPlanRequested`、`LearningPlanGenerated`、`PlanNodeUnlocked`。
 - **ContentSource/ContentDocument**（聚合根）：来源 URL/上传文件、抓取状态、清洗后的文档和 `ContentChunk`；向量是投影而非领域实体。发布 `ContentIngested`、`ContentIndexed`。
-- **Assessment**（聚合根）与 **Attempt**（高并发时独立聚合）：前测/节点测验、选择题/简答题、隐藏答案/rubric、答案、规则/AI 评分、置信度、`MasteryScore`。发布 `AssessmentSubmitted`、`MasteryUpdated`。
+- **Assessment**（聚合根）与 **Attempt**（高并发时独立聚合）：前测/路线后测、单选题、隐藏答案、答案、确定性评分与 `MasteryScore`。前测 10–20 题、后测 5–10 题，均由用户选择 `normal`/`hard`；发布 `AssessmentSubmitted`、`MasteryUpdated`。
 - **ExecutionJob**（聚合根）：用户代码或 AI Demo、运行时、资源限制、状态、stdout/stderr、产物引用；Demo 的调用顺序、注释结果和预运行验证摘要属于内容契约。发布 `ExecutionCompleted` 或 `ExecutionFailed`。
 - **AgentRun**（编排上下文聚合根）：工作流类型、关联业务对象、状态、幂等键、错误和 token 用量。它记录“如何执行”，不决定“什么是合格的学习计划”。发布 `AgentRunStarted`、`AgentRunSucceeded`、`AgentRunFailed`。
 
@@ -66,6 +67,11 @@ learncraft/
 │  │  │  │  │  ├─ infrastructure/
 │  │  │  │  │  ├─ interfaces/               # Zod 请求 schema、HTTP 输入/输出适配
 │  │  │  │  │  └─ presentation/             # React 表单、会话守卫、同源 BFF client
+│  │  │  │  ├─ model-connection/            # 用户 OpenAI-compatible 连接与加密凭据
+│  │  │  │  │  ├─ domain/
+│  │  │  │  │  ├─ application/
+│  │  │  │  │  ├─ infrastructure/
+│  │  │  │  │  └─ interfaces/
 │  │  │  │  ├─ profile/                     # 学习者画像与偏好
 │  │  │  │  │  ├─ domain/
 │  │  │  │  │  ├─ application/
@@ -76,7 +82,7 @@ learncraft/
 │  │  │  │  │  ├─ application/
 │  │  │  │  │  ├─ infrastructure/
 │  │  │  │  │  └─ interfaces/
-│  │  │  │  ├─ assessment/                  # 前测、随堂题、作答与评分
+│  │  │  │  ├─ assessment/                  # 前测、路线后测、作答与确定性评分
 │  │  │  │  │  ├─ domain/
 │  │  │  │  │  ├─ application/
 │  │  │  │  │  ├─ infrastructure/
@@ -102,9 +108,10 @@ learncraft/
 │  │  │  └─ lib/                            # Web 通用框架适配
 │  │  │     ├─ db/
 │  │  │     │  ├─ client.ts                  # 懒加载 PostgreSQL/Drizzle 客户端
-│  │  │     │  ├─ schema/                    # 22 张 P0 表、外键、索引、CHECK 与关系
-│  │  │     │  └─ migrations/                # 0000 初始 SQL 与 Drizzle meta 快照
+│  │  │     │  ├─ schema/                    # 23 张 P0 表、外键、索引、CHECK 与关系
+│  │  │     │  └─ migrations/                # 0000 初始迁移及后续增量 SQL / Drizzle meta 快照
 │  │  │     ├─ session/
+│  │  │     ├─ security/                    # Session、凭据 AES-256-GCM 等服务端安全工具
 │  │  │     ├─ outbox/
 │  │  │     └─ logger/
 │  │  └─ tests/
@@ -158,7 +165,7 @@ learncraft/
 
 ### 2.1 Web BC 当前分层
 
-`identity` 已在四层 DDD 骨架之外增加 `presentation/`，承载认证 UI；`profile`、`planning`、`assessment`、`content`、`practice` 与 `agent-run` 当前仍保持四层目录骨架：
+`identity` 已在四层 DDD 骨架之外增加 `presentation/`，承载认证 UI；`model-connection` 已实现加密凭据的 repository/application/HTTP 适配器；`profile`、`planning`、`assessment`、`content`、`practice` 与 `agent-run` 当前仍以骨架或渐进实现为主：
 
 ```text
 apps/web/src/modules/<bounded-context>/
@@ -203,16 +210,16 @@ Browser ──Zod──> Next.js Route Handler / Core API
 
 #### 托管模型 API 与 Agent Worker 的边界
 
-`ModelGateway` 是 `agent-worker` 内部的应用服务，不是独立 Docker 服务。后续 Provider adapter 放在 `infrastructure/llm/`，用 LangChain Provider integrations 调用已批准的托管模型 API；`application/ports/` 与 `application/services/` 决定任务该使用哪个白名单 `ModelProfile`。
+`ModelGateway` 是 `agent-worker` 内部的应用服务，不是独立 Docker 服务。Provider adapter 放在 `infrastructure/llm/`，使用 OpenAI-compatible 协议调用用户选择的 Provider；`application/ports/` 与 `application/services/` 解析“任务级选择 → 目标覆盖 → 账户默认”的连接优先级，平台仍统一限制超时、预算和重试。
 
 ```text
-LangGraph workflow → ModelGateway / LLM Port → ProviderAdapter
-                                                │ HTTPS + Provider API key
+LangGraph workflow → ModelGateway / LLM Port → OpenAICompatibleAdapter
+                                                │ HTTPS + 解密后的用户 Provider API Key
                                                 ▼
-                                         托管生成 / Embedding API
+                                    用户生成 API / 固定 Embedding API
 ```
 
-Provider API key、模型名称、并发/超时、单次预算与 fallback 策略只放在 `core/` 的运行时配置和部署 Secret 中，不能进入浏览器、Pydantic 对外 DTO 或领域模型。生成、embedding 与 rerank 可以使用不同 profile；Agent Worker 不得让用户传入任意 Provider、base URL 或模型参数。未来如具备稳定 GPU 基础设施，可在不改变 `LLM Port` 的前提下新增 vLLM adapter。
+用户 Provider API Key 由 Web 用 `CREDENTIAL_ENCRYPTION_KEY` 加密后存入 `user_model_connections`，浏览器只可写入/覆盖；Web 与实际执行生成任务的 Worker 持有同一主密钥，Outbox、Celery、Pydantic 对外 DTO 和日志只可携带连接 ID/模型名。生成、embedding 与 rerank 可以使用不同 profile；固定 embedding Profile 不允许用户修改。P0 允许用户填写任意 HTTP/HTTPS Base URL，但实际出网前必须在 P1 加入私网/metadata/DNS 重绑定/重定向阻断等 SSRF 防护。未来如具备稳定 GPU 基础设施，可在不改变 `LLM Port` 的前提下新增 vLLM adapter。
 
 #### Alembic 决策（当前 MVP）
 
@@ -245,7 +252,7 @@ agent_runs/agent_checkpoints/outbox_events   -> Agent/平台基础设施
 8. 测试按层分开：domain 纯单测，application 使用 fake ports，repository 做 PostgreSQL 集成测试，Agent graph 做节点/回放测试，关键流程做 Playwright E2E。
 9. 浏览器/Next.js 边界用 Zod，Python FastAPI、队列消息与 LLM 结构化输出用 Pydantic；跨语言只共享 OpenAPI/JSON Schema，禁止直接共享 ORM model 或把 Pydantic class 当作前端 DTO。
 10. MVP 的数据库迁移只能由 `db/migrations/`（Drizzle）执行；`agent-worker/alembic/` 在未完成“迁移所有权转移”决策前不得创建版本文件或运行。
-11. 托管模型 Provider 的 API key、模型 profile、预算与 fallback 策略只配置在 `agent-worker` 的 Secret 与 `core/` 运行时配置中；浏览器、代码 Runner 和领域模型都不能持有或传入任意 Provider、base URL、模型参数或密钥。
+11. 用户 Provider API Key 只经模型连接 API 写入，以 AES-256-GCM 密文存储；`CREDENTIAL_ENCRYPTION_KEY` 仅由 Web 与实际模型 Worker 的 Secret 持有。浏览器响应、代码 Runner、Outbox、Celery 和领域事件均不得持有明文 Key；任务只能传受信任的连接 ID/模型名。P0 的 Base URL 仅做格式校验，P1 必须完成 SSRF 受控出网后才允许真实调用。
 
 ## 4. MVP 的最小流程与入口
 

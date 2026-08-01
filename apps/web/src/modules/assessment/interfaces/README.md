@@ -1,3 +1,3 @@
 # Assessment 接口层
 
-预留选择题与简答题的 Zod 判别联合、公开题目响应和评分结果 presenter。
+预留单选题 Zod schema、前测/后测题量与难度卡片请求校验、公开题目响应和确定性评分结果 presenter。

@@ -22,6 +22,7 @@ import {
   contentSources,
 } from "./content";
 import { authSessions, users } from "./identity";
+import { userModelConnections } from "./model-connection";
 import { adaptationEvents, learningPlans, planNodePrerequisites, planNodes } from "./planning";
 import { codeRuns } from "./practice";
 import { learnerProfiles, learningGoals } from "./profile";
@@ -43,6 +44,17 @@ export const learnerProfilesRelations = relations(learnerProfiles, ({ one }) => 
 export const learningGoalsRelations = relations(learningGoals, ({ one }) => ({
   owner: one(users, {
     fields: [learningGoals.ownerId],
+    references: [users.id],
+  }),
+  modelConnection: one(userModelConnections, {
+    fields: [learningGoals.modelConnectionId],
+    references: [userModelConnections.id],
+  }),
+}));
+
+export const userModelConnectionsRelations = relations(userModelConnections, ({ one }) => ({
+  owner: one(users, {
+    fields: [userModelConnections.ownerId],
     references: [users.id],
   }),
 }));
@@ -220,6 +232,10 @@ export const agentRunsRelations = relations(agentRuns, ({ one }) => ({
   owner: one(users, {
     fields: [agentRuns.ownerId],
     references: [users.id],
+  }),
+  modelConnection: one(userModelConnections, {
+    fields: [agentRuns.modelConnectionId],
+    references: [userModelConnections.id],
   }),
 }));
 

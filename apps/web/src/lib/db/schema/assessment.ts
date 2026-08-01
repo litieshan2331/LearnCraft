@@ -2,8 +2,8 @@
  * Assessment 限界上下文的 Drizzle 表定义。
  *
  * 导出：
- * - assessments、assessmentItems：前测与随堂测验及其隐藏评分合同。
- * - assessmentAttempts、assessmentAnswers：用户作答、规则/AI 评分结果。
+ * - assessments、assessmentItems：前测、路线后测与卡片测验的配置及单选题评分合同。
+ * - assessmentAttempts、assessmentAnswers：用户作答与确定性评分结果。
  */
 
 import { sql } from "drizzle-orm";
@@ -44,6 +44,8 @@ export const assessments = pgTable("assessments", {
     onDelete: "cascade",
   }),
   kind: varchar("kind", { length: 30 }).notNull(),
+  requestedQuestionCount: integer("requested_question_count"),
+  difficulty: varchar("difficulty", { length: 20 }).notNull().default("normal"),
   version: integer("version").notNull().default(1),
   status: varchar("status", { length: 30 }).notNull().default("generating"),
   schemaVersion: varchar("schema_version", { length: 50 }).notNull(),
@@ -56,7 +58,19 @@ export const assessments = pgTable("assessments", {
   updatedAt: updatedAtColumn(),
 }, (table) => [
   check("ck_assessments_version", sql`${table.version} >= 1`),
-  check("ck_assessments_kind", sql`${table.kind} in ('diagnostic', 'card_quiz')`),
+  check("ck_assessments_kind", sql`${table.kind} in ('diagnostic', 'post_test', 'card_quiz')`),
+  check(
+    "ck_assessments_difficulty",
+    sql`${table.difficulty} in ('normal', 'hard')`,
+  ),
+  check(
+    "ck_assessments_question_count",
+    sql`(
+      (${table.kind} = 'diagnostic' and ${table.requestedQuestionCount} between 10 and 20)
+      or (${table.kind} = 'post_test' and ${table.requestedQuestionCount} between 5 and 10)
+      or (${table.kind} = 'card_quiz' and ${table.requestedQuestionCount} is null)
+    )`,
+  ),
   check(
     "ck_assessments_status",
     sql`${table.status} in (
@@ -70,7 +84,13 @@ export const assessments = pgTable("assessments", {
   check(
     "ck_assessment_scope",
     sql`(
-      ${table.kind} = 'diagnostic' and ${table.planNodeId} is null
+      ${table.kind} = 'diagnostic'
+      and ${table.planId} is null
+      and ${table.planNodeId} is null
+    ) or (
+      ${table.kind} = 'post_test'
+      and ${table.planId} is not null
+      and ${table.planNodeId} is null
     ) or (
       ${table.kind} = 'card_quiz' and ${table.planNodeId} is not null
     )`,
@@ -105,27 +125,19 @@ export const assessmentItems = pgTable("assessment_items", {
   check("ck_assessment_items_ordinal", sql`${table.ordinal} >= 1`),
   check(
     "ck_assessment_items_type",
-    sql`${table.itemType} in ('single_choice', 'short_answer')`,
+    sql`${table.itemType} = 'single_choice'`,
   ),
   check(
     "ck_assessment_items_grading_mode_value",
-    sql`${table.gradingMode} in ('deterministic', 'ai_rubric')`,
+    sql`${table.gradingMode} = 'deterministic'`,
   ),
   check("ck_assessment_items_max_score", sql`${table.maxScore} > 0`),
   check(
     "ck_assessment_item_grading_mode",
-    sql`(
-      ${table.itemType} = 'single_choice'
+    sql`${table.itemType} = 'single_choice'
       and ${table.gradingMode} = 'deterministic'
       and jsonb_typeof(${table.optionsJson}) = 'array'
-      and jsonb_array_length(${table.optionsJson}) >= 2
-    ) or (
-      ${table.itemType} = 'short_answer'
-      and ${table.gradingMode} = 'ai_rubric'
-      and jsonb_typeof(${table.optionsJson}) = 'array'
-      and ${table.optionsJson} = '[]'::jsonb
-      and ${table.rubricJson} <> '{}'::jsonb
-    )`,
+      and jsonb_array_length(${table.optionsJson}) >= 2`,
   ),
 ]);
 
