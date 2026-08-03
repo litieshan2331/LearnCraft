@@ -22,7 +22,7 @@ import {
   contentSources,
 } from "./content";
 import { authSessions, users } from "./identity";
-import { userModelConnections } from "./model-connection";
+import { modelConnectionEgressAudits, userModelConnections } from "./model-connection";
 import { adaptationEvents, learningPlans, planNodePrerequisites, planNodes } from "./planning";
 import { codeRuns } from "./practice";
 import { learnerProfiles, learningGoals } from "./profile";
@@ -58,6 +58,16 @@ export const userModelConnectionsRelations = relations(userModelConnections, ({ 
     references: [users.id],
   }),
 }));
+
+export const modelConnectionEgressAuditsRelations = relations(
+  modelConnectionEgressAudits,
+  ({ one }) => ({
+    owner: one(users, {
+      fields: [modelConnectionEgressAudits.ownerId],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const learningPlansRelations = relations(learningPlans, ({ one }) => ({
   owner: one(users, {

@@ -3,7 +3,7 @@
  *
  * 导出：
  * - learnerProfiles：学习者画像及偏好版本。
- * - learningGoals：仅支持 Python 3.11 基础主题的学习目标。
+ * - learningGoals：用户自定义学习主题的学习目标。
  */
 
 import { check, index, integer, jsonb, pgTable, uuid, varchar, date, text } from "drizzle-orm/pg-core";
@@ -43,7 +43,7 @@ export const learningGoals = pgTable("learning_goals", {
   ownerId: uuid("owner_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  subjectKey: varchar("subject_key", { length: 80 }).notNull(),
+  topic: varchar("topic", { length: 200 }).notNull(),
   title: varchar("title", { length: 200 }).notNull(),
   description: text("description").notNull(),
   desiredOutcome: text("desired_outcome").notNull(),
@@ -58,7 +58,10 @@ export const learningGoals = pgTable("learning_goals", {
   createdAt: createdAtColumn(),
   updatedAt: updatedAtColumn(),
 }, (table) => [
-  check("ck_learning_goals_subject", sql`${table.subjectKey} = 'python-311-basics'`),
+  check(
+    "ck_learning_goals_topic",
+    sql`length(btrim(${table.topic})) between 1 and 200`,
+  ),
   check("ck_learning_goals_profile_version", sql`${table.profileVersion} >= 1`),
   check(
     "ck_learning_goals_weekly_minutes_override",

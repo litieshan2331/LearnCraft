@@ -1,6 +1,6 @@
 # LearnCraft 本地基础设施
 
-`compose.yaml` 提供 P0 本地联调基线：PostgreSQL + pgvector、认证限流 Redis、独立的 Celery Redis Broker、MinIO、Web、Agent API、Outbox Dispatcher 与 Celery Worker。它不自动执行 Drizzle 迁移、不启动代码 Runner，也不调用真实模型 Provider；执行最新 Drizzle 迁移后，本地数据库包含 23 张 P0 应用表。
+`compose.yaml` 提供 P0 本地开发与联调基线：PostgreSQL + pgvector、认证限流 Redis、独立的 Celery Redis Broker、MinIO、Web、Agent API、Outbox Dispatcher 与 Celery Worker。Web 默认使用 `next dev` 并挂载前端源码，以支持热更新。它不自动执行 Drizzle 迁移、不启动代码 Runner，也不调用真实模型 Provider；执行最新 Drizzle 迁移后，本地数据库包含 24 张 P0 应用表。
 
 `private` 是本地开发服务的共享网络，并不自动将端口开放给宿主机；是否可从 Windows 访问仍只由服务的 `ports` 配置决定。当前 Web、PostgreSQL、MinIO 与 Agent Worker 都绑定到 `127.0.0.1`，只供本机开发调试，不向局域网暴露。
 
@@ -25,23 +25,17 @@ docker compose ps
 
 ## Web 热更新开发模式
 
-`compose.yaml` 保持为生产式本地验证配置：Web 使用 `next start` 启动，适合验证生产镜像行为，但不会监听宿主机源码变更。日常编写前端时，使用 `compose.dev.yaml` 作为覆盖文件：它只将 Web 改为 `next dev`，并挂载 `apps/web` 与 `packages/contracts`，其余 PostgreSQL、Redis、MinIO、Agent API、Dispatcher 和 Celery Worker 继续复用基础配置。
+本地 `compose.yaml` 已直接采用开发模式：Web 使用 `next dev`，并挂载 `apps/web` 与 `packages/contracts`。日常开发只使用这一份 Compose 文件，不再使用 `compose.dev.yaml`；因此保存 `apps/web/src` 下的 `.ts`、`.tsx` 或 `.css` 文件后，Next.js 会执行 Fast Refresh。
 
-在仓库根目录执行以下命令（不要单独运行 `compose.dev.yaml`）：
-
-```powershell
-docker compose -f infra/compose.yaml -f infra/compose.dev.yaml up --build -d web
-```
-
-随后访问 `http://127.0.0.1:3000`。修改并保存 `apps/web/src` 下的 `.ts`、`.tsx` 或 `.css` 文件后，Next.js 会执行 Fast Refresh；修改路由布局、服务端组件等文件时，浏览器发生完整页面刷新也属于正常行为。开发模式将依赖目录和 `.next` 缓存保存在 Docker 命名卷中，不会污染宿主机源码目录。
-
-以下变更会影响容器或依赖，仍需重复执行上面的 `up --build` 命令：`package.json`、`pnpm-lock.yaml`、Dockerfile、Compose 配置，以及需要重新读取的环境变量。若需要恢复生产式本地验证模式，在仓库根目录执行：
+在仓库根目录执行：
 
 ```powershell
 docker compose -f infra/compose.yaml up --build -d web
 ```
 
-Windows 上通过 Docker Desktop 挂载源码时，文件变更检测通常可用，但性能可能低于直接在宿主机运行 `next dev`；这是 Next.js 官方文档列出的 Docker 开发环境限制之一。当前项目优先使用上述容器开发模式，以保持 Web 与 Docker 内部服务的网络配置一致。[Next.js 本地开发指南](https://nextjs.org/docs/app/guides/local-development)
+随后访问 `http://127.0.0.1:3000`。修改路由布局、服务端组件等文件时，浏览器发生完整页面刷新也属于正常行为。开发模式将依赖目录和 `.next` 缓存保存在 Docker 命名卷中，不会污染宿主机源码目录。
+
+以下变更会影响容器或依赖，仍需重复执行上面的 `up --build` 命令：`package.json`、`pnpm-lock.yaml`、Dockerfile、Compose 配置，以及需要重新读取的环境变量。真正的生产部署始终使用独立的 `compose.production.yaml`，其中 Web 使用 `next start` 且不挂载源码，不需要手工回改本地 `compose.yaml`。Windows 上通过 Docker Desktop 挂载源码时，文件变更检测通常可用，但性能可能低于直接在宿主机运行 `next dev`；这是 Next.js 官方文档列出的 Docker 开发环境限制之一。当前项目优先使用上述容器开发模式，以保持 Web 与 Docker 内部服务的网络配置一致。[Next.js 本地开发指南](https://nextjs.org/docs/app/guides/local-development)
 
 | 服务 | 本机地址 | 用途 |
 | --- | --- | --- |
@@ -81,7 +75,9 @@ SILICONFLOW_API_KEY=你的密钥
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 ```
 
-将输出填到 `CREDENTIAL_ENCRYPTION_KEY=`，并保留 `CREDENTIAL_ENCRYPTION_KEY_VERSION=local-v1`。Web 与实际调用生成模型的 Celery Worker 必须使用同一个主密钥和版本；丢失它将无法解密既有用户连接。不要将其写进 Git、浏览器、日志或 Docker 镜像。P0 只允许保存和格式校验任意 Base URL；在 P1 的 SSRF 受控出网实现前，不应让 Worker 对任意用户地址发起真实请求。
+将输出填到 `CREDENTIAL_ENCRYPTION_KEY=`，并保留 `CREDENTIAL_ENCRYPTION_KEY_VERSION=local-v1`。Web 与实际调用生成模型的 Celery Worker 必须使用同一个主密钥和版本；丢失它将无法解密既有用户连接。不要将其写进 Git、浏览器、日志或 Docker 镜像。产品永久不支持用户填写 IP 字面量、localhost、局域网、私有地址或本地 vLLM；保存阶段只接受公网 HTTPS 域名/443。真实调用必须经过 Worker 的 `SafeModelEgressClient`：每次重新解析并校验全部 DNS 结果、以已验证 IP 进行 TCP/CONNECT、保留原域名 TLS SNI、拒绝重定向、限制响应体，并向 `model_connection_egress_audits` 写入不含密钥和请求正文的 30 天审计记录。
+
+本地 `.env` 默认 `MODEL_EGRESS_ENABLED=false`，因为当前尚未接通真实 ModelGateway 工作流。后续接通时，只能由 `agent-celery-worker` 使用该客户端；不得在 Web、Agent API、Dispatcher 或 Runner 中直接调用用户 Base URL。
 
 ## Redis 限流
 
@@ -103,13 +99,13 @@ Celery Worker 固定 `concurrency=1` 与 `prefetch_multiplier=1`。任务软超�
 
 `compose.production.yaml` 是独立编排文件，只启动 Web、Agent API、Dispatcher 与 Celery Worker，不创建 PostgreSQL、Redis 或 MinIO。本地开发不要启动它。
 
-部署服务器时复制 `.env.production.example` 为被 Git 忽略的 `.env.production`，填写外部 PostgreSQL、认证 Redis、Celery Redis、对象存储和 Provider Secret，再执行：
+部署服务器时复制 `.env.production.example` 为被 Git 忽略的 `.env.production`，填写外部 PostgreSQL、认证 Redis、Celery Redis、对象存储、Provider Secret 与 `MODEL_EGRESS_PROXY_URL`，再执行：
 
 ```powershell
 docker compose -f infra/compose.production.yaml --env-file infra/.env.production up --build -d
 ```
 
-首版可以使用受管 Redis 或单 Redis 加备份。未来 Celery Redis 切换 Sentinel 时修改 `CELERY_BROKER_URL` 与 `CELERY_BROKER_MASTER_NAME` 即可；认证 Redis 的 Sentinel 连接器尚未实现，切换前需要单独确认并实现。
+首版可以使用受管 Redis 或单 Redis 加备份。未来 Celery Redis 切换 Sentinel 时修改 `CELERY_BROKER_URL` 与 `CELERY_BROKER_MASTER_NAME` 即可；认证 Redis 的 Sentinel 连接器尚未实现，切换前需要单独确认并实现。生产中的 `MODEL_EGRESS_PROXY_URL` 必须是受控 HTTP CONNECT 代理；它和云防火墙均须禁止私网、云 metadata、非 443 与除 Worker 外的应用出网。Compose 的 `egress` 网络不是防火墙，不能替代这些部署侧规则。
 
 ## VS Code 查看 PostgreSQL
 
@@ -124,4 +120,4 @@ Password: infra/.env 中的 POSTGRES_PASSWORD
 SSL: Disable
 ```
 
-连接成功后，在 `learncraft` 数据库的 `public` schema 下浏览 21 张业务/基础设施表（包含 `user_model_connections`），并在 `agent` schema 下浏览 `agent_runs`、`agent_run_events`。首份 Drizzle 迁移文件位于 `apps/web/src/lib/db/migrations/0000_initial_p0_schema.sql`；新环境执行 `pnpm db:migrate` 后会创建相同结构。
+连接成功后，在 `learncraft` 数据库的 `public` schema 下浏览 22 张业务/基础设施表（包含 `user_model_connections` 与 `model_connection_egress_audits`），并在 `agent` schema 下浏览 `agent_runs`、`agent_run_events`。首份 Drizzle 迁移文件位于 `apps/web/src/lib/db/migrations/0000_initial_p0_schema.sql`；新环境执行 `pnpm db:migrate` 后会创建相同结构。

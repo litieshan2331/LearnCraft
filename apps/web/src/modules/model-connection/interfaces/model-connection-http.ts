@@ -77,7 +77,7 @@ export function modelConnectionErrorResponse(error: unknown): NextResponse {
     case "MODEL_CONNECTION_NAME_CONFLICT":
       return apiErrorResponse(409, error.code, "该连接名称已存在，请更换名称。");
     case "INVALID_BASE_URL":
-      return apiErrorResponse(422, error.code, "Base URL 必须是有效的 HTTP 或 HTTPS 地址，且不能含认证信息、查询参数或片段。");
+      return apiErrorResponse(422, error.code, "Base URL 必须是有效的公网 HTTPS 域名地址，不能使用任何 IP、localhost、局域网或私有地址，也不能含认证信息、查询参数或片段。");
     case "CREDENTIAL_ENCRYPTION_UNAVAILABLE":
       return apiErrorResponse(503, error.code, "模型凭据加密服务尚未配置，请稍后重试。");
   }

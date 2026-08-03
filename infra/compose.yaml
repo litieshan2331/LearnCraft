@@ -84,12 +84,14 @@ services:
     networks: [private]
 
   web:
+    # 本地开发默认运行 Next.js 开发服务器，支持保存后的 Fast Refresh。
+    image: learncraft-web:dev
     build:
       context: ..
-      dockerfile: infra/docker/web.Dockerfile
+      dockerfile: infra/docker/web.dev.Dockerfile
     restart: unless-stopped
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       APP_VERSION: ${APP_VERSION:-0.1.0}
       GIT_SHA: ${GIT_SHA:-unknown}
       APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN in .env}
@@ -109,6 +111,20 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    volumes:
+      # 源码和契约变更直接同步到容器；依赖与 .next 缓存保留在 Docker 命名卷中。
+      - type: bind
+        source: ../apps/web
+        target: /app/apps/web
+      - type: bind
+        source: ../packages/contracts
+        target: /app/packages/contracts
+      - type: volume
+        source: web-dev-node-modules
+        target: /app/apps/web/node_modules
+      - type: volume
+        source: web-dev-next-cache
+        target: /app/apps/web/.next
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/v1/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
       interval: 10s
@@ -139,7 +155,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15s
-    networks: [private, egress]
+    networks: [private]
 
   agent-dispatcher:
     build:
@@ -203,6 +219,13 @@ services:
       SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
       CREDENTIAL_ENCRYPTION_KEY_VERSION: ${CREDENTIAL_ENCRYPTION_KEY_VERSION:-local-v1}
+      MODEL_EGRESS_ENABLED: ${MODEL_EGRESS_ENABLED:-false}
+      MODEL_EGRESS_ENVIRONMENT: ${MODEL_EGRESS_ENVIRONMENT:-development}
+      MODEL_EGRESS_PROXY_URL: ${MODEL_EGRESS_PROXY_URL:-}
+      MODEL_EGRESS_CONNECT_TIMEOUT_SECONDS: ${MODEL_EGRESS_CONNECT_TIMEOUT_SECONDS:-10}
+      MODEL_EGRESS_READ_TIMEOUT_SECONDS: ${MODEL_EGRESS_READ_TIMEOUT_SECONDS:-120}
+      MODEL_EGRESS_MAX_RESPONSE_BYTES: ${MODEL_EGRESS_MAX_RESPONSE_BYTES:-4194304}
+      MODEL_EGRESS_AUDIT_RETENTION_DAYS: ${MODEL_EGRESS_AUDIT_RETENTION_DAYS:-30}
       CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
     depends_on:
@@ -227,3 +250,5 @@ volumes:
   redis-data:
   celery-redis-data:
   minio-data:
+  web-dev-node-modules:
+  web-dev-next-cache:

@@ -8,6 +8,8 @@
  * - normalizeOpenAiCompatibleBaseUrl：规范化用户填写的 OpenAI-compatible Base URL。
  */
 
+import { isIP } from "node:net";
+
 export const MODEL_CONNECTION_PROTOCOL = "openai_compatible";
 
 export const MODEL_CONNECTION_STATUSES = ["active", "invalid", "revoked"] as const;
@@ -88,10 +90,20 @@ export function normalizeOpenAiCompatibleBaseUrl(value: string): string {
     throw new ModelConnectionApplicationError("INVALID_BASE_URL");
   }
 
-  if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+  if (parsedUrl.protocol !== "https:") {
     throw new ModelConnectionApplicationError("INVALID_BASE_URL");
   }
-  if (parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash) {
+  if (
+    parsedUrl.port
+    || parsedUrl.username
+    || parsedUrl.password
+    || parsedUrl.search
+    || parsedUrl.hash
+    || hasRelativePathSegment(parsedUrl.pathname)
+  ) {
+    throw new ModelConnectionApplicationError("INVALID_BASE_URL");
+  }
+  if (isProhibitedModelProviderHost(parsedUrl.hostname)) {
     throw new ModelConnectionApplicationError("INVALID_BASE_URL");
   }
 
@@ -102,4 +114,33 @@ export function normalizeOpenAiCompatibleBaseUrl(value: string): string {
 
 export function isModelConnectionStatus(value: string): value is ModelConnectionStatus {
   return (MODEL_CONNECTION_STATUSES as readonly string[]).includes(value);
+}
+
+function isProhibitedModelProviderHost(hostname: string): boolean {
+  const normalizedHostname = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (
+    normalizedHostname === "localhost"
+    || normalizedHostname.endsWith(".localhost")
+    || normalizedHostname.endsWith(".local")
+  ) {
+    return true;
+  }
+
+  const addressFamily = isIP(normalizedHostname);
+  if (addressFamily !== 0) {
+    return true;
+  }
+
+  return false;
+}
+
+function hasRelativePathSegment(pathname: string): boolean {
+  try {
+    return pathname
+      .split("/")
+      .filter(Boolean)
+      .some((segment) => [".", ".."].includes(decodeURIComponent(segment)));
+  } catch {
+    return true;
+  }
 }

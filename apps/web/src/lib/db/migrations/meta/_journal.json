@@ -29,6 +29,20 @@
       "when": 1785562917853,
       "tag": "0003_user_model_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785650621577,
+      "tag": "0004_learning_goal_topic",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785653974476,
+      "tag": "0005_model_connection_egress_audit",
+      "breakpoints": true
     }
   ]
 }

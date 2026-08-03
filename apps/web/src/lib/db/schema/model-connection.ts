@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  integer,
   index,
   pgTable,
   text,
@@ -21,6 +22,7 @@ import {
 import {
   createdAtColumn,
   nullableTimestampColumn,
+  requiredTimestampColumn,
   updatedAtColumn,
 } from "./_common";
 import { users } from "./identity";
@@ -70,4 +72,43 @@ export const userModelConnections = pgTable("user_model_connections", {
     table.status,
     table.updatedAt.desc(),
   ),
+]);
+
+/**
+ * 记录模型 Provider 的安全出网决策；不保存 API Key、提示词、响应正文或 DNS IP。
+ * 删除模型连接后仍保留 30 天内的安全审计痕迹，因此 modelConnectionId 不设置外键。
+ */
+export const modelConnectionEgressAudits = pgTable("model_connection_egress_audits", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ownerId: uuid("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  modelConnectionId: uuid("model_connection_id").notNull(),
+  agentRunId: uuid("agent_run_id"),
+  host: varchar("host", { length: 253 }),
+  port: integer("port"),
+  decision: varchar("decision", { length: 20 }).notNull(),
+  reasonCode: varchar("reason_code", { length: 100 }).notNull(),
+  occurredAt: createdAtColumn(),
+  expiresAt: requiredTimestampColumn("expires_at"),
+}, (table) => [
+  check(
+    "ck_model_connection_egress_audits_decision",
+    sql`${table.decision} in ('allowed', 'blocked', 'request_failed')`,
+  ),
+  check(
+    "ck_model_connection_egress_audits_port",
+    sql`${table.port} is null or ${table.port} between 1 and 65535`,
+  ),
+  check(
+    "ck_model_connection_egress_audits_reason_code",
+    sql`length(btrim(${table.reasonCode})) > 0`,
+  ),
+  check(
+    "ck_model_connection_egress_audits_expiry",
+    sql`${table.expiresAt} > ${table.occurredAt}`,
+  ),
+  index("idx_model_connection_egress_audits_cleanup").on(table.expiresAt),
+  index("idx_model_connection_egress_audits_connection_occurred")
+    .on(table.modelConnectionId, table.occurredAt.desc()),
 ]);

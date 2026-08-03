@@ -11,6 +11,10 @@ from learncraft_agent.application.ports.vector_store import (
     VectorSearchRequest,
     VectorStore,
 )
+from learncraft_agent.application.ports.model_egress_audit import (
+    ModelEgressAuditEntry,
+    ModelEgressAuditWriter,
+)
 
 __all__ = [
     "SparseVector",
@@ -18,4 +22,6 @@ __all__ = [
     "VectorSearchHit",
     "VectorSearchRequest",
     "VectorStore",
+    "ModelEgressAuditEntry",
+    "ModelEgressAuditWriter",
 ]

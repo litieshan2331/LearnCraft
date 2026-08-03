@@ -16,7 +16,7 @@ Web 必须在创建 `AgentRun` 的同一 PostgreSQL 事务中写入 Outbox。Dis
 
 ## 用户模型凭据边界
 
-生成任务将按“任务级选择 → 学习目标覆盖 → 账户默认”解析 `model_connection_id`。用户 Provider API Key 由 Web 以 AES-256-GCM 密文存入 `user_model_connections`；Worker 未来仅在执行时使用与 Web 相同的 `CREDENTIAL_ENCRYPTION_KEY` 解密，Celery 消息、日志和 AgentRun 只携带连接 ID 与模型名。P0 虽允许保存任意 HTTP/HTTPS Base URL，但在 P1 的 SSRF 受控出网层完成前，Worker 不得对任意用户地址发起真实模型请求。
+生成任务将按“任务级选择 → 学习目标覆盖 → 账户默认”解析 `model_connection_id`。用户 Provider API Key 由 Web 以 AES-256-GCM 密文存入 `user_model_connections`；Worker 未来仅在执行时使用与 Web 相同的 `CREDENTIAL_ENCRYPTION_KEY` 解密，Celery 消息、日志和 AgentRun 只携带连接 ID 与模型名。用户 Base URL 只允许公网 HTTPS 域名和 443 端口；真实调用必须经 `SafeModelEgressClient`：每次复核全部 DNS 结果、禁止 IP 字面量及私网地址、以已验证 IP 连接、保留 TLS SNI、拒绝重定向、限制响应体并写入 30 天最小审计。当前尚未实现具体 LangGraph 工作流或 ModelGateway，因此该客户端尚未被真实任务调用。
 
 Celery 不启用 Result Backend。用户可见状态、运行事件、错误和后续结果始终以 PostgreSQL 为事实来源；Redis 只作为 Broker，且与认证限流 Redis 分离。
 

@@ -9,7 +9,8 @@ FROM node:24.18.0-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="${PNPM_HOME}:${PATH}"
 
-RUN corepack enable
+# 在基础层安装并激活锁定版本，运行阶段无需由 Corepack 联网下载 pnpm。
+RUN corepack enable && corepack install --global pnpm@11.15.0
 
 WORKDIR /app
 

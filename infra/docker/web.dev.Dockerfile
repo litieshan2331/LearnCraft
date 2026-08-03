@@ -7,7 +7,8 @@ ENV PNPM_HOME=/pnpm
 ENV PATH="${PNPM_HOME}:${PATH}"
 ENV NODE_ENV=development
 
-RUN corepack enable
+# 在基础层安装并激活锁定版本，容器每次重启均可直接运行 pnpm。
+RUN corepack enable && corepack install --global pnpm@11.15.0
 
 WORKDIR /app
 

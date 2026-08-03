@@ -13,7 +13,7 @@
 | Identity & Learner Profile（身份与学习者画像） | 支撑 | 用户、技术栈/目标/可用时间、内容偏好、难度偏好 | 必须 |
 | Learning Planning（学习规划） | 核心 | 学习目标、路线图、四阶段节点、节点状态和依赖 | 必须 |
 | Learning Content（学习内容与知识库） | 核心 | 受控资料目录、URL/文档导入、解析、切块、摘要、向量索引、内容包 | 必须（P0 用人工审核资料；URL/Markdown/PDF 受控入口为 P1） |
-| Model Connection（用户模型连接） | 支撑 | 用户 OpenAI-compatible Base URL、加密 API Key、账户默认模型和任务选择快照 | 必须（P0 仅保存/格式校验；任意 Base URL 的实际出网须等 P1 SSRF 受控出网层） |
+| Model Connection（用户模型连接） | 支撑 | 用户 OpenAI-compatible Base URL、加密 API Key、账户默认模型和任务选择快照 | 必须（仅公网 HTTPS 域名；Worker 通过受控出网层实际调用） |
 | Assessment（前测与后测） | 核心 | 单选题、答题、确定性评分、掌握度，驱动路线调整 | 必须（前测 10–20 题、路线后测 5–10 题；用户选择 `normal`/`hard`，不含简答题） |
 | Practice Execution（代码实践执行） | 核心差异化 | 代码片段、运行任务、日志/结果、超时与安全策略 | MVP 只做受限 Python 3.11 Demo；实战/调试节点的 AI Demo 必须预运行验证并带调用顺序/注释结果；其他语言后置，生产沙箱必须独立 |
 | Agent Orchestration（Agent 编排） | 通用技术上下文 | LangGraph 工作流、运行状态、重试、检查点、提示词版本、工具调用 | 必须，但不拥有学习业务聚合 |
@@ -108,7 +108,7 @@ learncraft/
 │  │  │  └─ lib/                            # Web 通用框架适配
 │  │  │     ├─ db/
 │  │  │     │  ├─ client.ts                  # 懒加载 PostgreSQL/Drizzle 客户端
-│  │  │     │  ├─ schema/                    # 23 张 P0 表、外键、索引、CHECK 与关系
+│  │  │     │  ├─ schema/                    # 24 张 P0 表、外键、索引、CHECK 与关系
 │  │  │     │  └─ migrations/                # 0000 初始迁移及后续增量 SQL / Drizzle meta 快照
 │  │  │     ├─ session/
 │  │  │     ├─ security/                    # Session、凭据 AES-256-GCM 等服务端安全工具
@@ -219,7 +219,7 @@ LangGraph workflow → ModelGateway / LLM Port → OpenAICompatibleAdapter
                                     用户生成 API / 固定 Embedding API
 ```
 
-用户 Provider API Key 由 Web 用 `CREDENTIAL_ENCRYPTION_KEY` 加密后存入 `user_model_connections`，浏览器只可写入/覆盖；Web 与实际执行生成任务的 Worker 持有同一主密钥，Outbox、Celery、Pydantic 对外 DTO 和日志只可携带连接 ID/模型名。生成、embedding 与 rerank 可以使用不同 profile；固定 embedding Profile 不允许用户修改。P0 允许用户填写任意 HTTP/HTTPS Base URL，但实际出网前必须在 P1 加入私网/metadata/DNS 重绑定/重定向阻断等 SSRF 防护。未来如具备稳定 GPU 基础设施，可在不改变 `LLM Port` 的前提下新增 vLLM adapter。
+用户 Provider API Key 由 Web 用 `CREDENTIAL_ENCRYPTION_KEY` 加密后存入 `user_model_connections`，浏览器只可写入/覆盖；Web 与实际执行生成任务的 Worker 持有同一主密钥，Outbox、Celery、Pydantic 对外 DTO 和日志只可携带连接 ID/模型名。生成、embedding 与 rerank 可以使用不同 profile；固定 embedding Profile 不允许用户修改。Base URL 只允许公网 HTTPS 域名和 443 端口，禁止 IP 字面量、本机与局域网；所有真实模型调用必须经过 `SafeModelEgressClient`，由它完成 DNS 全结果复核、固定 IP 连接、重定向阻断和 30 天审计。未来如具备稳定 GPU 基础设施，可在不改变 `LLM Port` 的前提下新增 vLLM adapter。
 
 #### Alembic 决策（当前 MVP）
 
@@ -252,7 +252,7 @@ agent_runs/agent_checkpoints/outbox_events   -> Agent/平台基础设施
 8. 测试按层分开：domain 纯单测，application 使用 fake ports，repository 做 PostgreSQL 集成测试，Agent graph 做节点/回放测试，关键流程做 Playwright E2E。
 9. 浏览器/Next.js 边界用 Zod，Python FastAPI、队列消息与 LLM 结构化输出用 Pydantic；跨语言只共享 OpenAPI/JSON Schema，禁止直接共享 ORM model 或把 Pydantic class 当作前端 DTO。
 10. MVP 的数据库迁移只能由 `db/migrations/`（Drizzle）执行；`agent-worker/alembic/` 在未完成“迁移所有权转移”决策前不得创建版本文件或运行。
-11. 用户 Provider API Key 只经模型连接 API 写入，以 AES-256-GCM 密文存储；`CREDENTIAL_ENCRYPTION_KEY` 仅由 Web 与实际模型 Worker 的 Secret 持有。浏览器响应、代码 Runner、Outbox、Celery 和领域事件均不得持有明文 Key；任务只能传受信任的连接 ID/模型名。P0 的 Base URL 仅做格式校验，P1 必须完成 SSRF 受控出网后才允许真实调用。
+11. 用户 Provider API Key 只经模型连接 API 写入，以 AES-256-GCM 密文存储；`CREDENTIAL_ENCRYPTION_KEY` 仅由 Web 与实际模型 Worker 的 Secret 持有。浏览器响应、代码 Runner、Outbox、Celery 和领域事件均不得持有明文 Key；任务只能传受信任的连接 ID/模型名。Base URL 仅允许公网 HTTPS 域名/443；真实调用只能经 `SafeModelEgressClient` 的 DNS/IP/重定向/审计策略，生产环境还必须配置受控 egress proxy。
 
 ## 4. MVP 的最小流程与入口
 

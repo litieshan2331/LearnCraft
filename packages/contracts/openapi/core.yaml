@@ -13,6 +13,8 @@ tags:
     description: 无需登录的服务健康与版本信息接口
   - name: 认证
     description: 邮箱密码与不透明 Session 的认证接口
+  - name: 学习画像
+    description: 当前用户的学习画像与偏好接口
   - name: 学习目标
     description: 当前用户的学习目标接口
   - name: 模型连接
@@ -144,6 +146,47 @@ paths:
                 $ref: '#/components/schemas/CurrentUser'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /api/v1/learner-profile:
+    get:
+      tags: [学习画像]
+      summary: 获取当前用户的学习者画像
+      operationId: get_learner_profile
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 当前学习者画像；首次尚未填写时 profile 为 null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearnerProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      tags: [学习画像]
+      summary: 创建或更新当前用户的学习者画像
+      operationId: upsert_learner_profile
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearnerProfileUpsertRequest'
+      responses:
+        '200':
+          description: 已保存的学习者画像；每次更新会递增 profile_version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearnerProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/learning-goals:
     post:
       tags: [学习目标]
@@ -162,6 +205,12 @@ paths:
       responses:
         '201':
           description: 学习目标已创建，等待请求前测
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '200':
+          description: 同一幂等键重复请求，返回已创建的学习目标
           content:
             application/json:
               schema:
@@ -211,7 +260,7 @@ paths:
     post:
       tags: [模型连接]
       summary: 加密保存一个 OpenAI-compatible 模型连接
-      description: P0 接受用户自定义 HTTP 或 HTTPS Base URL；SSRF 主机限制将在 P1 补充。API Key 仅可写入，响应和日志不会返回该字段。
+      description: 连接保存阶段拒绝 localhost、.local、回环和常见局域网 IP；真实 Worker 调用前仍必须完成 P1 的 DNS、重定向与受控出网防护。API Key 仅可写入，响应和日志不会返回该字段。
       operationId: create_model_connection
       security:
         - sessionCookie: []
@@ -611,14 +660,91 @@ components:
           type: string
         profile_completed:
           type: boolean
+    LearnerProfileUpsertRequest:
+      type: object
+      additionalProperties: false
+      required: [current_level, weekly_minutes, content_preference]
+      properties:
+        current_level:
+          type: string
+          enum: [beginner, intermediate, advanced]
+          description: 用户整体编程经验，不针对某一种编程语言或技术主题。
+        weekly_minutes:
+          type: integer
+          minimum: 30
+          maximum: 10080
+        operating_system:
+          type: string
+          enum: [windows, macos, linux, other]
+          nullable: true
+        background_summary:
+          type: string
+          maxLength: 2000
+          nullable: true
+        content_preference:
+          type: string
+          enum: [document_first, video_first, balanced]
+    LearnerProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - current_level
+        - primary_language
+        - weekly_minutes
+        - content_preference
+        - profile_version
+        - created_at
+        - updated_at
+      properties:
+        current_level:
+          type: string
+          enum: [beginner, intermediate, advanced]
+          description: 用户整体编程经验，不针对某一种编程语言或技术主题。
+        primary_language:
+          type: string
+          enum: [zh-CN]
+        weekly_minutes:
+          type: integer
+          minimum: 30
+          maximum: 10080
+        operating_system:
+          type: string
+          enum: [windows, macos, linux, other]
+          nullable: true
+        background_summary:
+          type: string
+          nullable: true
+        content_preference:
+          type: string
+          enum: [document_first, video_first, balanced]
+        profile_version:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    LearnerProfileResponse:
+      type: object
+      additionalProperties: false
+      required: [profile]
+      properties:
+        profile:
+          allOf:
+            - $ref: '#/components/schemas/LearnerProfile'
+          nullable: true
     GoalCreateRequest:
       type: object
       additionalProperties: false
-      required: [subject_key, title, description, desired_outcome]
+      required: [topic, title, description, desired_outcome]
       properties:
-        subject_key:
+        topic:
           type: string
-          enum: [python-311-basics]
+          minLength: 1
+          maxLength: 200
+          description: 用户输入的程序员学习主题，例如 Vue 3、Go 并发编程或 Kubernetes；不设技术栈白名单。
         title:
           type: string
           minLength: 1
@@ -632,10 +758,12 @@ components:
         target_date:
           type: string
           format: date
+          nullable: true
         weekly_minutes_override:
           type: integer
           minimum: 30
           maximum: 10080
+          nullable: true
         model_connection_id:
           type: string
           format: uuid
@@ -645,7 +773,7 @@ components:
       additionalProperties: false
       required:
         - id
-        - subject_key
+        - topic
         - title
         - description
         - desired_outcome
@@ -657,9 +785,10 @@ components:
         id:
           type: string
           format: uuid
-        subject_key:
+        topic:
           type: string
-          enum: [python-311-basics]
+          minLength: 1
+          maxLength: 200
         title:
           type: string
         description:
@@ -669,8 +798,10 @@ components:
         target_date:
           type: string
           format: date
+          nullable: true
         weekly_minutes_override:
           type: integer
+          nullable: true
         model_connection_id:
           type: string
           format: uuid
@@ -771,7 +902,7 @@ components:
           type: string
           minLength: 1
           maxLength: 2048
-          description: 用户提供的 OpenAI-compatible Base URL。P0 不做 SSRF 主机限制；P1 将补充出网策略。
+          description: 用户提供的 OpenAI-compatible Base URL。不支持 localhost、局域网、私有 IP 或本地 vLLM；真实调用前必须再通过受控出网策略。
         api_key:
           type: string
           minLength: 1

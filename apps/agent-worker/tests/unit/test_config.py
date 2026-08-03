@@ -28,6 +28,28 @@ def test_settings_treats_a_blank_api_key_as_missing() -> None:
     assert settings.siliconflow_api_key is None
 
 
+def test_production_model_egress_requires_a_controlled_proxy() -> None:
+    """生产环境一旦开启模型调用，必须显式配置受控出网代理。"""
+    with pytest.raises(ValidationError, match="MODEL_EGRESS_PROXY_URL"):
+        Settings(
+            _env_file=None,
+            MODEL_EGRESS_ENVIRONMENT="production",
+            MODEL_EGRESS_ENABLED="true",
+        )
+
+
+def test_production_model_egress_accepts_a_controlled_proxy() -> None:
+    """合法的 HTTP(S) 代理地址可以开启生产模型出网。"""
+    settings = Settings(
+        _env_file=None,
+        MODEL_EGRESS_ENVIRONMENT="production",
+        MODEL_EGRESS_ENABLED="true",
+        MODEL_EGRESS_PROXY_URL="http://egress-proxy.internal:8080",
+    )
+
+    assert settings.model_egress_proxy_url == "http://egress-proxy.internal:8080"
+
+
 def test_queue_settings_use_the_confirmed_celery_defaults() -> None:
     """确保 P0 的单并发、超时和重试策略由配置模型固定。"""
     settings = QueueSettings(

@@ -1,7 +1,7 @@
 """Agent Worker 运行时配置。
 
 类：
-- Settings：读取 Agent API 的服务标识、已锁定的 Embedding Profile、Provider 密钥与用户凭据加密配置。
+- Settings：读取 Agent API 的服务标识、已锁定的 Embedding Profile、Provider 密钥、用户凭据加密与模型受控出网配置。
 - QueueSettings：读取 Dispatcher 与 Celery Worker 的 PostgreSQL、Broker、超时和重试配置。
 
 函数：
@@ -11,6 +11,7 @@
 
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -62,6 +63,42 @@ class Settings(BaseSettings):
         default="v1",
         validation_alias="CREDENTIAL_ENCRYPTION_KEY_VERSION",
     )
+    model_egress_enabled: bool = Field(
+        default=False,
+        validation_alias="MODEL_EGRESS_ENABLED",
+    )
+    model_egress_environment: Literal["development", "production"] = Field(
+        default="development",
+        validation_alias="MODEL_EGRESS_ENVIRONMENT",
+    )
+    model_egress_proxy_url: str | None = Field(
+        default=None,
+        validation_alias="MODEL_EGRESS_PROXY_URL",
+    )
+    model_egress_connect_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        le=60,
+        validation_alias="MODEL_EGRESS_CONNECT_TIMEOUT_SECONDS",
+    )
+    model_egress_read_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        le=600,
+        validation_alias="MODEL_EGRESS_READ_TIMEOUT_SECONDS",
+    )
+    model_egress_max_response_bytes: int = Field(
+        default=4 * 1024 * 1024,
+        ge=1024,
+        le=16 * 1024 * 1024,
+        validation_alias="MODEL_EGRESS_MAX_RESPONSE_BYTES",
+    )
+    model_egress_audit_retention_days: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+        validation_alias="MODEL_EGRESS_AUDIT_RETENTION_DAYS",
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -76,6 +113,36 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @field_validator("model_egress_proxy_url", mode="before")
+    @classmethod
+    def empty_proxy_url_to_none(cls, value: object) -> object:
+        """把未配置的受控出网代理地址统一为 None。"""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def validate_model_egress_settings(self) -> "Settings":
+        """确保生产环境启用模型出网时只能经显式配置的代理。"""
+        if not self.model_egress_proxy_url:
+            if self.model_egress_environment == "production" and self.model_egress_enabled:
+                raise ValueError(
+                    "生产环境启用模型出网时必须配置 MODEL_EGRESS_PROXY_URL。",
+                )
+            return self
+
+        parsed_proxy_url = urlsplit(self.model_egress_proxy_url)
+        if (
+            parsed_proxy_url.scheme not in {"http", "https"}
+            or not parsed_proxy_url.hostname
+            or parsed_proxy_url.username
+            or parsed_proxy_url.password
+            or parsed_proxy_url.query
+            or parsed_proxy_url.fragment
+        ):
+            raise ValueError("MODEL_EGRESS_PROXY_URL 必须是不含认证信息、查询参数或片段的 HTTP(S) 地址。")
+        return self
 
 
 class QueueSettings(BaseSettings):

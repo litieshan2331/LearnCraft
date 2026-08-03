@@ -1,0 +1,256 @@
+/**
+ * Profile 限界上下文的 Drizzle 持久化适配器。
+ *
+ * 导出：
+ * - DrizzleProfileRepository：读写学习者画像、学习目标、幂等键与目标级模型连接归属。
+ */
+
+import { and, eq, sql } from "drizzle-orm";
+
+import { getDatabase } from "@/lib/db/client";
+import {
+  idempotencyKeys,
+  learnerProfiles,
+  learningGoals,
+  userModelConnections,
+} from "@/lib/db/schema";
+
+import {
+  isContentPreference,
+  isCurrentLevel,
+  isLearningGoalStatus,
+  type CreateLearningGoalInput,
+  type CreateLearningGoalResult,
+  type LearnerProfileSnapshot,
+  type LearningGoalSnapshot,
+  ProfileApplicationError,
+  type ProfileRepository,
+  type SaveLearnerProfileInput,
+} from "../domain/profile";
+
+type LearnerProfileRecord = typeof learnerProfiles.$inferSelect;
+type LearningGoalRecord = typeof learningGoals.$inferSelect;
+
+const IDEMPOTENCY_SCOPE = "learning_goal.create";
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+
+export class DrizzleProfileRepository implements ProfileRepository {
+  async findProfile(ownerId: string): Promise<LearnerProfileSnapshot | null> {
+    const database = getDatabase();
+    const [profile] = await database
+      .select()
+      .from(learnerProfiles)
+      .where(eq(learnerProfiles.userId, ownerId))
+      .limit(1);
+
+    return profile ? toLearnerProfileSnapshot(profile) : null;
+  }
+
+  async saveProfile(input: SaveLearnerProfileInput): Promise<LearnerProfileSnapshot> {
+    const database = getDatabase();
+    const [profile] = await database
+      .insert(learnerProfiles)
+      .values({
+        userId: input.ownerId,
+        currentLevel: input.currentLevel,
+        primaryLanguage: "zh-CN",
+        weeklyMinutes: input.weeklyMinutes,
+        operatingSystem: input.operatingSystem,
+        backgroundSummary: input.backgroundSummary,
+        preferencesJson: { contentPreference: input.contentPreference },
+        profileVersion: 1,
+      })
+      .onConflictDoUpdate({
+        target: learnerProfiles.userId,
+        set: {
+          currentLevel: input.currentLevel,
+          weeklyMinutes: input.weeklyMinutes,
+          operatingSystem: input.operatingSystem,
+          backgroundSummary: input.backgroundSummary,
+          preferencesJson: { contentPreference: input.contentPreference },
+          profileVersion: sql`${learnerProfiles.profileVersion} + 1`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+
+    if (!profile) {
+      throw new Error("保存学习者画像后未返回记录。");
+    }
+
+    return toLearnerProfileSnapshot(profile);
+  }
+
+  async isActiveModelConnectionOwned(ownerId: string, modelConnectionId: string): Promise<boolean> {
+    const database = getDatabase();
+    const [connection] = await database
+      .select({ id: userModelConnections.id })
+      .from(userModelConnections)
+      .where(and(
+        eq(userModelConnections.id, modelConnectionId),
+        eq(userModelConnections.ownerId, ownerId),
+        eq(userModelConnections.status, "active"),
+      ))
+      .limit(1);
+
+    return Boolean(connection);
+  }
+
+  async createGoal(
+    input: CreateLearningGoalInput & { profileVersion: number },
+  ): Promise<CreateLearningGoalResult> {
+    const database = getDatabase();
+
+    return database.transaction(async (transaction) => {
+      const [idempotencyRecord] = await transaction
+        .insert(idempotencyKeys)
+        .values({
+          actorKey: input.ownerId,
+          scope: IDEMPOTENCY_SCOPE,
+          idempotencyKey: input.idempotencyKey,
+          requestHash: input.requestHash,
+          status: "processing",
+          responseJson: {},
+          expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+        })
+        .onConflictDoNothing()
+        .returning({ id: idempotencyKeys.id });
+
+      if (!idempotencyRecord) {
+        return this.findExistingIdempotentGoal(transaction, input);
+      }
+
+      const [goal] = await transaction
+        .insert(learningGoals)
+        .values({
+          ownerId: input.ownerId,
+          topic: input.topic,
+          title: input.title,
+          description: input.description,
+          desiredOutcome: input.desiredOutcome,
+          targetDate: input.targetDate,
+          weeklyMinutesOverride: input.weeklyMinutesOverride,
+          modelConnectionId: input.modelConnectionId,
+          profileVersion: input.profileVersion,
+          status: "assessment_pending",
+          metadataJson: {},
+        })
+        .returning();
+
+      if (!goal) {
+        throw new Error("创建学习目标后未返回记录。");
+      }
+
+      await transaction
+        .update(idempotencyKeys)
+        .set({
+          status: "succeeded",
+          responseStatus: 201,
+          resourceType: "learning_goal",
+          resourceId: goal.id,
+          responseJson: { goal_id: goal.id },
+          updatedAt: new Date(),
+        })
+        .where(eq(idempotencyKeys.id, idempotencyRecord.id));
+
+      return { goal: toLearningGoalSnapshot(goal), created: true };
+    });
+  }
+
+  async findOwnedGoal(ownerId: string, goalId: string): Promise<LearningGoalSnapshot | null> {
+    const database = getDatabase();
+    const [goal] = await database
+      .select()
+      .from(learningGoals)
+      .where(and(eq(learningGoals.id, goalId), eq(learningGoals.ownerId, ownerId)))
+      .limit(1);
+
+    return goal ? toLearningGoalSnapshot(goal) : null;
+  }
+
+  private async findExistingIdempotentGoal(
+    transaction: Parameters<ReturnType<typeof getDatabase>["transaction"]>[0] extends (
+      transaction: infer Transaction,
+    ) => unknown ? Transaction : never,
+    input: CreateLearningGoalInput & { profileVersion: number },
+  ): Promise<CreateLearningGoalResult> {
+    const [idempotencyRecord] = await transaction
+      .select()
+      .from(idempotencyKeys)
+      .where(and(
+        eq(idempotencyKeys.actorKey, input.ownerId),
+        eq(idempotencyKeys.scope, IDEMPOTENCY_SCOPE),
+        eq(idempotencyKeys.idempotencyKey, input.idempotencyKey),
+      ))
+      .limit(1);
+
+    if (!idempotencyRecord || idempotencyRecord.requestHash !== input.requestHash) {
+      throw new ProfileApplicationError("IDEMPOTENCY_CONFLICT");
+    }
+    if (idempotencyRecord.status !== "succeeded" || !idempotencyRecord.resourceId) {
+      throw new Error("学习目标幂等请求尚未完成，无法返回确定结果。");
+    }
+
+    const [goal] = await transaction
+      .select()
+      .from(learningGoals)
+      .where(and(
+        eq(learningGoals.id, idempotencyRecord.resourceId),
+        eq(learningGoals.ownerId, input.ownerId),
+      ))
+      .limit(1);
+
+    if (!goal) {
+      throw new Error("学习目标幂等记录指向的资源不存在。");
+    }
+
+    return { goal: toLearningGoalSnapshot(goal), created: false };
+  }
+}
+
+function toLearnerProfileSnapshot(record: LearnerProfileRecord): LearnerProfileSnapshot {
+  if (!isCurrentLevel(record.currentLevel)) {
+    throw new Error("学习者画像包含不支持的当前水平。");
+  }
+
+  const preferences = record.preferencesJson as { contentPreference?: string };
+  const rawContentPreference = preferences.contentPreference ?? "";
+  const contentPreference = isContentPreference(rawContentPreference)
+    ? rawContentPreference
+    : "balanced";
+
+  return {
+    userId: record.userId,
+    currentLevel: record.currentLevel,
+    primaryLanguage: record.primaryLanguage,
+    weeklyMinutes: record.weeklyMinutes,
+    operatingSystem: record.operatingSystem,
+    backgroundSummary: record.backgroundSummary,
+    contentPreference,
+    profileVersion: record.profileVersion,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+function toLearningGoalSnapshot(record: LearningGoalRecord): LearningGoalSnapshot {
+  if (!record.topic.trim() || !isLearningGoalStatus(record.status)) {
+    throw new Error("学习目标包含不支持的主题或状态。");
+  }
+
+  return {
+    id: record.id,
+    ownerId: record.ownerId,
+    topic: record.topic,
+    title: record.title,
+    description: record.description,
+    desiredOutcome: record.desiredOutcome,
+    targetDate: record.targetDate,
+    weeklyMinutesOverride: record.weeklyMinutesOverride,
+    modelConnectionId: record.modelConnectionId,
+    profileVersion: record.profileVersion,
+    status: record.status,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}

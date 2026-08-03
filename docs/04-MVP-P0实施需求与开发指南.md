@@ -15,19 +15,19 @@
 
 ### 1.1 P0 的一句话目标
 
-一位用户能够注册登录，填写 Python 学习目标并完成前测，获得一条包含“概念 → 语法 → 实战 → 调试”的学习路线；点击卡片取得带来源的学习内容，并通过独立 CodeRun 接口在线运行受限 Python 代码；完成整条路线后，再通过后测获得掌握、复习或提高下一路线难度的建议。
+一位用户能够注册登录，填写面向程序员的学习目标并完成前测，获得一条包含“概念 → 语法 → 实战 → 调试”的学习路线；点击卡片取得带来源的学习内容，并通过独立 CodeRun 接口在线运行受限 Python 代码；完成整条路线后，再通过后测获得掌握、复习或提高下一路线难度的建议。
 
 ### 1.2 P0 产品与技术边界
 
 | 项目 | P0 固定范围 | 原因 |
 | --- | --- | --- |
-| 试点主题 | 仅 `python-311-basics`，中文桌面端 | 先验证闭环，不把内容、评测和 Runner 复杂度乘以多语言。 |
+| 学习主题 | 用户自由填写面向程序员的技术主题，中文桌面端 | 先验证主题输入、前测与路线闭环；在线运行环境仍按语言逐步扩展。 |
 | 学习目标 | 每个目标一条当前激活路线；路线 6–12 个节点 | 足够展示个性化和四阶段，避免路线编辑器。 |
 | 前测与路线后测 | 前测由用户选择 10–20 题（默认推荐 12 题），后测由用户选择 5–10 题（推荐 5–8 题）；均为单选题 | 提交后可立即确定性评分；前测提供“正常/困难”卡片且按题序逐步提高难度。 |
 | 知识来源 | 内置、人工审核的官方文档/视频链接和种子文档 | P0 不允许用户上传 PDF、任意 URL 抓取或 MinerU 解析。 |
 | 检索 | PostgreSQL FTS + pgvector 余弦精确检索；返回可追溯引用 | 小规模内容先获得确定性和易维护性；压测后才加 HNSW。 |
 | 在线代码 | Python 3.11、预置依赖、无网络、限时限资源；实战/调试节点先展示 AI 生成且 Runner 已验证的 Demo | 代码执行是高风险能力，不能把宿主机或任意依赖暴露给用户。 |
-| 模型 | 用户自带 OpenAI-compatible 生成连接 + 一个固定 embedding Profile；Worker 按任务解析已选连接 | 不部署 vLLM/Ollama；用户承担生成 Provider 费用，平台免费提供学习流程、检索与运行能力。P0 允许任意 Base URL，SSRF 防护列为 P1。 |
+| 模型 | 用户自带公网 OpenAI-compatible 生成连接 + 一个固定 embedding Profile；Worker 按任务解析已选连接 | 不部署 vLLM/Ollama；用户承担生成 Provider 费用，平台免费提供学习流程、检索与运行能力。产品永久不支持 IP 字面量、localhost、局域网、私有地址或本地 vLLM；真实调用固定经受控出网层。 |
 | 异步任务 | 规划、内容/Demo 生成和自动出题通过 `AgentRun` 异步执行；单选题评分同步完成 | 模型调用有延迟和失败，需要可重试、可观察、可恢复；确定性评分不需要排队。 |
 
 ### 1.3 P0 已作出的实现决策
@@ -35,7 +35,7 @@
 1. **架构：**Next.js App Router 负责 UI、BFF、认证与核心学习领域；Python FastAPI + LangGraph 仅负责 Agent 编排、模型调用、检索和受控工具。Python 不复制学习路线、题目等业务聚合。
 2. **认证：**P0 使用“邮箱 + 密码 + 数据库不透明 Session + HttpOnly Cookie”。密码用 Argon2id 哈希；浏览器不接收 JWT。这样本地开发不依赖 OAuth 或邮件供应商，也不会把长期令牌暴露给前端。OAuth、Magic Link、找回密码和移动端 Token 放 P1。
 3. **迁移所有权：**`db/migrations/` 中的 Drizzle 迁移是 P0 唯一建表入口。`apps/agent-worker/alembic/` 保留说明文件，但 **P0 不执行 Alembic**，否则会出现两个迁移工具竞争同一数据库的问题。
-4. **用户模型连接：**`ModelGateway` 是 `agent-worker` 内的应用服务，不是 Docker 容器。用户可保存 OpenAI-compatible Base URL、API Key 和模型名；Key 由 Web 以 AES-256-GCM 加密持久化，浏览器只可写入/覆盖，Outbox、日志和 AgentRun 仅记录连接 ID/模型名。`CREDENTIAL_ENCRYPTION_KEY` 只进入 Web 与 Worker 的 Secret/环境变量。
+4. **用户模型连接：**`ModelGateway` 是 `agent-worker` 内的应用服务，不是 Docker 容器。用户只可保存公网 OpenAI-compatible Base URL、API Key 和模型名，永久不支持 localhost、局域网、私有 IP 或本地 vLLM；Key 由 Web 以 AES-256-GCM 加密持久化，浏览器只可写入/覆盖，Outbox、日志和 AgentRun 仅记录连接 ID/模型名。`CREDENTIAL_ENCRYPTION_KEY` 只进入 Web 与 Worker 的 Secret/环境变量。
 5. **向量索引：**P0 先不建 ANN 索引。固定 embedding Profile、内容量和检索评测集后，只有在检索 p95 或数据量达到阈值时，才用 HNSW 作为首个 ANN 方案；不引入独立向量数据库。
 6. **代码 Runner：**Docker Compose 是本地编排工具，不是用户不可信代码的安全边界。上线前必须验证一次性沙箱的断网、非 root、只读根文件系统、资源限制和逃逸测试；未达到标准时，P0 关闭“运行”按钮而不是冒险上线。
 
@@ -72,11 +72,11 @@
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
 | P0-PROFILE-001 | 首次进入时收集学习水平、每周可投入时间、内容偏好和设备信息。 | 必填项缺失不能进入建目标步骤；刷新后资料仍存在。 |
-| P0-PROFILE-002 | 用户可创建一个 Python 3.11 基础学习目标。 | 目标包含主题、自然语言说明、期望结果、截止日期（可选）和每周时间（可选）；不支持的 `subject_key` 返回 `422`。 |
+| P0-PROFILE-002 | 用户可创建一个自定义技术主题学习目标。 | 目标包含 1–200 字符的 `topic`、自然语言说明、期望结果、截止日期（可选）和每周时间（可选）；主题不设语言或技术栈白名单。 |
 | P0-PROFILE-003 | 用户可查看和修改自己的画像与草稿目标。 | 修改只影响本人数据；修改后生成路线前会使用最新画像版本。 |
 | P0-PROFILE-004 | 已启动规划的目标显示明确状态。 | 状态至少可见：`draft`、`assessment_pending`、`planning`、`active`、`failed`；页面不会无提示地一直加载。 |
 
-**暂时需要做：**单主题白名单、表单 Zod 校验、目标与画像版本、目标状态机、空状态和失败重试入口。
+**暂时需要做：**自由主题表单与数据库非空校验、目标与画像版本、目标状态机、空状态和失败重试入口。
 
 **暂时不需要做：**用户自定义课程市场、技能树编辑、学习时间日历、多个并行主题推荐、企业/班级画像。
 
@@ -187,7 +187,7 @@
 
 **暂时需要做：**OpenAI-compatible Adapter、用户模型连接设置、AES-256-GCM 凭据加密、账户默认和任务级覆盖、Fake Adapter、超时/预算/重试、结构化输出、AgentRun 事件、健康检查。
 
-**暂时不需要做：**自动跨 Provider 智能路由、微调、模型网关独立服务、LangSmith 强依赖、自托管推理，以及 P1 的自定义 Base URL SSRF 受控出网层。
+**暂时不需要做：**自动跨 Provider 智能路由、微调、模型网关独立服务、LangSmith 强依赖、自托管推理，以及自动发起 Provider 连通性验证。
 
 ---
 
@@ -211,21 +211,21 @@
 
 ### 3.2 Schema、表数量与模型归属
 
-P0 共 **23 张 LearnCraft 应用/基础设施表**：`public` schema 21 张，`agent` schema 2 张。LangGraph PostgreSQL checkpointer 的官方表不算入这 23 张；它由锁定版本的 `langgraph-checkpoint-postgres` 官方迁移创建，不能手写一个“类似的” ORM 表替代。
+P0 共 **24 张 LearnCraft 应用/基础设施表**：`public` schema 22 张，`agent` schema 2 张。LangGraph PostgreSQL checkpointer 的官方表不算入这 24 张；它由锁定版本的 `langgraph-checkpoint-postgres` 官方迁移创建，不能手写一个“类似的” ORM 表替代。
 
 | Schema | 表 | 写入所有者 | ORM/Schema 文件 | 用途 |
 | --- | --- | --- | --- | --- |
 | public | `users`、`auth_sessions` | Web Identity | `db/schema/identity.ts` | 邮箱密码账号和数据库 Session。 |
-| public | `user_model_connections` | Web Model Connection | `db/schema/model-connection.ts` | 用户自带 OpenAI-compatible Base URL、默认模型及 AES-256-GCM 加密凭据。 |
+| public | `user_model_connections`、`model_connection_egress_audits` | Web Model Connection / Python 安全审计写入 | `db/schema/model-connection.ts`、`infrastructure/persistence/models/model_connection_egress_audit.py` | 用户自带 OpenAI-compatible Base URL、默认模型及 AES-256-GCM 加密凭据；最小出网审计保留 30 天。 |
 | public | `learner_profiles` | Web Profile | `db/schema/profile.ts` | 学习者画像。 |
 | public | `learning_goals`、`learning_plans`、`plan_nodes`、`plan_node_prerequisites`、`adaptation_events` | Web Planning | `db/schema/planning.ts` | 目标、路线、节点、依赖和调整审计。 |
 | public | `assessments`、`assessment_items`、`assessment_attempts`、`assessment_answers` | Web Assessment | `db/schema/assessment.ts` | 前测、路线后测、答案与评分快照。 |
 | public | `content_sources`、`content_documents`、`content_chunks`、`card_contents`、`card_content_references` | Web Content | `db/schema/content.ts` | 受控资料、FTS/向量、卡片内容/引用，以及实战/调试 Demo 合同与验证摘要。 |
 | public | `code_runs` | Web Practice | `db/schema/practice.ts` | 受限代码执行任务和结果。 |
 | public | `outbox_events`、`idempotency_keys` | Web Shared Infrastructure | `db/schema/integration.ts` | 可靠投递和 HTTP 写操作幂等。 |
-| agent | `agent_runs`、`agent_run_events` | Python Agent Worker | `infrastructure/persistence/models/` | 编排状态、可重放运行事件和模型审计。 |
+| agent | `agent_runs`、`agent_run_events` | Python Agent Worker | `infrastructure/persistence/models/` | 编排状态与可重放运行事件。 |
 
-> **数据库基类澄清：**Drizzle 是 TypeScript 查询/映射工具，不使用 Python 那种 `DeclarativeBase` 继承树；公共业务表用 Drizzle schema + SQL migration 定义。Python 的 SQLAlchemy `Base` 只映射 `agent_runs` 和 `agent_run_events`，不能再创建一套 `UserModel`、`LearningPlanModel` 与 Next.js 竞争。
+> **数据库基类澄清：**Drizzle 是 TypeScript 查询/映射工具，不使用 Python 那种 `DeclarativeBase` 继承树；公共业务表用 Drizzle schema + SQL migration 定义。Python 的 SQLAlchemy `Base` 只映射 `agent_runs`、`agent_run_events` 与 Worker 写入的最小安全审计表 `model_connection_egress_audits`，不能再创建一套 `UserModel`、`LearningPlanModel` 与 Next.js 竞争。
 
 ### 3.3 表关系图
 
@@ -235,6 +235,7 @@ erDiagram
     USERS ||--o{ AUTH_SESSIONS : opens
     USERS ||--o{ LEARNING_GOALS : owns
     USERS ||--o{ USER_MODEL_CONNECTIONS : configures
+    USERS ||--o{ MODEL_CONNECTION_EGRESS_AUDITS : audits
     USER_MODEL_CONNECTIONS ||--o{ LEARNING_GOALS : overrides
     LEARNING_GOALS ||--o{ LEARNING_PLANS : versions
     LEARNING_PLANS ||--o{ PLAN_NODES : contains
@@ -326,6 +327,28 @@ CREATE UNIQUE INDEX uq_user_model_connections_owner_default
 CREATE INDEX idx_user_model_connections_owner_status
     ON public.user_model_connections(owner_id, status, updated_at DESC);
 
+-- 仅记录模型出网安全决策；不保存 API Key、提示词、响应正文或 DNS IP。
+-- model_connection_id 不设外键，避免用户删除连接后失去保留期内的审计痕迹。
+CREATE TABLE public.model_connection_egress_audits (
+    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id            uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    model_connection_id uuid NOT NULL,
+    agent_run_id        uuid,
+    host                varchar(253),
+    port                integer CHECK (port IS NULL OR port BETWEEN 1 AND 65535),
+    decision            varchar(20) NOT NULL
+                        CHECK (decision IN ('allowed', 'blocked', 'request_failed')),
+    reason_code         varchar(100) NOT NULL CHECK (length(btrim(reason_code)) > 0),
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    expires_at          timestamptz NOT NULL,
+    CONSTRAINT ck_model_connection_egress_audits_expiry CHECK (expires_at > created_at)
+);
+
+CREATE INDEX idx_model_connection_egress_audits_cleanup
+    ON public.model_connection_egress_audits(expires_at);
+CREATE INDEX idx_model_connection_egress_audits_connection_occurred
+    ON public.model_connection_egress_audits(model_connection_id, created_at DESC);
+
 CREATE TABLE public.auth_sessions (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
@@ -365,8 +388,8 @@ CREATE TABLE public.learner_profiles (
 CREATE TABLE public.learning_goals (
     id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id                uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-    subject_key             varchar(80) NOT NULL
-                            CHECK (subject_key IN ('python-311-basics')),
+    topic                   varchar(200) NOT NULL
+                            CHECK (length(btrim(topic)) BETWEEN 1 AND 200),
     title                   varchar(200) NOT NULL,
     description             text NOT NULL,
     desired_outcome         text NOT NULL,
@@ -874,7 +897,7 @@ FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 -- 其余表在同一迁移中按相同模式建立 trigger；不要依赖应用代码“记得更新”。
 ```
 
-当前初始库使用一个可审查的 `0000_initial_p0_schema`：其中包含 22 张表、`pgcrypto`/`citext`/`vector` 扩展、`agent` schema、索引、外键和 15 个 `updated_at` trigger，已在本地 Docker PostgreSQL 验证。`0003_user_model_connections` 以增量方式新增第 23 张表、目标/AgentRun 选择快照字段与第 16 个 trigger；上线后不得重写历史迁移，所有变更必须由新的增量迁移表达。
+当前初始库使用一个可审查的 `0000_initial_p0_schema`：其中包含 22 张表、`pgcrypto`/`citext`/`vector` 扩展、`agent` schema、索引、外键和 15 个 `updated_at` trigger，已在本地 Docker PostgreSQL 验证。`0003_user_model_connections` 以增量方式新增第 23 张表、目标/AgentRun 选择快照字段与第 16 个 trigger；`0004_learning_goal_topic` 将固定主题键改为开放 `topic` 字段；`0005_model_connection_egress_audit` 新增第 24 张表。上线后不得重写历史迁移，所有变更必须由新的增量迁移表达。
 
 原先规划的逻辑拆分保留为后续迁移的职责参考：
 
@@ -894,7 +917,8 @@ FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 | P1 | `oauth_accounts`、`email_verification_tokens`、`password_reset_tokens` | OAuth/Magic Link、邮箱验证与安全找回密码。 |
 | P1 | `content_ingestion_jobs`、`content_source_access`、`content_chunk_embeddings` | 用户资料导入、MinerU、私有资料授权、多版本重嵌入。 |
 | P1 | `model_usage_ledger`、`plan_change_sets`、`data_deletion_jobs` | 用户成本/配额、路线回退、数据删除编排。 |
-| P1 | `model_connection_verification_events`、`egress_policy_audits` | 自定义 Base URL 的 SSRF 受控出网、DNS/重定向复核和连接验证审计。 |
+| 已实现安全基础 | `model_connection_egress_audits` | 自定义 Base URL 的最小出网审计（允许/拒绝/请求失败），30 天保留；运行时完成 HTTPS/443、DNS/IP、固定连接与重定向防护。 |
+| P1 | `model_connection_verification_events` | 用户主动触发的 Provider 连通性验证记录；不自动调用以避免产生用户费用。 |
 | P2 | `organizations`、`organization_members`、`roles` | 多租户组织与权限。 |
 | P2 | `progress_snapshots`、`learning_reports`、`achievements` | 进度条、学习报告和成就投影。 |
 | P2 | `posts`、`comments`、`reactions`、`groups` | 社区/社群。 |
@@ -976,7 +1000,7 @@ HTTP/1.1 200 OK
 
 ### 4.3 模型连接 API
 
-模型连接为当前账户私有资源，支持一个账户默认连接。`api_key` 是仅写字段：创建时必须提供，更新时仅在替换 Key 时提供，任何成功或失败响应都不会回传它或其密文。P0 允许自定义 HTTP/HTTPS Base URL，但实际 Worker 出网必须等 P1 SSRF 受控出网层完成后才可启用。
+模型连接为当前账户私有资源，支持一个账户默认连接。`api_key` 是仅写字段：创建时必须提供，更新时仅在替换 Key 时提供，任何成功或失败响应都不会回传它或其密文。用户只能填写公网 HTTPS 域名且仅允许 443 端口，永久不支持任何 IP 字面量、localhost、局域网、私有地址或本地 vLLM；实际 Worker 出网必须经受控出网层。
 
 | 方法与路径 | 用途 | 成功响应 |
 | --- | --- | --- |
@@ -1017,7 +1041,7 @@ HTTP/1.1 201 Created
 | --- | --- | --- |
 | `GET /api/v1/profile` | 读取当前用户画像 | `200` Profile |
 | `PUT /api/v1/profile` | 创建/更新画像 | `200` Profile（`profile_version` +1） |
-| `POST /api/v1/learning-goals` | 创建 Python 基础目标 | `201` Goal |
+| `POST /api/v1/learning-goals` | 创建自定义技术主题目标 | `201` Goal |
 | `GET /api/v1/learning-goals/{goal_id}` | 读取目标及当前状态 | `200` Goal |
 | `POST /api/v1/learning-goals/{goal_id}/diagnostic-assessments` | 请求前测生成 | `202` `{ assessment_id, agent_run_id, status }` |
 | `GET /api/v1/assessments/{assessment_id}` | 读取题目或结果 | `200`；进行中不包含 `answer_key_json`、`rubric_json` 或评分内部元数据 |
@@ -1033,10 +1057,10 @@ Idempotency-Key: 5301bb75-b6a7-4d0a-9d58-3edc6b3b5999
 Content-Type: application/json
 
 {
-  "subject_key": "python-311-basics",
-  "title": "两周掌握 Python 基础并写一个命令行待办程序",
-  "description": "我会一点 JavaScript，但没有 Python 基础。",
-  "desired_outcome": "能理解变量、函数、列表和错误，并完成一个小项目。",
+  "topic": "Vue 3 + TypeScript",
+  "title": "两周完成 Vue 3 数据看板",
+  "description": "我会一点 JavaScript，希望系统学习 Composition API 和 TypeScript。",
+  "desired_outcome": "能完成带路由、状态管理和列表筛选的小型前端项目。",
   "target_date": "2026-08-01",
   "weekly_minutes_override": 300,
   "model_connection_id": "model-connection-uuid"
@@ -1047,7 +1071,7 @@ HTTP/1.1 201 Created
 {
   "id": "79a55d76-46ed-4e7b-b4c0-1641c4a1d7d9",
   "status": "assessment_pending",
-  "subject_key": "python-311-basics"
+  "topic": "Vue 3 + TypeScript"
 }
 ```
 
@@ -1568,7 +1592,7 @@ uv run pytest
 
 实施顺序：
 
-1. 已在 `apps/web/src/lib/db/schema/` 按第 3.2 节的文件归属声明全部 23 张表与 relation；其中 `0003_user_model_connections` 为用户模型连接及目标/AgentRun 选择快照的增量迁移；
+1. 已在 `apps/web/src/lib/db/schema/` 按第 3.2 节的文件归属声明全部 24 张表与 relation；其中 `0003_user_model_connections` 为用户模型连接及目标/AgentRun 选择快照的增量迁移，`0005_model_connection_egress_audit` 为 Worker 最小出网审计表；
 2. 将扩展、schema、CHECK、partial index、trigger、HNSW（暂不创建）等 Drizzle 不擅长表达的部分放在 migration raw SQL；
 3. 已生成并审查 `0000_initial_p0_schema`；后续所有变更使用新的增量迁移；
 4. 已在空库执行首份迁移并完成表、扩展、向量列、trigger 的 schema smoke test；下一步再加入 seed；
@@ -1655,7 +1679,7 @@ SILICONFLOW_API_KEY=
 MODEL_RUN_MAX_COST_USD=0.05
 ```
 
-用户自行选择生成 Provider 时，界面必须清晰展示连接名、Base URL 和模型名，但 API 响应永远不返回 API Key 密文、IV、认证标签或主密钥。先通过 Fake Adapter 的单元/契约测试，再在 staging 用一条真实测试目标做 smoke test。P0 仅对 Base URL 做格式校验，尚未发起校验请求；**在允许 Worker 对任意用户 Base URL 出网前，P1 必须实现受控出网与 SSRF 防护**：仅允许 HTTPS/批准端口、拒绝 loopback/私网/link-local/云 metadata 地址、DNS 解析后复核与防重绑定、重定向逐跳复核、审计和限流。
+用户自行选择生成 Provider 时，界面必须清晰展示连接名、Base URL 和模型名，但 API 响应永远不返回 API Key 密文、IV、认证标签或主密钥。保存阶段拒绝非 HTTPS、非 443、所有 IP 字面量、localhost、`.local`、回环与常见局域网地址，且产品永久不支持本地 vLLM；不自动发起校验请求。Worker 的受控出网层会在每次实际调用前复核全部 DNS 结果、拒绝私网/link-local/云 metadata、以已校验 IP 连接、拒绝重定向、限制响应体并写入审计。
 
 ### 步骤 8：加入 Docker Compose（本地一键联调）
 
@@ -1832,7 +1856,7 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 
 | 顺序 | 操作 | 必须观察到的证据 |
 | --- | --- | --- |
-| 1 | `docker compose up` 后执行 migration/seed | PostgreSQL 有 `public`、`agent` schema；23 张应用表、vector extension、健康检查均成功。 |
+| 1 | `docker compose up` 后执行 migration/seed | PostgreSQL 有 `public`、`agent` schema；24 张应用表、vector extension、健康检查均成功。 |
 | 2 | 注册并登录测试用户 | `users.password_hash` 不是明文；浏览器仅有 HttpOnly Cookie；`GET /auth/me` 成功。 |
 | 3 | 写画像、创建目标 | 数据行 `owner_id` 正确；重复 Idempotency-Key 返回同一 Goal。 |
 | 4 | 请求前测 | Assessment/AgentRun/Outbox 状态由 `generating/queued` 变为 `ready/succeeded`；用户选定 10–20 题、仅有单选题、难度符合 `normal`/`hard` 与逐步提升规则；事件序号连续。 |
@@ -1891,7 +1915,7 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 
 #### 学习闭环
 
-- [ ] 填完画像后，能够创建 `python-311-basics` 目标；不支持主题被 `422` 拒绝。
+- [ ] 填完画像后，能够创建任意 1–200 字符的程序员技术主题目标；空白或超长 `topic` 被 `422` 拒绝。
 - [ ] 前测由用户选择 10–20 题且只有单选题；“正常/困难”难度正确生效，题序逐步提高难度；提交前无法通过 API 拿到正确答案。
 - [ ] 完成路线后，后测由用户选择 5–10 题（推荐 5–8）且只有单选题；服务端确定性评分返回分数、反馈和薄弱点，不泄露答案。
 - [ ] 前测完成后生成一条四阶段、6–12 节点的路线，首节点为 `available`。
@@ -1905,7 +1929,7 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 - [ ] 每项异步操作立即返回可查询的 `agent_run_id`，页面有 queued/running/succeeded/failed 状态。
 - [ ] Fake Provider 能完成所有 E2E；没有 Key 时本地启动不失败。
 - [ ] 模型连接列表、创建、更新、删除和设为默认接口均只返回安全摘要；缺少加密主密钥时创建/更新返回 503，不允许明文降级。
-- [ ] staging 的真实 Provider smoke 不超过设定 token/金额/超时预算；在 P1 SSRF 受控出网完成前，不对任意 Base URL 启用 Worker 实际调用。
+- [ ] staging 的真实 Provider smoke 仅在用户明确触发时执行，且不超过设定 token/金额/超时预算；必须经受控 egress proxy、云网络规则与 `SafeModelEgressClient`，不得绕过 DNS/IP/重定向/审计策略。
 - [ ] `agent_runs` 记录连接 ID、请求/实际模型版本、token、估算费用、重试和错误类别，不记录 API Key/完整 prompt。
 - [ ] 检索结果在 seed golden set 上达到团队设定的最低 `recall@k` 与引用正确率，并保留评测结果。
 - [ ] P0 不存在 HNSW 索引；达到压测门槛前不以“感觉慢”为由过早优化。
@@ -1924,7 +1948,7 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 P0 只有在以下条件同时满足时才算完成：
 
 1. 第 2 节所有“暂时需要做”的需求均有实现、测试和演示证据；
-2. 第 3 节 23 张应用表、扩展、迁移、seed、trigger 与备份/恢复演练可复现；
+2. 第 3 节 24 张应用表、扩展、迁移、seed、trigger 与备份/恢复演练可复现；
 3. 第 4 节公开 API 均进入 OpenAPI，并通过至少一条契约测试；
 4. 第 5 节三个核心流程可在 Compose 环境从 UI 跑通；
 5. 第 7 节的 Fake Provider E2E 与 staging 真实 Provider smoke 都通过；
