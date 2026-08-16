@@ -12,6 +12,7 @@ from collections.abc import Mapping, Sequence
 from uuid import uuid4
 
 import httpx
+import orjson
 import pytest
 
 from learncraft_agent.application.ports.model_egress_audit import ModelEgressAuditEntry
@@ -94,6 +95,24 @@ class FakeAsyncClient:
         assert stream is True
         type(self).last_request = request
         return httpx.Response(200, json={"id": "chatcmpl-test"}, request=request)
+
+
+class FakeSseAsyncClient(FakeAsyncClient):
+    '''返回固定 SSE 事件，用于验证受控出网层逐块读取流。'''
+
+    async def send(self, request: httpx.Request, *, stream: bool) -> httpx.Response:
+        '''记录 SSE 请求并返回带 DONE 标记的数据流。'''
+        assert stream is True
+        type(self).last_request = request
+        event = orjson.dumps(
+            {'choices': [{'index': 0, 'delta': {'content': '{}'}}]},
+        )
+        return httpx.Response(
+            200,
+            headers={'content-type': 'text/event-stream; charset=utf-8'},
+            content=b'data: ' + event + b'\n\ndata: [DONE]\n\n',
+            request=request,
+        )
 
 
 @pytest.mark.asyncio
@@ -202,3 +221,39 @@ async def test_safe_client_uses_pinned_ip_with_original_host_and_tls_sni(
     assert [(entry.decision, entry.reason_code) for entry in audit_writer.entries] == [
         ("allowed", "MODEL_EGRESS_POLICY_ALLOWED"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_safe_client_reads_sse_events_through_pinned_request_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    '''SSE 调用也必须走固定 IP、原始 Host 与 TLS SNI 的受控路径。'''
+    from learncraft_agent.infrastructure.llm import safe_egress_client
+
+    monkeypatch.setattr(safe_egress_client.httpx, 'AsyncClient', FakeSseAsyncClient)
+    client = SafeModelEgressClient(
+        options=ModelEgressOptions(
+            enabled=True,
+            proxy_url=None,
+            connect_timeout_seconds=10,
+            read_timeout_seconds=120,
+            max_response_bytes=1024,
+        ),
+        audit_writer=FakeAuditWriter(),
+        policy=FakePolicy(),  # type: ignore[arg-type]
+    )
+
+    response = await client.post_openai_compatible_sse(
+        owner_id=uuid4(),
+        model_connection_id=uuid4(),
+        agent_run_id=None,
+        base_url='https://api.example.com/v1',
+        api_key='test-api-key',
+        endpoint_segments=('chat', 'completions'),
+        payload={'model': 'test-model', 'stream': True},
+    )
+
+    assert response.events[0]['choices'][0]['delta']['content'] == '{}'
+    assert FakeSseAsyncClient.last_request is not None
+    assert FakeSseAsyncClient.last_request.headers['accept'] == 'text/event-stream'
+    assert str(FakeSseAsyncClient.last_request.url) == 'https://8.8.8.8/v1/chat/completions'

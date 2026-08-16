@@ -1,7 +1,15 @@
 # LearnCraft MVP P0 实施需求与开发指南
 
-> 版本：v0.2（待评审）
-> 日期：2026-08-01
+> ## 当前范围决策（2026-08-16，优先级最高）
+>
+> P0 不执行任何用户或模型代码，不增加 `code-runner` 服务，也不实现浏览器在线编辑器。P0 Demo 仅为可复制到本地运行的代码产物，必须含中文注释、入口、依赖与运行步骤、预期输出、调用顺序和常见报错排查。在线 Sandbox、执行日志、stdout/stderr、资源限额与隔离测试全部后置 P1。
+>
+> P0 的产品主线为：用户可以维护一份当前学习画像并创建多个目标；每个目标只有一份有效前测，题集生成失败或取消且尚未得到题集时才可重试；前测提交并评分后，先向本人展示结果，只有用户点击“生成学习计划”时，模型才基于目标、题目、作答、分数、薄弱点和当前画像生成学习计划。用户可任选计划节点，不受线性解锁限制；P0 优先完成一个节点的内容与本地 Demo → 标记完成 → 节点后测 → 评分 → 可重新生成后测练习闭环。
+>
+> 画像只保留一份当前记录。新目标和未生成内容使用最新画像；前测、学习计划和已生成内容保存 `profile_version` 与必要输入快照，不因后续画像编辑而改写。P0 提供目标列表与目标详情；每个目标只显示最新前测，历史数据保留但不提供历史 UI。
+
+> 版本：v0.3（范围已确认）
+> 日期：2026-08-16
 > 配套文档：[技术栈选型](./01-技术栈选型.md) · [DDD 项目目录](./02-DDD项目目录.md) · [MVP PRD](./03-MVP-PRD.md)
 
 ## 1. 文档目的、P0 边界与已锁定决策
@@ -15,29 +23,30 @@
 
 ### 1.1 P0 的一句话目标
 
-一位用户能够注册登录，填写面向程序员的学习目标并完成前测，获得一条包含“概念 → 语法 → 实战 → 调试”的学习路线；点击卡片取得带来源的学习内容，并通过独立 CodeRun 接口在线运行受限 Python 代码；完成整条路线后，再通过后测获得掌握、复习或提高下一路线难度的建议。
+一位用户能够注册登录，维护一份当前学习画像并创建多个程序员学习目标；每个目标完成一次前测并查看答案、解析和分数后，自主决定是否生成“概念 → 语法 → 实战 → 调试”学习路线；可任选节点取得唯一的带来源学习内容与本地代码 Demo，标记完成后反复生成独立后测题集、查看历史错题解析，并获得掌握、复习或提高难度建议。
 
 ### 1.2 P0 产品与技术边界
 
 | 项目 | P0 固定范围 | 原因 |
 | --- | --- | --- |
-| 学习主题 | 用户自由填写面向程序员的技术主题，中文桌面端 | 先验证主题输入、前测与路线闭环；在线运行环境仍按语言逐步扩展。 |
-| 学习目标 | 每个目标一条当前激活路线；路线 6–12 个节点 | 足够展示个性化和四阶段，避免路线编辑器。 |
-| 前测与路线后测 | 前测由用户选择 10–20 题（默认推荐 12 题），后测由用户选择 5–10 题（推荐 5–8 题）；均为单选题 | 提交后可立即确定性评分；前测提供“正常/困难”卡片且按题序逐步提高难度。 |
+| 学习主题 | 用户自由填写面向程序员的技术主题，中文桌面端 | 先验证主题输入、前测与路线闭环；P0 不承诺任何语言的在线运行环境。 |
+| 学习目标 | 用户可创建多个目标；每个目标一条当前激活路线；路线 6–12 个节点 | 支持并行目标，避免路线编辑器。 |
+| 前测与节点后测 | 前测由用户选择 10–20 题（默认推荐 12 题），节点后测由用户选择 5–10 题（推荐 5–8 题）；均为单选题 | 提交后可立即确定性评分；前测提供“正常/困难”卡片且按题序逐步提高难度。 |
 | 知识来源 | 内置、人工审核的官方文档/视频链接和种子文档 | P0 不允许用户上传 PDF、任意 URL 抓取或 MinerU 解析。 |
 | 检索 | PostgreSQL FTS + pgvector 余弦精确检索；返回可追溯引用 | 小规模内容先获得确定性和易维护性；压测后才加 HNSW。 |
-| 在线代码 | Python 3.11、预置依赖、无网络、限时限资源；实战/调试节点先展示 AI 生成且 Runner 已验证的 Demo | 代码执行是高风险能力，不能把宿主机或任意依赖暴露给用户。 |
-| 模型 | 用户自带公网 OpenAI-compatible 生成连接 + 一个固定 embedding Profile；Worker 按任务解析已选连接 | 不部署 vLLM/Ollama；用户承担生成 Provider 费用，平台免费提供学习流程、检索与运行能力。产品永久不支持 IP 字面量、localhost、局域网、私有地址或本地 vLLM；真实调用固定经受控出网层。 |
+| 本地代码 Demo | 实战/调试节点生成可复制到本地运行的代码、说明和调用顺序；P0 不执行任何用户或模型代码 | 保持 Demo 的学习价值，同时不把在线执行高风险能力带入 P0。 |
+| 模型 | 用户自带公网 OpenAI-compatible 生成连接 + 一个固定 embedding Profile；P0 Worker 只解析账户默认连接 | 不部署 vLLM/Ollama；用户承担生成 Provider 费用，平台免费提供学习流程、检索与本地 Demo。产品永久不支持 IP 字面量、localhost、局域网、私有地址或本地 vLLM；真实调用固定经受控出网层。 |
 | 异步任务 | 规划、内容/Demo 生成和自动出题通过 `AgentRun` 异步执行；单选题评分同步完成 | 模型调用有延迟和失败，需要可重试、可观察、可恢复；确定性评分不需要排队。 |
 
 ### 1.3 P0 已作出的实现决策
 
-1. **架构：**Next.js App Router 负责 UI、BFF、认证与核心学习领域；Python FastAPI + LangGraph 仅负责 Agent 编排、模型调用、检索和受控工具。Python 不复制学习路线、题目等业务聚合。
+1. **架构：**Next.js App Router 负责 UI、BFF、认证与核心学习领域；Python FastAPI + LangGraph 在同一 Worker 内实现学习规划 Agent 与节点教学 Agent 两个职责隔离的工作流，负责模型调用、检索和受控工具。Python 不复制学习路线、题目等业务聚合，也不维护无限原始聊天记录。
 2. **认证：**P0 使用“邮箱 + 密码 + 数据库不透明 Session + HttpOnly Cookie”。密码用 Argon2id 哈希；浏览器不接收 JWT。这样本地开发不依赖 OAuth 或邮件供应商，也不会把长期令牌暴露给前端。OAuth、Magic Link、找回密码和移动端 Token 放 P1。
 3. **迁移所有权：**`db/migrations/` 中的 Drizzle 迁移是 P0 唯一建表入口。`apps/agent-worker/alembic/` 保留说明文件，但 **P0 不执行 Alembic**，否则会出现两个迁移工具竞争同一数据库的问题。
 4. **用户模型连接：**`ModelGateway` 是 `agent-worker` 内的应用服务，不是 Docker 容器。用户只可保存公网 OpenAI-compatible Base URL、API Key 和模型名，永久不支持 localhost、局域网、私有 IP 或本地 vLLM；Key 由 Web 以 AES-256-GCM 加密持久化，浏览器只可写入/覆盖，Outbox、日志和 AgentRun 仅记录连接 ID/模型名。`CREDENTIAL_ENCRYPTION_KEY` 只进入 Web 与 Worker 的 Secret/环境变量。
 5. **向量索引：**P0 先不建 ANN 索引。固定 embedding Profile、内容量和检索评测集后，只有在检索 p95 或数据量达到阈值时，才用 HNSW 作为首个 ANN 方案；不引入独立向量数据库。
-6. **代码 Runner：**Docker Compose 是本地编排工具，不是用户不可信代码的安全边界。上线前必须验证一次性沙箱的断网、非 root、只读根文件系统、资源限制和逃逸测试；未达到标准时，P0 关闭“运行”按钮而不是冒险上线。
+6. **在线代码执行：**P0 不创建 `CodeRun` API、不启动 Runner 容器、不提供浏览器编辑器或 stdout/stderr。当前数据库中已存在的 `code_runs` 物理表只作为 P1 预留，不是 P0 功能契约；P1 再确认沙箱隔离、语言、资源限制和成本模型后才启用。
+7. **双 Agent 与内部参数：**P0 的学习规划 Agent（每 Goal 一个逻辑会话）负责前测与计划；节点教学 Agent（每 PlanNode 一个逻辑会话）负责唯一内容/Demo 与后测。二者只通过版本化结构化快照交接。用户只选择账户默认模型；开发者通过 Worker 内部版本化 `AgentExecutionProfile` 配置各 Agent 的提示词、Schema、Token、超时、工具权限、重试和思考模式，不提供管理员或用户参数配置页面。
 
 ### 1.4 P0 明确不做
 
@@ -46,7 +55,7 @@
 - 本地模型、vLLM、Ollama、自动的跨 Provider 费用优化或平台代付生成费用；
 - 多租户组织、付费订阅、管理员后台、人工教师批改；
 - 多人协作、通用聊天助手、长期记忆、自动向外部系统发布；
-- 任意 `pip install`、网络访问、持久磁盘、GPU 或长任务代码执行。
+- 浏览器代码编辑、任意 `pip install`、网络访问、持久磁盘、GPU 或长任务代码执行。
 
 ---
 
@@ -71,12 +80,13 @@
 
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
-| P0-PROFILE-001 | 首次进入时收集学习水平、每周可投入时间、内容偏好和设备信息。 | 必填项缺失不能进入建目标步骤；刷新后资料仍存在。 |
+| P0-PROFILE-001 | 首次进入时创建唯一的当前学习画像。 | 收集整体编程经验、学习背景、每周可投入时间和内容偏好；不填写与具体主题重复的起始水平；刷新后资料仍存在。 |
 | P0-PROFILE-002 | 用户可创建一个自定义技术主题学习目标。 | 目标包含 1–200 字符的 `topic`、自然语言说明、期望结果、截止日期（可选）和每周时间（可选）；主题不设语言或技术栈白名单。 |
-| P0-PROFILE-003 | 用户可查看和修改自己的画像与草稿目标。 | 修改只影响本人数据；修改后生成路线前会使用最新画像版本。 |
-| P0-PROFILE-004 | 已启动规划的目标显示明确状态。 | 状态至少可见：`draft`、`assessment_pending`、`planning`、`active`、`failed`；页面不会无提示地一直加载。 |
+| P0-PROFILE-003 | 用户可查看和修改自己的当前画像。 | 每用户只保存一份可编辑画像；修改只影响本人数据、新目标和未生成内容；已生成前测、路线与内容保存画像版本和输入快照。 |
+| P0-PROFILE-004 | 用户可查看全部学习目标及其状态。 | 可在尚未开始前测时继续创建新目标；目标列表显示标题、状态和最新前测摘要，详情页提供开始前测、创建另一个目标与查看全部目标入口。 |
+| P0-PROFILE-005 | 已启动规划的目标显示明确状态。 | 状态至少可见：`draft`、`assessment_pending`、`planning`、`active`、`failed`；页面不会无提示地一直加载。 |
 
-**暂时需要做：**自由主题表单与数据库非空校验、目标与画像版本、目标状态机、空状态和失败重试入口。
+**暂时需要做：**自由主题表单与数据库非空校验、目标列表/详情、目标与画像版本、目标状态机、空状态和失败重试入口。
 
 **暂时不需要做：**用户自定义课程市场、技能树编辑、学习时间日历、多个并行主题推荐、企业/班级画像。
 
@@ -84,13 +94,13 @@
 
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
-| P0-ASSESS-001 | 为目标生成或选择一套前测。 | 用户可选择 10–20 题，默认推荐 12 题；只包含单选题；模型生成失败时可降级到受控题库。 |
+| P0-ASSESS-001 | 为目标生成唯一的一套前测。 | 用户可选择 10–20 题，默认推荐 12 题；只包含单选题；每目标题集成功生成后禁止再次生成。 |
 | P0-ASSESS-002 | 用户可以保存作答并提交前测。 | 刷新不丢答案；重复点击提交不创建两条 Attempt；提交后的答案不可直接修改。 |
-| P0-ASSESS-003 | 系统自动评分并给出薄弱点标签。 | 服务端按隐藏答案确定性评分并返回结构化分数、反馈和薄弱点标签；正确答案不通过公开 API 返回。 |
-| P0-ASSESS-004 | 前测结果驱动后续路线生成。 | 评分完成后目标状态进入 `planning`，创建一条可追踪的 `plan_generate` AgentRun。 |
-| P0-ASSESS-005 | 异常状态可恢复。 | 题目生成/评分失败显示失败原因类别与“重试”入口，不产生重复费用或重复题目。 |
+| P0-ASSESS-003 | 系统自动评分并给出薄弱点标签。 | 题目首次生成时已保存隐藏答案与解析；服务端按答案确定性评分。交卷前公开题集不返回答案/解析，交卷后仅向作答用户返回正确答案、逐题解析、分数与薄弱点；不再次调用模型。 |
+| P0-ASSESS-004 | 用户确认后生成学习路线。 | 评分完成后目标保持“可生成计划”状态；只有用户点击“生成学习计划”才进入 `planning` 并创建可追踪的 `plan_generate` AgentRun。 |
+| P0-ASSESS-005 | 前测生成异常可恢复。 | 模型、网络错误或用户取消且尚未成功得到题集时，显示失败原因类别与重新发起入口；成功得到题集后不再提供重新生成；不产生重复费用或重复题目。 |
 
-**暂时需要做：**10–20 题单选前测、`normal`/`hard` 难度卡片、按题序逐步提高难度、确定性评分、受控题库兜底、答题幂等与隐藏答案。
+**暂时需要做：**10–20 题单选前测、`normal`/`hard` 难度卡片、按题序逐步提高难度、确定性评分、答题幂等与隐藏答案、成功题集唯一性与失败重试规则。
 
 **暂时不需要做：**长篇作文/开放项目报告的主观阅卷、人工批改、限时监考、题库运营后台、跨目标能力雷达图。
 
@@ -98,12 +108,12 @@
 
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
-| P0-PLAN-001 | 根据画像、目标和前测生成路线。 | 路线含 6–12 个节点，覆盖 `concept`、`syntax`、`practice`、`debug` 四阶段。 |
-| P0-PLAN-002 | 每个节点有可展示的学习信息。 | 节点至少含标题、目标、难度、预计分钟、前置节点、完成标准、安排理由和状态。 |
+| P0-PLAN-001 | 根据画像、目标和前测生成路线。 | 用户确认后由学习规划 Agent 生成路线；路线含 6–12 个节点，覆盖 `concept`、`syntax`、`practice`、`debug` 四阶段。 |
+| P0-PLAN-002 | 每个节点有可展示的学习信息。 | 节点至少含标题、自然语言 `node_brief`、目标、难度、预计分钟、前置节点、完成标准、安排理由和状态；`node_brief` 是节点教学 Agent 的主要自然语言输入。 |
 | P0-PLAN-003 | 路线依赖关系合法。 | 保存前校验节点数、阶段覆盖、前置无环和时长范围；不合法结果不能写入激活路线。 |
-| P0-PLAN-004 | 用户能查看路线并打开当前可学节点。 | 路线页能区分 `locked`、`available`、`in_progress`、`completed`、`needs_review`；首个可学节点可直接进入。 |
-| P0-PLAN-005 | 后测/代码结果产生显式建议。 | 整条路线完成后的后测 ≥80% 标记为掌握；50–79% 标记复习建议；<50% 或连续代码失败，为下一次学习建议补强主题；所有建议写入审计事件。 |
-| P0-PLAN-006 | 高分建议有边界。 | 后测 100% 且相关代码通过时，只能建议下一条路线选用“困难”难度；不得跳过或改写当前路线节点，页面展示理由。 |
+| P0-PLAN-004 | 用户能查看路线并打开任意节点。 | 路线页展示 `not_started`、`in_progress`、`completed`、`needs_review` 等状态；前置关系只用于展示和建议，不能阻止用户直接进入任意节点。 |
+| P0-PLAN-005 | 节点后测结果产生显式建议。 | 节点后测 ≥80% 提示掌握；50–79% 建议复习；<50% 提示薄弱点与重新生成后测练习；不改写当前路线。 |
+| P0-PLAN-006 | 高分建议有边界。 | 节点后测 100% 时，只能建议下一次内容生成选用“困难”难度；不得跳过、锁定或改写当前路线节点，页面展示理由。 |
 
 **暂时需要做：**异步路线生成、DAG 校验、路线版本、简单可解释规则、节点状态展示和失败重试。
 
@@ -113,13 +123,13 @@
 
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
-| P0-CONTENT-001 | 点击可学节点后按需生成内容卡。 | 内容至少有学习目标、核心解释、示例、练习、提示和资料引用；`practice/debug` 节点额外带经 Runner 验证的可运行 Demo、调用顺序和注释结果。 |
+| P0-CONTENT-001 | 点击任意节点后首次生成内容卡。 | 节点教学 Agent 以目标摘要、`node_brief` 和当前画像生成并保存唯一内容；内容至少有学习目标、核心解释、示例、练习、提示、资料引用和内部 `teaching_memory`；`practice/debug` 节点额外带可复制到本地运行的 Demo、调用顺序和中文注释。 |
 | P0-CONTENT-002 | 内容只使用获准来源或显式标记模型推断。 | 每个引用返回来源名称、URL、文档/页码或定位；找不到来源时不伪造引用。 |
 | P0-CONTENT-003 | 检索先做权限/标签过滤，再做 FTS 和向量召回。 | 检索日志保留 `source/document/chunk` 标识与 profile 版本；UI 不直接查询 pgvector。 |
-| P0-CONTENT-004 | 内容生成结果可版本化和重试。 | 同一节点重新生成创建新 `card_contents.version`，历史内容不被覆盖；幂等重放不重复创建。 |
+| P0-CONTENT-004 | 唯一内容与失败重试。 | 同一节点只允许一份成功 `card_contents`；成功后不提供重新生成入口。仅在尚未成功保存内容时允许重试，幂等重放返回同一运行或同一成功内容。 |
 | P0-CONTENT-005 | P0 内容目录可被种子脚本初始化。 | 新环境执行 seed 后，至少有一组 Python 基础资料、分块和 embedding，可完成一次真实检索。 |
 
-**暂时需要做：**种子来源、对象存储 URI 元数据、分块、固定 embedding、FTS、精确向量检索、引用校验、卡片内容 schema，以及实战/调试 Demo 的结构化合同和发布前验证。
+**暂时需要做：**种子来源、对象存储 URI 元数据、分块、固定 embedding、FTS、精确向量检索、引用校验、卡片内容 schema，以及实战/调试本地 Demo 的结构化合同。
 
 **暂时不需要做：**用户上传、任意 URL 抓取、PDF/OCR/MinerU、视频转写、全文版权库、Milvus 迁移、多 embedding 版本共存。检索实现必须只依赖 `VectorStore` 抽象，P0 由 pgvector 适配器承载。
 
@@ -129,13 +139,20 @@
 
 ```json
 {
-  "runnable_demo": {
-    "language": "python-3.11",
-    "source_code": "def greet(name):\n    return f'Hello, {name}!'\n\nprint(greet('LearnCraft'))\n",
-    "stdin": "",
-    "expected_stdout": "Hello, LearnCraft!\n",
-    "validated_code_run_id": "uuid",
-    "validated_at": "2026-07-18T12:00:00Z"
+  "local_demo": {
+    "language": "python",
+    "runtime_version": "3.11",
+    "files": [
+      {
+        "path": "main.py",
+        "content": "def greet(name):\n    # 返回欢迎语\n    return f'Hello, {name}!'\n\nprint(greet('LearnCraft'))\n"
+      }
+    ],
+    "entry_file": "main.py",
+    "dependencies": [],
+    "setup_steps": ["创建虚拟环境", "安装依赖（如有）"],
+    "run_command": "python main.py",
+    "expected_output": "Hello, LearnCraft!"
   },
   "call_sequence": [
     { "step": 1, "symbol": "__main__", "action": "执行 print(...)" },
@@ -143,36 +160,39 @@
   ],
   "annotated_result": [
     { "step": 1, "code_reference": "print(greet('LearnCraft'))", "explanation": "入口调用 greet。" },
-    { "step": 2, "code_reference": "return f'Hello, {name}!'", "explanation": "函数返回字符串，随后由 print 输出。", "observed_stdout": "Hello, LearnCraft!" }
+    { "step": 2, "code_reference": "return f'Hello, {name}!'", "explanation": "函数返回字符串，随后由 print 输出。" }
+  ],
+  "troubleshooting": [
+    { "symptom": "python 命令不存在", "suggestion": "确认已安装 Python 3.11，并将其加入 PATH。" }
   ]
 }
 ```
 
-`debug` 节点还应提供一个**受控故障版本**（故障位置、可复现症状、诊断提示和修复后代码）。最终展示的 `runnable_demo` 必须是修复后、在 Runner 中验证成功的版本；故障版本只能在同一个隔离环境中运行，不能用未验证的 AI 代码冒充 Demo。
+`debug` 节点可额外提供一个**受控故障版本**（故障位置、预期症状、诊断提示和修复后代码），但它只用于阅读与本地调试练习。P0 不在服务器运行或验证任何代码，因此不得出现 `validated_code_run_id`、`validated_at`、stdout/stderr 或类似的执行结论。
 
-### 2.6 在线代码实践
-
-| 需求 ID | 描述（简洁） | 验收标准 |
-| --- | --- | --- |
-| P0-RUN-001 | 实战/调试节点由 AI 生成可运行 Demo。 | AI 输出 Python 3.11 源码、输入、期望输出、调用顺序与逐步注释结果；发布给用户前必须在受限 Runner 成功执行。 |
-| P0-RUN-002 | CodeRun 作为独立 HTTP 接口异步执行受限代码。 | 在 `goal_id + plan_node_id` 卡片上下文内创建并返回 `queued/running/succeeded/failed/timeout/rejected`；不依赖 LangGraph 工作流；重复请求依赖 Idempotency-Key 不产生第二次执行。 |
-| P0-RUN-003 | 运行环境默认隔离。 | 执行进程为非 root、无网络、无宿主机挂载、临时目录、CPU/内存/进程数/输出大小/墙钟时间均有限额。 |
-| P0-RUN-004 | 用户可见并理解运行结果。 | 页面展示 Demo/用户代码的 stdout、stderr、退出码、测试摘要与耗时，并将实际运行结果映射到调用顺序和逐步注释；不泄露主机路径、环境变量、Token 或内部异常栈。 |
-
-**暂时需要做：**Python 3.11 固定镜像、AI Demo 的生成后 Runner 验证、调用顺序/注释结果 schema、受限 API、运行状态查询、基础隐藏测试、超时和输出截断、恶意样例测试。
-
-**暂时不需要做：**任意语言、包安装、网络请求、文件持久化、多人共享运行环境、GPU、长任务、Notebook。
-
-### 2.7 路线后测、完成规则与适应性
+### 2.6 本地代码 Demo（P0）与在线 Sandbox（P1）
 
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
-| P0-POST-001 | 整条路线完成后生成后测。 | 用户可选择 5–10 题，推荐 5–8 题；只包含单选题，且 `plan_id` 必填、`plan_node_id` 为空；无法生成时走受控模板。 |
-| P0-POST-002 | 提交后获得评分与解释。 | 服务端确定性评分并返回总分、逐题反馈和薄弱点；隐藏答案不外泄。 |
-| P0-POST-003 | 路线完成条件明确。 | 所有节点完成后可发起后测；后测 ≥80% 标记为掌握；有代码任务时其 CodeRun 必须成功；不满足时允许复习和重测，不丢历史结果。 |
-| P0-POST-004 | 后续建议可审计。 | 每一次掌握、复习或提高下一路线难度的建议都记录触发证据、策略版本和结果。 |
+| P0-RUN-001 | 实战/调试节点由 AI 生成本地 Demo。 | 输出语言与版本、完整文件、入口、依赖安装、运行命令、预期输出、调用顺序、中文注释和常见报错排查；不要求或声称服务端预运行。 |
+| P0-RUN-002 | 用户可复制与理解 Demo。 | 页面可复制文件内容、命令与步骤；明确提示代码需在用户本地运行；不创建 CodeRun、不提供运行 API、编辑器、stdout/stderr 或执行状态查询。 |
+| P1-RUN-003 | 浏览器编辑器和受限 Sandbox。 | 在重新确认语言、依赖与隔离方案后，才支持编辑、运行、重置；执行进程必须非 root、无网络、无宿主机挂载、临时目录且有 CPU/内存/进程数/输出大小/墙钟时间限额。 |
+| P1-RUN-004 | 在线运行结果与审计。 | 展示 stdout、stderr、退出码、测试摘要与耗时；保存资源用量和代码快照；不泄露主机路径、环境变量、Token 或内部异常栈。 |
 
-**暂时需要做：**前测与后测共用的单选题和确定性评分合同、自动出题/模板兜底、题量边界、完成条件、规则驱动建议、用户可见理由。
+**暂时需要做：**本地 Demo schema、完整文件/入口/依赖/命令字段、调用顺序、中文注释、预期输出、排错提示、页面复制体验与明确免责声明。
+
+**暂时不需要做：**在线执行器、浏览器编辑器、任意语言运行时、服务端包安装、网络请求、文件持久化、多人共享运行环境、GPU、长任务、Notebook。
+
+### 2.7 节点后测、完成规则与反馈
+
+| 需求 ID | 描述（简洁） | 验收标准 |
+| --- | --- | --- |
+| P0-POST-001 | 节点完成后生成后测。 | 用户标记任意节点完成后，可选择 5–10 题，推荐 5–8 题；节点教学 Agent 仅基于该节点固定内容、Demo 与 `teaching_memory` 出单选题，plan_node_id 必填；每次重练生成独立题集。 |
+| P0-POST-002 | 提交后获得评分、解析和历史错题。 | 题目首次生成时已保存答案与解析；服务端确定性评分，交卷后仅向作答用户返回总分、正确答案、逐题解析和薄弱点。节点页可查看历史后测题集、作答、错题和解析；不再次调用模型。 |
+| P0-POST-003 | 节点完成条件明确。 | 节点完成由用户显式标记；后测分数不限制访问其他节点；不满足时允许复习和重新生成后测，不丢历史结果。 |
+| P0-POST-004 | 后续建议可审计。 | 每一次掌握、复习或提高下一次内容生成难度的建议都记录触发证据、策略版本和结果；不修改当前路线。 |
+
+**暂时需要做：**前测与节点后测共用的单选题和确定性评分合同、生成时一次性保存答案/解析、交卷后按所有权暴露解析、题量边界、用户完成标记、同节点后测新题集重生、历史题集/错题查看、规则驱动建议和用户可见理由。
 
 **暂时不需要做：**完整学习报告、徽章/积分、同伴对比、复杂知识追踪算法、教师审批。
 
@@ -180,12 +200,12 @@
 
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
-| P0-AGENT-001 | 每项模型长任务有 AgentRun。 | 前测/后测出题、路线生成、内容/Demo 生成与验证都返回 `agent_run_id` 与状态；确定性评分和 CodeRun 状态查询不创建 AgentRun。 |
-| P0-AGENT-002 | ModelGateway 使用用户选择的 OpenAI-compatible 连接。 | 用户可在模型设置保存 Base URL/API Key/模型名，账户默认可被目标、前测/后测出题和 AI Demo 生成覆盖；Key 加密保存且不进入响应、日志、Outbox 或 AgentRun。运行记录连接 ID、模型名、超时、重试、token 与费用估算。 |
+| P0-AGENT-001 | 每项模型长任务有 AgentRun。 | 前测/节点后测出题、路线生成、内容/本地 Demo 生成都返回 `agent_run_id` 与状态；确定性评分不创建 AgentRun。 |
+| P0-AGENT-002 | 两个 Agent 使用账户默认模型与内部 Profile。 | 用户可在模型设置保存 Base URL/API Key/模型名并设置账户默认连接；P0 的学习规划 Agent 和节点教学 Agent 均使用该默认连接。开发者在内部 `AgentExecutionProfile` 中分别设置提示词、输出 Schema、Token、超时、工具权限、重试和思考模式；运行记录连接 ID、模型名、Profile 版本、超时、重试、token 与费用估算。Key 不进入响应、日志、Outbox 或 AgentRun。 |
 | P0-AGENT-003 | 模型输出通过结构化校验和业务校验。 | Pydantic/JSON Schema 失败可有限次重试，之后回退模板或失败；无效路线/题目/AI 评分/Demo/引用不得写库或触发路线调整。 |
-| P0-AGENT-004 | Worker 故障可定位和恢复。 | `trace_id` 可贯穿 Web、Outbox、Worker、模型调用和 Runner；失败有错误类别、可重试标识和安全的用户文案。 |
+| P0-AGENT-004 | Worker 故障可定位和恢复。 | `trace_id` 可贯穿 Web、Outbox、Worker 和模型调用；失败有错误类别、可重试标识和安全的用户文案。 |
 
-**暂时需要做：**OpenAI-compatible Adapter、用户模型连接设置、AES-256-GCM 凭据加密、账户默认和任务级覆盖、Fake Adapter、超时/预算/重试、结构化输出、AgentRun 事件、健康检查。
+**暂时需要做：**OpenAI-compatible Adapter、用户模型连接设置、AES-256-GCM 凭据加密、账户默认选择、Fake Adapter、超时/预算/重试、结构化输出、AgentRun 事件、健康检查。
 
 **暂时不需要做：**自动跨 Provider 智能路由、微调、模型网关独立服务、LangSmith 强依赖、自托管推理，以及自动发起 Provider 连通性验证。
 
@@ -198,30 +218,31 @@
 | 原则 | 说明 |
 | --- | --- |
 | 原生类型优先 | ID 用 PostgreSQL `uuid`，时间用 `timestamptz`，可演进的结构才用 `jsonb`；不以 `VARCHAR(36)` 模拟 UUID。 |
-| 单一事实源 | `public` 中的用户、目标、路线、题目、内容、代码运行等由 Next.js Core 领域服务写入；Python Worker 不绕过 Core API 修改这些表。 |
+| 单一事实源 | `public` 中的用户、目标、路线、题目与内容由 Next.js Core 领域服务写入；Python Worker 不绕过 Core API 修改这些表。在线代码执行是 P1 范围。 |
 | Agent 独立基础设施 | `agent` schema 仅保存 AgentRun 和运行事件；它记录“如何执行”，不定义“何为合格路线”。 |
 | 迁移单一所有者 | Drizzle 负责所有 schema 迁移，包括 `agent` schema 的 DDL；P0 不同时运行 Alembic。 |
 | 所有权默认显式 | 每个用户私有聚合保留 `owner_id`，每个查询都按 `id + owner_id` 过滤；P0 服务层执行 ACL，P2 再评估 RLS。 |
-| 状态不藏在 JSONB | 路线、节点、测验、运行、Agent 的关键状态使用 `varchar + CHECK`；JSONB 只存模型元数据、结构化内容或资源用量。 |
-| 版本不可覆盖 | 路线、卡片内容、题目和 Attempt 都带版本/快照；重新生成和重试不能覆盖历史结果。 |
-| 幂等写入 | 所有会创建费用、任务或执行的写 API 接收 `Idempotency-Key`，并保存请求哈希与原始响应。 |
+| 状态不藏在 JSONB | 路线、节点、测验与 Agent 的关键状态使用 `varchar + CHECK`；JSONB 只存模型元数据、结构化内容或必要输入快照。 |
+| 版本与唯一内容并存 | 路线、题目和 Attempt 保留版本/快照；前测、路线和已生成内容记录 `profile_version` 与必要输入快照。P0 每节点只允许一份成功内容/Demo，不能重生；节点后测每次重练创建新题集，不能覆盖历史作答或错题解析。 |
+| 幂等写入 | 所有会创建费用或任务的写 API 接收 `Idempotency-Key`，并保存请求哈希与原始响应。 |
 | Embedding 固定 | P0 一个数据库只接受一个固定 embedding Profile/维度。切换模型要走新迁移和完整重嵌入，不能静默混用向量维度。 |
 | 敏感数据最小化 | 用户 Provider API Key 仅以 AES-256-GCM 密文、IV、认证标签和密钥版本存储；不记录明文密码、原始 session token、隐藏答案、完整 prompt 或未脱敏的模型响应。 |
 | 自动更新时间 | `updated_at DEFAULT now()` 不会自动更新；所有含 `updated_at` 的表通过数据库 trigger 统一维护。 |
 
 ### 3.2 Schema、表数量与模型归属
 
-P0 共 **24 张 LearnCraft 应用/基础设施表**：`public` schema 22 张，`agent` schema 2 张。LangGraph PostgreSQL checkpointer 的官方表不算入这 24 张；它由锁定版本的 `langgraph-checkpoint-postgres` 官方迁移创建，不能手写一个“类似的” ORM 表替代。
+当前物理 Schema 共 **24 张 LearnCraft 应用/基础设施表**：`public` schema 22 张，`agent` schema 2 张。P0 实际使用其中 22 张；`code_runs` 与 `adaptation_events` 为 P1 预留物理表，P0 不写入或读取它们。LangGraph PostgreSQL checkpointer 的官方表不算入这 24 张；它由锁定版本的 `langgraph-checkpoint-postgres` 官方迁移创建，不能手写一个“类似的” ORM 表替代。
 
 | Schema | 表 | 写入所有者 | ORM/Schema 文件 | 用途 |
 | --- | --- | --- | --- | --- |
 | public | `users`、`auth_sessions` | Web Identity | `db/schema/identity.ts` | 邮箱密码账号和数据库 Session。 |
 | public | `user_model_connections`、`model_connection_egress_audits` | Web Model Connection / Python 安全审计写入 | `db/schema/model-connection.ts`、`infrastructure/persistence/models/model_connection_egress_audit.py` | 用户自带 OpenAI-compatible Base URL、默认模型及 AES-256-GCM 加密凭据；最小出网审计保留 30 天。 |
 | public | `learner_profiles` | Web Profile | `db/schema/profile.ts` | 学习者画像。 |
-| public | `learning_goals`、`learning_plans`、`plan_nodes`、`plan_node_prerequisites`、`adaptation_events` | Web Planning | `db/schema/planning.ts` | 目标、路线、节点、依赖和调整审计。 |
-| public | `assessments`、`assessment_items`、`assessment_attempts`、`assessment_answers` | Web Assessment | `db/schema/assessment.ts` | 前测、路线后测、答案与评分快照。 |
-| public | `content_sources`、`content_documents`、`content_chunks`、`card_contents`、`card_content_references` | Web Content | `db/schema/content.ts` | 受控资料、FTS/向量、卡片内容/引用，以及实战/调试 Demo 合同与验证摘要。 |
-| public | `code_runs` | Web Practice | `db/schema/practice.ts` | 受限代码执行任务和结果。 |
+| public | `learning_goals`、`learning_plans`、`plan_nodes`、`plan_node_prerequisites` | Web Planning | `db/schema/planning.ts` | P0 目标、路线、节点和依赖。 |
+| public | `adaptation_events` | Web Planning | `db/schema/planning.ts` | P1 预留的动态调整审计；P0 不写入。 |
+| public | `assessments`、`assessment_items`、`assessment_attempts`、`assessment_answers` | Web Assessment | `db/schema/assessment.ts` | 前测、节点后测、答案与评分快照。 |
+| public | `content_sources`、`content_documents`、`content_chunks`、`card_contents`、`card_content_references` | Web Content | `db/schema/content.ts` | 受控资料、FTS/向量、卡片内容/引用，以及实战/调试本地 Demo 合同。 |
+| public | `code_runs` | Web Practice | `db/schema/practice.ts` | P1 预留的在线代码执行任务和结果；P0 不写入。 |
 | public | `outbox_events`、`idempotency_keys` | Web Shared Infrastructure | `db/schema/integration.ts` | 可靠投递和 HTTP 写操作幂等。 |
 | agent | `agent_runs`、`agent_run_events` | Python Agent Worker | `infrastructure/persistence/models/` | 编排状态与可重放运行事件。 |
 
@@ -249,8 +270,8 @@ erDiagram
     CONTENT_SOURCES ||--o{ CONTENT_DOCUMENTS : provides
     CONTENT_DOCUMENTS ||--o{ CONTENT_CHUNKS : splits_into
     CONTENT_CHUNKS ||--o{ CARD_CONTENT_REFERENCES : supports
-    PLAN_NODES ||--o{ CODE_RUNS : executes
-    LEARNING_PLANS ||--o{ ADAPTATION_EVENTS : adjusts
+    PLAN_NODES ||--o{ CODE_RUNS : P1_executes
+    LEARNING_PLANS ||--o{ ADAPTATION_EVENTS : P1_adjusts
     USERS ||--o{ AGENT_RUNS : owns
     USER_MODEL_CONNECTIONS ||--o{ AGENT_RUNS : selected_for
     AGENT_RUNS ||--o{ AGENT_RUN_EVENTS : emits
@@ -258,7 +279,7 @@ erDiagram
 
 ### 3.4 初始化约定
 
-下面 DDL 是 P0 的迁移蓝图。当前空库基线已由 Drizzle 生成 `apps/web/src/lib/db/migrations/0000_initial_p0_schema.sql`，并在该文件中补充扩展、`agent` schema 与 trigger 的 raw SQL；不要把整段 SQL 在生产库手工粘贴运行。
+下面 DDL 说明当前 Drizzle 物理迁移基线。当前空库基线已由 Drizzle 生成 `apps/web/src/lib/db/migrations/0000_initial_p0_schema.sql`，并在该文件中补充扩展、`agent` schema 与 trigger 的 raw SQL；不要把整段 SQL 在生产库手工粘贴运行。后续需求一律通过新的增量迁移实现，不重写历史文件。
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -280,7 +301,19 @@ $$;
 
 `agent-worker` 连接字符串必须设置 `search_path=agent,public`，并使用权限受限的数据库角色；它只能写 `agent.*` 和共享基础设施所需的 Outbox 状态，核心业务结果经内部 Core API 写入。
 
-### 3.5 全部 P0 建表 DDL（第一部分：身份、画像、规划）
+#### 3.4.1 节点闭环实施前必须补齐的增量迁移
+
+当前物理 Schema 已有 `learner_profiles.profile_version` 与 `learning_goals.profile_version`，但尚未为前测、路线和卡片内容完整保存画像版本与输入快照。实现 `plan_generate`、节点内容生成和节点后测前，必须新增一次 Drizzle 迁移，至少补齐：
+
+- `assessments.profile_version` 与 `assessments.input_snapshot_json`，用于前测与节点后测的可追溯输入；节点后测还要增加 `source_card_content_id`，并约束其指向该 `plan_node_id` 的唯一成功内容；
+- `learning_plans.profile_version` 与 `learning_plans.input_snapshot_json`，用于固定生成路线时的目标、前测结果和当前画像；`plan_nodes` 要增加非空 `node_brief`，它是节点教学 Agent 的自然语言输入；
+- `card_contents.profile_version`、`card_contents.input_snapshot_json` 与仅供 Worker 读取的 `teaching_memory_json`，用于固定节点内容、本地 Demo 与后测出题上下文；建立“每个 `plan_node_id` 最多一条 `ready` 内容”的部分唯一索引或等效事务性规则。失败记录可保留并允许重试，但成功后不得插入第二份内容；
+- 将当前 `card_quiz` 的数据库语义明确迁移为节点后测，且约束 `plan_node_id`、`source_card_content_id` 必填；前测成功生成后建立数据库唯一性约束或等效事务性规则，禁止同一目标创建第二份成功题集。节点后测不设唯一题集约束，每次重练新增 Assessment 与 Attempt 历史；
+- 复用现有 `agent_runs.requested_model_profile`、`actual_model_profile`、`prompt_version`、`input_summary_json` 与 `output_summary_json`，记录由 `run_type` 派生的 Agent 角色、逻辑会话键和 `AgentExecutionProfile` 版本；不新增原始聊天消息表。
+
+这些字段与约束是已确认的 P0 产品需求；迁移文件尚未创建。新增前必须按 Drizzle 的增量迁移规则编写，并同步更新 Zod、领域对象、OpenAPI 与 Pydantic 契约。
+
+### 3.5 当前物理 Schema DDL（第一部分：身份、画像、规划）
 
 ```sql
 CREATE TABLE public.users (
@@ -502,7 +535,7 @@ CREATE INDEX idx_adaptation_events_plan_created
     ON public.adaptation_events(plan_id, created_at DESC);
 ```
 
-### 3.6 全部 P0 建表 DDL（第二部分：测验、内容与 pgvector）
+### 3.6 当前物理 Schema DDL（第二部分：测验、内容与 pgvector）
 
 ```sql
 CREATE TABLE public.assessments (
@@ -731,7 +764,7 @@ CREATE TABLE public.card_content_references (
 );
 ```
 
-对于 `practice/debug` 卡片，`public_content_json` 保存用户可见的 `runnable_demo`、`call_sequence` 和 `annotated_result`；`runner_spec_json` 保存允许运行的 runtime、输入、期望输出与非敏感验证摘要；`generation_metadata` 保存生成/修复次数、验证 `code_run_id` 和 schema 版本。任何包含隐藏测试、内部 Runner 地址或密钥的信息都不能写入这三个对用户可读的字段。
+对于 `practice/debug` 卡片，`public_content_json` 保存用户可见的 `local_demo`、`call_sequence`、`annotated_result` 和 `troubleshooting`；当前物理字段 `runner_spec_json` 是历史命名，P0 仅可将其作为兼容的本地 Demo 辅助信息存储，不能保存运行时配置、验证摘要或执行输出。后续如要改名为 `local_demo_spec_json`，需另行确认并通过增量迁移完成。 `generation_metadata` 仅保存生成次数、模型/提示词/schema 版本与非敏感结构化校验结果；不得保存 `code_run_id`、内部 Runner 地址或密钥。
 
 **向量检索决策：**检索工作流只能调用 `VectorStore` 抽象，不得出现 pgvector SQL 或 Milvus SDK。该端口可承载 dense 与 sparse 向量，但单次 `search` 只查询一种模态；`HybridRetriever` 分别获取 dense、sparse（未来）或 FTS 的排序列表，再以 RRF 融合。P0 的托管 BGE-M3 Embedding API 仅使用 dense 输出，因此以 `source_type / tag / language / verification_status` 过滤后，分别做 PostgreSQL FTS 和 `<=>` 余弦精确排序并融合即可；`tsvector` 是词法检索，不是 BGE-M3 学习型 sparse embedding。此时不建立 HNSW，导入和重嵌入更简单，也不会出现近似召回质量难以解释的问题。达到以下任一条件后，才以离线检索集压测并评审 HNSW：`content_chunks >= 50,000`、检索 p95 超过 300 ms、或精确检索已影响用户等待时间。只有当已确认的数据规模或吞吐目标仍无法由 pgvector 满足，且用户批准 backfill、双读评测、成本与回滚方案后，才实现 `MilvusVectorStore` 并切换。批准 HNSW 后执行类似以下的专用迁移（`CREATE INDEX CONCURRENTLY` 不能放在普通事务迁移中）：
 
@@ -742,7 +775,9 @@ CREATE INDEX CONCURRENTLY idx_content_chunks_embedding_hnsw
     WITH (m = 16, ef_construction = 64);
 ```
 
-### 3.7 全部 P0 建表 DDL（第三部分：实践、Agent 与可靠投递）
+### 3.7 当前物理 Schema DDL（第三部分：P1 预留实践、Agent 与可靠投递）
+
+下列 `code_runs` DDL 已存在于当前物理 Schema，但不表示 P0 应实现在线执行。P0 不对该表进行读写；它保留给 P1 通过独立安全决策启用。
 
 ```sql
 CREATE TABLE public.code_runs (
@@ -883,7 +918,7 @@ CREATE INDEX idx_idempotency_keys_expiry
 
 `outbox_events` 的最小可靠投递流程为：同一数据库事务中完成核心聚合变更、创建 `agent.agent_runs` 和 `INSERT outbox_events`；独立 `agent-dispatcher` 使用 `SELECT ... FOR UPDATE SKIP LOCKED` 领取 `agent.run.requested`，投递到 Celery 后回写状态。Celery Worker 仅推进 `agent.agent_runs` 与 `agent.agent_run_events`，再经内部 Core API 持久化结构化业务结果。Dispatcher 在“已发送、未回写”间中断时允许重复投递，`agent_run_id` 同时作为 Celery `task_id` 与幂等边界。`outbox_events` 是跨上下文基础设施例外，不是 Worker 可以任意修改核心表的通行证。
 
-P0 的 `assessment_items` 仅允许 `single_choice`：`answer_key_json` 保存隐藏正确选项，服务端同步完成确定性评分，并在 `grading_metadata_json` 保存评分器与题目/答案版本标识。`rubric_json` 是为避免破坏旧迁移而保留的历史兼容列，P0 不读取或写入它。`assessment_evaluate` 与 `card_quiz_generate` 已从 AgentRun 类型中移除，任何 P0 路径均不得创建这两类任务。
+P0 的 `assessment_items` 仅允许 `single_choice`：题目首次生成时，`answer_key_json` 保存隐藏正确选项，`explanation`/等价解析字段保存逐题解释；服务端同步完成确定性评分，并在 `grading_metadata_json` 保存评分器与题目/答案版本标识。交卷前绝不返回答案或解析，交卷后仅题主可读取。`rubric_json` 是为避免破坏旧迁移而保留的历史兼容列，P0 不读取或写入它。节点后测的每次生成创建新的 `assessment_generate` AgentRun 和新的 Assessment；评分不创建 AgentRun。当前 `card_quiz` 命名与节点后测语义的收敛要求以 3.4.1 的增量迁移为准。
 
 ### 3.8 `updated_at` Trigger 与迁移顺序
 
@@ -897,7 +932,7 @@ FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 -- 其余表在同一迁移中按相同模式建立 trigger；不要依赖应用代码“记得更新”。
 ```
 
-当前初始库使用一个可审查的 `0000_initial_p0_schema`：其中包含 22 张表、`pgcrypto`/`citext`/`vector` 扩展、`agent` schema、索引、外键和 15 个 `updated_at` trigger，已在本地 Docker PostgreSQL 验证。`0003_user_model_connections` 以增量方式新增第 23 张表、目标/AgentRun 选择快照字段与第 16 个 trigger；`0004_learning_goal_topic` 将固定主题键改为开放 `topic` 字段；`0005_model_connection_egress_audit` 新增第 24 张表。上线后不得重写历史迁移，所有变更必须由新的增量迁移表达。
+当前初始库使用一个可审查的 `0000_initial_p0_schema`：其中包含 22 张历史物理表、`pgcrypto`/`citext`/`vector` 扩展、`agent` schema、索引、外键和 15 个 `updated_at` trigger，已在本地 Docker PostgreSQL 验证。`0003_user_model_connections` 以增量方式新增第 23 张表、目标/AgentRun 选择快照字段与第 16 个 trigger；`0004_learning_goal_topic` 将固定主题键改为开放 `topic` 字段；`0005_model_connection_egress_audit` 新增第 24 张表。当前 P0 范围以本章 3.4.1 的后续增量迁移为准；上线后不得重写历史迁移，所有变更必须由新的增量迁移表达。
 
 原先规划的逻辑拆分保留为后续迁移的职责参考：
 
@@ -917,6 +952,7 @@ FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 | P1 | `oauth_accounts`、`email_verification_tokens`、`password_reset_tokens` | OAuth/Magic Link、邮箱验证与安全找回密码。 |
 | P1 | `content_ingestion_jobs`、`content_source_access`、`content_chunk_embeddings` | 用户资料导入、MinerU、私有资料授权、多版本重嵌入。 |
 | P1 | `model_usage_ledger`、`plan_change_sets`、`data_deletion_jobs` | 用户成本/配额、路线回退、数据删除编排。 |
+| P1（物理表已预留） | `code_runs`、`adaptation_events` | 在线 Sandbox 运行记录与动态路线调整审计；P0 不读写。 |
 | 已实现安全基础 | `model_connection_egress_audits` | 自定义 Base URL 的最小出网审计（允许/拒绝/请求失败），30 天保留；运行时完成 HTTPS/443、DNS/IP、固定连接与重定向防护。 |
 | P1 | `model_connection_verification_events` | 用户主动触发的 Provider 连通性验证记录；不自动调用以避免产生用户费用。 |
 | P2 | `organizations`、`organization_members`、`roles` | 多租户组织与权限。 |
@@ -935,8 +971,8 @@ FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 | API 前缀 | 浏览器 API 使用 `/api/v1`；仅服务间使用 `/internal/v1`，绝不通过公网暴露 Worker 写入接口。 |
 | 身份 | 浏览器由 `lc_session` HttpOnly Cookie 认证；内部 Web → Worker / Worker → Web 使用短期服务令牌或 HMAC 签名。 |
 | 命名 | HTTP JSON 使用 `snake_case`，数据库字段同名；前端内部 view model 可自行转成 `camelCase`。 |
-| 写操作 | 除注册、登录、退出外，所有可能创建任务、生成内容或运行代码的 POST 请求都必须带 `Idempotency-Key`。 |
-| 异步 | 返回 `202 Accepted` 时必有 `agent_run_id` 或 `code_run_id`；客户端查询状态或订阅 SSE，不等待模型调用完成。 |
+| 写操作 | 除注册、登录、退出外，所有可能创建任务或生成内容的 POST 请求都必须带 `Idempotency-Key`。 |
+| 异步 | 返回 `202 Accepted` 时必有 `agent_run_id`；客户端查询状态或订阅 SSE，不等待模型调用完成。 |
 | 错误格式 | `{ "error": { "code": "PLAN_NOT_READY", "message": "路线仍在生成", "trace_id": "..." } }`；不把数据库异常、密钥或完整模型响应返回浏览器。 |
 | 授权 | 所有资源路由先取 Session 用户，再以 `resource_id + owner_id` 查询；查不到统一 `404`。 |
 | 时间 | 请求和响应时间用 ISO 8601 UTC，例如 `2026-07-18T12:00:00Z`。 |
@@ -1008,7 +1044,7 @@ HTTP/1.1 200 OK
 | `POST /api/v1/model-connections` | 加密保存连接，可同时设为账户默认 | `201` `ModelConnection` |
 | `PATCH /api/v1/model-connections/{model_connection_id}` | 修改名称、Base URL、默认模型或替换 API Key | `200` `ModelConnection` |
 | `POST /api/v1/model-connections/{model_connection_id}/default` | 设置账户默认连接 | `200` `ModelConnection` |
-| `DELETE /api/v1/model-connections/{model_connection_id}` | 删除连接，解除可选目标/运行记录关联 | `204` |
+| `DELETE /api/v1/model-connections/{model_connection_id}` | 删除连接；历史运行记录保留安全摘要 | `204` |
 
 ```http
 POST /api/v1/model-connections
@@ -1039,15 +1075,16 @@ HTTP/1.1 201 Created
 
 | 方法与路径 | 用途 | 成功响应 |
 | --- | --- | --- |
-| `GET /api/v1/profile` | 读取当前用户画像 | `200` Profile |
-| `PUT /api/v1/profile` | 创建/更新画像 | `200` Profile（`profile_version` +1） |
+| `GET /api/v1/learner-profile` | 读取当前用户唯一画像 | `200` Profile |
+| `PUT /api/v1/learner-profile` | 创建/更新当前画像 | `200` Profile（`profile_version` +1） |
 | `POST /api/v1/learning-goals` | 创建自定义技术主题目标 | `201` Goal |
+| `GET /api/v1/learning-goals` | 查询当前用户的目标列表 | `200` 目标摘要列表；每个目标仅返回最新前测摘要 |
 | `GET /api/v1/learning-goals/{goal_id}` | 读取目标及当前状态 | `200` Goal |
-| `POST /api/v1/learning-goals/{goal_id}/diagnostic-assessments` | 请求前测生成 | `202` `{ assessment_id, agent_run_id, status }` |
-| `GET /api/v1/assessments/{assessment_id}` | 读取题目或结果 | `200`；进行中不包含 `answer_key_json`、`rubric_json` 或评分内部元数据 |
+| `POST /api/v1/learning-goals/{goal_id}/assessment-runs` | 请求前测生成 | `202`；成功后从 AgentRun 的 `assessment_result.assessment_id` 读取题集 |
+| `GET /api/v1/assessments/{assessment_id}` | 读取题目或已评分结果 | `200`；交卷前不包含答案/解析，`graded` 后仅题主可读自己的作答、正确答案和逐题解析；不返回系统提示词或密钥 |
 | `POST /api/v1/assessments/{assessment_id}/attempts` | 创建/恢复一次作答 | `201` Attempt |
 | `PUT /api/v1/assessment-attempts/{attempt_id}/answers/{item_id}` | 保存单题答案 | `200` Answer 摘要 |
-| `POST /api/v1/assessment-attempts/{attempt_id}/submit` | 提交并评分 | `202` `{ attempt_id, agent_run_id, status: "queued" }` |
+| `POST /api/v1/assessment-attempts/{attempt_id}/submit` | 提交并确定性评分 | `200`；返回 attempt 状态、得分、薄弱点、正确答案和逐题解析；不调用模型 |
 
 创建目标示例：
 
@@ -1062,8 +1099,7 @@ Content-Type: application/json
   "description": "我会一点 JavaScript，希望系统学习 Composition API 和 TypeScript。",
   "desired_outcome": "能完成带路由、状态管理和列表筛选的小型前端项目。",
   "target_date": "2026-08-01",
-  "weekly_minutes_override": 300,
-  "model_connection_id": "model-connection-uuid"
+  "weekly_minutes_override": 300
 }
 
 HTTP/1.1 201 Created
@@ -1075,9 +1111,9 @@ HTTP/1.1 201 Created
 }
 ```
 
-#### 前测 / 路线后测共用题目与提交合同
+#### 前测 / 节点后测共用题目与提交合同
 
-`diagnostic`（前测）与 `post_test`（路线后测）共用单选题公开题目和作答 API。前测由用户选择 10–20 题（默认推荐 12），并指定 `normal` 或 `hard`；`normal` 从基础到进阶逐步提升，`hard` 在相同题序上整体提高基线。路线后测要求 `plan_id`，由用户选择 5–10 题（推荐 5–8），覆盖已完成路线的关键目标。两者都不向浏览器返回隐藏答案。
+`diagnostic`（前测）与节点后测共用单选题公开题目和作答 API。两类题目均在首次生成时一次性保存题干、选项、隐藏答案、解析和能力标签；前测由用户选择 10–20 题（默认推荐 12），并指定 `normal` 或 `hard`；`normal` 从基础到进阶逐步提升，`hard` 在相同题序上整体提高基线。节点后测要求 `plan_node_id` 与固定 `source_card_content_id`，由用户选择 5–10 题（推荐 5–8），只覆盖该节点已经保存的内容/Demo；每次重练创建新题集。交卷前两类题目都不向浏览器返回隐藏答案或解析，交卷后仅向该 Attempt 所有者返回。
 
 ```json
 {
@@ -1126,20 +1162,22 @@ HTTP/1.1 200 OK
 }
 ```
 
-确定性评分的公开结果只返回分数、反馈和薄弱点；不会返回隐藏参考答案、评分内部元数据、系统提示词或模型密钥。路线后测结果可用于生成下一路线的复习或提高难度建议。
+确定性评分不调用模型。交卷后的题主结果返回分数、反馈、薄弱点、正确答案和逐题解析；未交卷、其他用户和公开列表均不会返回隐藏参考答案、评分内部元数据、系统提示词或模型密钥。节点页提供后测历史列表，任一历史题集均可读取自己的作答与错题解析。节点后测结果只用于复习或提高难度建议，不会触发内容重生、改写当前路线或限制其他节点访问。
 
-`model_connection_id` 是可选的目标级覆盖值。服务端必须先按当前 `owner_id` 验证该连接处于 `active` 状态；缺省时，在真正创建生成任务时解析账户默认连接。
+P0 不接受或使用 `model_connection_id` 作为目标级覆盖值。服务端在真正创建生成任务时解析当前用户的账户默认连接；不存在 active 默认连接时，返回明确错误而不是静默选择其他连接。
 
 ### 4.5 路线与卡片内容 API
 
 | 方法与路径 | 用途 | 成功响应 |
 | --- | --- | --- |
-| `POST /api/v1/learning-goals/{goal_id}/plans` | 根据已评分前测请求生成路线 | `202` `{ plan_id, agent_run_id, status }` |
+| `POST /api/v1/learning-goals/{goal_id}/plans` | 用户确认后，根据已评分前测请求生成路线 | `202` `{ plan_id, agent_run_id, status }`；未点击不创建模型任务 |
 | `GET /api/v1/learning-plans/{plan_id}` | 读取路线和节点摘要 | `200` Plan；不返回内部 prompt/模型密钥 |
 | `GET /api/v1/plan-nodes/{node_id}` | 读取节点详情 | `200` Node |
-| `POST /api/v1/plan-nodes/{node_id}/card-contents` | 请求/重试生成卡片 | `202` `{ card_content_id, agent_run_id, status }` |
-| `GET /api/v1/card-contents/{card_content_id}` | 读取已完成卡片 | `200`；`practice/debug` 卡含已验证 Demo、调用顺序和注释结果；不含隐藏测试/评分依据 |
-| `POST /api/v1/learning-plans/{plan_id}/post-test-assessments` | 路线所有节点完成后请求后测 | `202` `{ assessment_id, agent_run_id, status }` |
+| `POST /api/v1/plan-nodes/{node_id}/content-runs` | 首次请求节点内容和本地 Demo | `202`；仅尚无成功内容时创建任务。已有成功内容返回既有内容摘要；失败记录允许重试 |
+| `GET /api/v1/card-contents/{card_content_id}` | 读取已完成卡片 | `200`；`practice/debug` 卡含本地 Demo、调用顺序和中文注释；不含隐藏测试/评分依据 |
+| `POST /api/v1/plan-nodes/{node_id}/completion` | 用户标记节点学习完成 | `200` Node 摘要 |
+| `POST /api/v1/plan-nodes/{node_id}/post-assessment-runs` | 请求节点后测生成 | `202`；返回 `agent_run_id` 与状态 |
+| `GET /api/v1/plan-nodes/{node_id}/post-assessments` | 查询节点后测历史 | `200`；按时间倒序返回题集、得分、作答状态和错题数量，题主可继续读取任一题集详情 |
 
 路线生成示例：
 
@@ -1162,16 +1200,20 @@ HTTP/1.1 202 Accepted
 {
   "plan_node_id": "node-uuid",
   "phase": "practice",
-  "runnable_demo": {
-    "language": "python-3.11",
-    "source_code": "def add(a, b):\n    return a + b\n\nprint(add(2, 3))\n",
-    "stdin": "",
-    "expected_stdout": "5\n",
-    "validation": {
-      "code_run_id": "system-demo-run-uuid",
-      "status": "succeeded",
-      "observed_stdout": "5\n"
-    }
+  "local_demo": {
+    "language": "python",
+    "runtime_version": "3.11",
+    "files": [
+      {
+        "path": "main.py",
+        "content": "def add(a, b):\n    # 返回两个数的和\n    return a + b\n\nprint(add(2, 3))\n"
+      }
+    ],
+    "entry_file": "main.py",
+    "dependencies": [],
+    "setup_steps": ["创建 Python 3.11 虚拟环境", "安装依赖（如有）"],
+    "run_command": "python main.py",
+    "expected_output": "5"
   },
   "call_sequence": [
     { "step": 1, "symbol": "__main__", "action": "调用 add(2, 3)" },
@@ -1181,48 +1223,34 @@ HTTP/1.1 202 Accepted
   "annotated_result": [
     { "step": 1, "explanation": "程序入口发起函数调用。" },
     { "step": 2, "explanation": "add 接收两个参数并返回计算结果。" },
-    { "step": 3, "observed_stdout": "5", "explanation": "print 将返回值写入标准输出。" }
+    { "step": 3, "explanation": "print 输出函数的返回值。" }
+  ],
+  "troubleshooting": [
+    { "symptom": "ModuleNotFoundError", "suggestion": "确认已激活虚拟环境，并安装 dependencies 中声明的包。" }
   ]
 }
 ```
 
-该 `validation` 由系统在内容发布前产生，不能由模型自行声称“可运行”而跳过 Runner。
+该响应是本地运行说明，不是服务端验证结论。模型不得自行声称已经运行成功，页面也不得显示 validation、stdout、stderr、code_run_id 或类似字段。
 
-### 4.6 代码实践、Agent 状态与内部 API
+### 4.6 Agent 状态与内部 API
 
 | 方法与路径 | 用途 | 成功响应 |
 | --- | --- | --- |
-| `POST /api/v1/plan-nodes/{node_id}/code-runs` | 在学习卡片上下文提交受限 Python 代码；独立于 LangGraph | `202` `{ code_run_id, status: "queued" }` |
-| `GET /api/v1/code-runs/{code_run_id}` | 查询运行结果 | `200` stdout/stderr/test summary/resource usage |
 | `GET /api/v1/agent-runs/{agent_run_id}` | 查询长任务快照 | `200` 状态、进度摘要、错误类别、trace ID |
 | `GET /api/v1/agent-runs/{agent_run_id}/events` | 可选 SSE 订阅/重放 | `200 text/event-stream`；支持 `Last-Event-ID` |
 | `POST /internal/v1/agent-runs/{agent_run_id}/results` | Worker 回写校验后的业务结果 | 仅服务身份可用，`204` |
 | `POST /internal/v1/agent-runs/{agent_run_id}/failures` | Worker 回写安全失败摘要 | 仅服务身份可用，`204` |
 
-代码运行请求示例：
-
-```http
-POST /api/v1/plan-nodes/8c922ec9-2ba4-4510-9e1e-2ad69fcbb57f/code-runs
-Idempotency-Key: e856c23c-a6fa-4bf0-8405-55b8d5701d56
-Content-Type: application/json
-
-{
-  "source_code": "name = input()\nprint(f'Hello, {name}!')\n",
-  "stdin": "LearnCraft\n"
-}
-
-HTTP/1.1 202 Accepted
-
-{ "code_run_id": "d098af18-8839-488a-a8b8-476b867e8e86", "status": "queued" }
-```
+P0 没有代码运行 HTTP API。页面只读取 CardContent 中的 LocalDemoSpec，并将代码、依赖安装步骤和运行命令提供给用户复制；任何 `code_runs` 路由均为 P1 预留，不能在 P0 暴露。
 
 ### 4.7 API 需要先写入的契约
 
 `packages/contracts/openapi/core.yaml` 是 Web 与 Worker 的唯一跨语言 HTTP 契约来源。P0 至少定义：
 
-- Auth、ModelConnection、Profile、Goal、Assessment、Plan、Node、CardContent、CodeRun、AgentRun 的 request/response schema；
-- `AssessmentItem`（仅 `single_choice`）、`AssessmentGrade`、`RunnableDemoSpec`、`DemoValidationResult`、`CallSequenceStep` 与 `AnnotatedResultStep` schema；
-- `AgentRunRequested`、`PlanGenerated`、`CardContentGenerated`、`CodeRunFinished` 的事件信封 JSON Schema；
+- Auth、ModelConnection、Profile、Goal、Assessment、Plan、Node、CardContent、AgentRun 的 request/response schema；
+- `AssessmentItem`（仅 `single_choice`）、`AssessmentGrade`、`LocalDemoSpec`、`CallSequenceStep`、`AnnotatedResultStep` 与 `TroubleshootingStep` schema；
+- `AgentRunRequested`、`PlanGenerated`、`CardContentGenerated`、`PlanNodeCompleted`、`AssessmentScored` 的事件信封 JSON Schema；
 - 统一错误、分页（如需要）、`trace_id` 和幂等冲突响应；
 - internal endpoint 的服务认证要求与所有权边界。
 
@@ -1240,7 +1268,7 @@ sequenceDiagram
     participant W as Next.js Web/BFF
     participant DB as PostgreSQL
     participant O as Outbox
-    participant A as Python Agent Worker
+    participant A1 as 学习规划 Agent（Python Worker）
     participant M as 用户配置的模型 Provider
 
     U->>W: 注册
@@ -1253,25 +1281,28 @@ sequenceDiagram
     W-->>U: Set-Cookie + 当前用户
     U->>W: 保存模型连接或选择账户默认
     W->>DB: 加密保存连接（不写入 Outbox）
-    U->>W: 提交画像与学习目标（可覆盖模型连接）
-    W->>DB: 保存 Profile、Goal(status=assessment_pending, model_connection_id?)
+    U->>W: 保存当前画像并创建学习目标
+    W->>DB: 保存唯一 Profile（版本递增）、Goal(status=assessment_pending)
     U->>W: 请求前测
-    W->>DB: 创建 Assessment(generating) + Outbox(event)
-    O-->>A: 领取 assessment.generate
-    A->>M: 生成用户指定的 10–20 题单选前测
-    M-->>A: 结构化题目
-    A->>A: Pydantic + 单选题/隐藏答案/题量/难度校验
-    A->>W: Internal API 回写题目
+    W->>DB: 创建唯一前测 Assessment(generating) + Outbox(event)
+    O-->>A1: 领取 assessment.generate
+    A1->>M: 生成用户指定的 10–20 题单选前测（答案与解析同次生成）
+    M-->>A1: 结构化题目、隐藏答案和解析
+    A1->>A1: Pydantic + 单选题/隐藏答案/解析/题量/难度校验
+    A1->>W: Internal API 回写题集
     W->>DB: Assessment(status=ready)
     U->>W: 作答并提交
     W->>DB: Attempt + Answers
     W->>W: 按隐藏答案确定性评分
+    W->>DB: 保存前测作答/得分/薄弱点快照（保持可生成计划状态）
+    W-->>U: 展示分数、正确答案和逐题解析
+    U->>W: 主动点击生成学习计划
     W->>DB: Goal(status=planning) + Outbox(plan.generate)
-    O-->>A: 领取 plan.generate
-    A->>M: 生成路线 JSON
-    A->>A: Schema、阶段覆盖、DAG、时长校验
-    A->>W: Internal API 回写激活路线
-    W->>DB: Plan(active) + 首节点(available)
+    O-->>A1: 领取 plan.generate
+    A1->>M: 使用目标、前测交接快照和当前画像生成路线 JSON + node_brief
+    A1->>A1: Schema、阶段覆盖、DAG、时长校验
+    A1->>W: Internal API 回写激活路线
+    W->>DB: Plan(active, profile_version/input_snapshot) + 节点
     W-->>U: 路线可见
 ```
 
@@ -1279,53 +1310,47 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    U[用户点击 available 节点] --> W[Web 创建 CardContent + AgentRun]
+    U[用户任选节点] --> W[Web：若不存在成功内容则创建 CardContent + AgentRun；否则返回既有内容]
     W --> OB[(Outbox)]
-    OB --> AW[Agent Worker]
+    OB --> AW[节点教学 Agent]
+    AW --> NB[读取目标摘要、node_brief 与当前画像]
     AW --> F[按来源状态/标签/语言过滤]
     F --> R[RetrieverPort: FTS + pgvector 精确召回]
     R --> C[返回 source/document/chunk/locator]
     C --> MG[ModelGateway: content profile]
     MG --> LLM[托管模型 API]
-    LLM --> V[Pydantic 内容 Schema + 引用校验]
+    LLM --> V[Pydantic 内容 Schema + 引用校验 + teaching_memory]
     V --> P{practice/debug 节点?}
     P -->|否| API[Internal Core API]
-    P -->|是| DV[Runner 预运行 Demo并比对预期输出]
-    DV -->|成功| API
-    DV -->|失败| RETRY[修复一次或模板兜底]
+    P -->|是| DS[校验 LocalDemoSpec 完整性]
+    DS --> API
     V -->|Schema/引用失败| RETRY
     RETRY --> V
-    API --> DB[(CardContent + References)]
+    API --> DB[(唯一成功 CardContent + LocalDemo + teaching_memory + References)]
     DB --> U
 ```
 
-**不可绕过的检查：**模型只能看到获准的检索摘要；内容结果中的引用必须能映射到已有 `content_source/document/chunk`；若无法映射，标记为“模型推断”或使任务失败，不能虚构 URL/页码。`practice/debug` 节点还必须通过受限 Runner 预运行：实际 stdout/退出码与 Demo 声明一致后，才可以把 `validated_code_run_id`、调用顺序和注释结果回写给用户。
+**不可绕过的检查：**模型只能看到获准的检索摘要；内容结果中的引用必须能映射到已有 `content_source/document/chunk`；若无法映射，标记为“模型推断”或使任务失败，不能虚构 URL/页码。`practice/debug` 节点还必须通过 LocalDemoSpec 校验：语言与版本、完整文件、入口、依赖、运行命令、预期输出、调用顺序、中文注释和排错提示齐全后，才可以连同内部 `teaching_memory` 回写给用户；不得写入任何预运行或执行输出字段。节点已有成功内容时必须返回既有内容，不能再次调用模型。
 
-### 5.3 代码运行、测验和动态路线调整
+### 5.3 本地 Demo、节点后测与反馈
 
 ```mermaid
 flowchart TD
-    A[打开实战/调试节点] --> D[展示已验证 AI Demo、调用顺序和注释结果]
-    D --> B[用户编辑/提交代码]
-    B --> C[Runner 领取任务]
-    C --> D{隔离策略通过?}
-    D -->|否| E[rejected + 安全文案]
-    D -->|是| F[一次性 Python 3.11 沙箱执行]
-    F --> G{超时/资源超限?}
-    G -->|是| H[timeout + 回收环境]
-    G -->|否| I[保存 stdout/stderr/隐藏测试摘要]
-    I --> J[节点完成；按前置关系解锁下一节点]
-    J --> K{整条路线所有节点完成?}
-    K -->|否| A
-    K -->|是| L[用户选择 5–10 题路线后测]
-    L --> M[服务端按隐藏答案确定性评分]
-    M --> N{后测 >= 80% 且相关代码通过?}
-    N -->|是| O[路线标记掌握]
-    N -->|否，50-79%| P[建议复习并允许重测]
-    N -->|否，<50% 或连续失败| Q[建议下一路线补强主题]
-    O --> R[记录 AdaptationEvent]
+    A[用户打开已保存的节点内容与本地 Demo] --> D[展示本地 Demo、运行步骤、调用顺序和中文注释]
+    D --> B[用户复制到本地运行]
+    B --> C[用户标记节点学习完成]
+    C --> L[用户选择 5–10 题节点后测]
+    L --> G[节点教学 Agent 基于固定内容、Demo 与 teaching_memory 生成新题集，答案/解析同时隐藏保存]
+    G --> M[用户提交；服务端按隐藏答案确定性评分]
+    M --> X[仅向本人展示分数、正确答案与逐题解析]
+    X --> N{后测结果}
+    N -->|>=80%| O[提示掌握]
+    N -->|50-79%| P[建议复习]
+    N -->|<50%| Q[提示薄弱点并可重做后测]
+    O --> R[记录评分和反馈]
     P --> R
     Q --> R
+    R --> S[用户可查看后测历史错题，或基于同一固定内容重新生成新题集]
 ```
 
 ### 5.4 AgentRun 状态机
@@ -1377,8 +1402,10 @@ learncraft/
 │     │  ├─ application/                        # RunService、ModelGateway、commands、ports、DTO
 │     │  ├─ domain/                             # AgentRunPolicy、BudgetPolicy、repository interfaces
 │     │  ├─ workflows/                          # LangGraph graphs、states、nodes、输出 schema
+│     │  │  ├─ learning_architect/              # 前测、前测交接摘要、用户确认后的路线生成
+│     │  │  └─ node_tutor/                      # 唯一内容/Demo、teaching_memory、节点后测
 │     │  ├─ acl/                                # Core API DTO ↔ Agent DTO 转换
-│     │  ├─ tools/                              # profile、plan、retrieval、assessment、execution 工具
+│     │  ├─ tools/                              # profile、plan、retrieval、assessment 工具
 │     │  ├─ infrastructure/                     # provider、pgvector、SQLAlchemy、Outbox、checkpoint
 │     │  └─ main.py
 │     ├─ tests/{unit,integration,e2e}/
@@ -1393,7 +1420,7 @@ learncraft/
 │  └─ ui/                                       # 无业务规则的共享 UI 组件
 ├─ infra/
 │  ├─ compose.yaml
-│  └─ docker/{web,agent-worker,code-runner}.Dockerfile
+│  └─ docker/{web,agent-worker}.Dockerfile
 ├─ scripts/{dev,db-migrate,generate-contracts}.ps1
 ├─ .env.example
 ├─ pnpm-workspace.yaml
@@ -1408,7 +1435,7 @@ learncraft/
 | --- | --- | --- | --- |
 | Domain | `domain/` | 聚合、实体、值对象、状态转移、领域策略、repository interface、领域事件。 | import Next `Request`、Drizzle record、React、HTTP client。 |
 | Application | `application/` | Command/Query handler、事务边界、授权后的用例编排、调用 port。 | 直接拼 SQL、承载页面 UI。 |
-| Infrastructure | `infrastructure/` | Drizzle repository、Outbox publisher、Runner/Agent HTTP adapter、对象存储 adapter。 | 把基础设施 DTO 传回 UI 当领域对象。 |
+| Infrastructure | `infrastructure/` | Drizzle repository、Outbox publisher、Agent HTTP adapter、对象存储 adapter；P1 再增加 Sandbox adapter。 | 把基础设施 DTO 传回 UI 当领域对象。 |
 | Interfaces | `interfaces/` 与 `app/api/` | Zod 请求校验、session 提取、HTTP status、presenter。 | 直接实施业务规则或访问数据库表。 |
 
 示例：`planning/application/commands/request-plan-generation.ts` 在一个事务里创建 `learning_plans(status=generating)`、首条 `agent_runs` 的业务引用和 Outbox 事件；它不等待模型响应。`agent-worker` 完成后调用内部结果接口，由 `planning` 用例再校验、持久化节点和激活路线。
@@ -1417,12 +1444,12 @@ learncraft/
 
 | 用户熟悉的目录 | LearnCraft 中的位置 | P0 职责 | 边界 |
 | --- | --- | --- | --- |
-| `core/` | `core/config.py`、`logging.py`、`security.py`、`dependencies.py` | Pydantic Settings、模型 profile、密钥读取、结构化日志、内部服务鉴权、连接池。 | 不写路线、题目或用户权限规则。 |
+| `core/` | `core/config.py`、`agent_execution_profiles.py`、`logging.py`、`security.py`、`dependencies.py` | Pydantic Settings、开发者内部的学习规划/节点教学 Agent Profile、密钥读取、结构化日志、内部服务鉴权、连接池。 | 不写路线、题目或用户权限规则；不提供用户或管理员参数配置接口。 |
 | `schemas/` | `interfaces/http/schemas/`、`workflows/schemas/`、`application/dto/` | Pydantic 校验 HTTP、Outbox、Core API DTO、LLM 输出和图状态。 | 不能充当 SQLAlchemy ORM 或共享给浏览器。 |
 | `services/` | `application/services/` | `RunService`、`ModelGateway`、重试/预算门面。 | 不直接依赖 FastAPI Request 或 SQLAlchemy session。 |
 | `repositories/` | `domain/repositories/` + `infrastructure/persistence/repositories/` | AgentRun / event / checkpoint 的接口和实现。 | 不直接更新 `public.learning_plans`、`public.assessments`、`public.users`。 |
 | `models/` | `infrastructure/persistence/models/` | SQLAlchemy 表映射，仅限 `agent.agent_runs`、`agent.agent_run_events`。 | 不复制 TypeScript 的核心业务模型。 |
-| `workflows/` | `workflows/<use_case>/` | LangGraph 的有状态编排：输入标准化、检索、生成、结构校验、回写。 | 不把学习规则藏到 prompt。 |
+| `workflows/` | `workflows/learning_architect/`、`workflows/node_tutor/` | 两个逻辑 Agent 的有状态编排：前测/计划与节点内容/后测；每次只读取结构化快照，不回灌无限聊天记录。 | 不把学习规则藏到 prompt，或跨 Goal/Node 读取无关上下文。 |
 | `alembic/` | `apps/agent-worker/alembic/` | P0 只放 README，说明 Drizzle 是唯一迁移所有者。 | 不生成/执行第二套业务迁移。 |
 
 ### 6.3 数据库基类、ORM 与 DTO 的正确关系
@@ -1592,13 +1619,13 @@ uv run pytest
 
 实施顺序：
 
-1. 已在 `apps/web/src/lib/db/schema/` 按第 3.2 节的文件归属声明全部 24 张表与 relation；其中 `0003_user_model_connections` 为用户模型连接及目标/AgentRun 选择快照的增量迁移，`0005_model_connection_egress_audit` 为 Worker 最小出网审计表；
+1. 已在 `apps/web/src/lib/db/schema/` 按第 3.2 节的文件归属声明当前 24 张物理表与 relation；其中 22 张属于当前 P0，`code_runs` 与 `adaptation_events` 为 P1 预留。`0003_user_model_connections` 为用户模型连接与 AgentRun 模型快照的增量迁移，`0005_model_connection_egress_audit` 为 Worker 最小出网审计表；
 2. 将扩展、schema、CHECK、partial index、trigger、HNSW（暂不创建）等 Drizzle 不擅长表达的部分放在 migration raw SQL；
 3. 已生成并审查 `0000_initial_p0_schema`；后续所有变更使用新的增量迁移；
 4. 已在空库执行首份迁移并完成表、扩展、向量列、trigger 的 schema smoke test；下一步再加入 seed；
 5. 使用测试数据库重复运行迁移，验证不会出现第二套 Alembic 迁移或 `updated_at` 漏更新。
 
-Seed 必须包含：一名测试用户（仅测试环境）、Python 基础受控来源、至少一份文档、若干分块、对应 embedding、10–20 题前测与 5–10 题路线后测的单选题模板、隐藏答案和确定性评分 fixture、可运行 Demo golden case、检索 golden set。真实用户密码和 Provider Key 永远不进入 seed 文件。
+Seed 必须包含：一名测试用户（仅测试环境）、Python 基础受控来源、至少一份文档、若干分块、对应 embedding、10–20 题前测与 5–10 题节点后测的单选题模板、隐藏答案和确定性评分 fixture、本地 Demo schema golden case、检索 golden set。真实用户密码和 Provider Key 永远不进入 seed 文件。
 
 ### 步骤 5：完成认证与会话，再开始私有业务 API
 
@@ -1617,37 +1644,42 @@ Argon2id 的参数从 OWASP 建议的最低基线起步：内存约 19 MiB、迭
 
 按以下顺序交付，每完成一项都增加单元测试和 repository integration test：
 
-1. Profile：创建/更新画像、版本递增；
-2. Goal：创建 Python 目标、检查画像已经完成、状态流转；
-3. Assessment：创建前测/路线后测容器；前测校验 10–20 题及 `normal`/`hard`，后测校验 5–10 题及 `plan_id`；仅写入单选题，服务端按隐藏答案确定性评分且不外泄；
-4. Planning：创建路线请求、DAG 验证、激活一条版本、节点解锁策略；
-5. Content：创建卡片内容请求、内容版本、引用校验；实战/调试卡必须保存 AI Demo、调用顺序、注释结果与预运行验证摘要；
-6. Practice：创建独立 CodeRun、只接受允许的 runtime 和长度受限的代码；请求必须携带学习卡片上下文的 `goal_id + plan_node_id`；为 AI Demo 提供发布前预运行验证；
+1. Profile：创建/更新唯一画像、版本递增；
+2. Goal：创建自由主题目标、检查画像已经完成、支持目标列表与状态流转；
+3. Assessment：创建唯一前测/节点后测容器；前测校验 10–20 题及 `normal`/`hard`，节点后测校验 5–10 题及 `plan_node_id`；仅写入单选题，服务端按隐藏答案确定性评分且不外泄；
+4. Planning：以目标、前测题目/作答/分数/薄弱点和当前画像请求路线，做 DAG 验证并激活一条版本；不实现节点解锁策略；
+5. Content：创建任意节点的首次内容请求、唯一成功内容、引用校验和 `teaching_memory`；实战/调试卡必须保存 LocalDemoSpec、调用顺序、注释、运行步骤和排错提示，不能保存预运行摘要或提供内容重生；
+6. Practice：提供节点完成标记与本地 Demo 读取契约；P0 不创建 CodeRun 或 Runner；
 7. Shared：在同一事务写 Outbox 与 IdempotencyKey，确保失败回滚时两者都不残留。
 
-在此阶段 Worker 先接 `FakeModelGateway`，使“前测出题 → 路线 → 内容/Demo → 后测出题”的 API 流可以稳定自动化测试，不消耗任何真实 Provider 额度。
+在此阶段 Worker 先接 `FakeModelGateway`，使“学习规划 Agent 前测出题 → 服务端评分与解析 → 用户确认路线 → 节点教学 Agent 唯一内容/本地 Demo → 节点后测新题集与历史错题”的 API 流可以稳定自动化测试，不消耗任何真实 Provider 额度。
 
 ### 步骤 7：实现 ModelGateway 与 OpenAI-compatible Provider Adapter
+
+#### 流式与结构化输出约束
+
+所有真实生成请求必须发送 `stream=true`。`SafeModelEgressClient` 以 SSE 读取 Provider 响应，限制总响应字节数，验证完成标记后在 Worker 内存中聚合文本、思考内容、工具参数和末尾用量；不得把原始分片写入数据库、日志或浏览器。对于前测/节点后测等结构化任务，Adapter 在请求载荷中同时设置 `response_format: {"type": "json_object"}`，提示词明确顶层 JSON 字段；聚合完成后先提取 JSON，再用 Pydantic 校验。首次校验失败只允许一次受控修复请求；修复仍失败时将 AgentRun 标为结构化输出失败。Web 的 `GET /api/v1/agent-runs/{agent_run_id}/events` SSE 仅发布状态和已验证结果，不代理或展示 Provider 的原始 token 流。
 
 P0 的**生成模型**由用户配置 OpenAI-compatible 连接（例如支持该协议的 DeepSeek、Qwen 等）；Embedding 仍固定为一个平台 Profile。先定义稳定 port，再接 OpenAI-compatible Adapter：
 
 ```text
 LangGraph workflow
-  → ModelGateway.generate(task_role, input, budget, model_connection_id?)
+  → ModelGateway.generate(task_role, input, budget)
   → LLM Port / Embedding Port
   → OpenAICompatibleAdapter（LangChain integration）
   → 用户已配置的 Base URL
 ```
 
-`ModelGateway` 解析模型的优先级为：**任务级显式选择** → **学习目标 `model_connection_id`** → **账户默认连接**。每个 AgentRun 固化连接 ID 与请求模型名；即使之后修改默认连接，历史任务也不会被静默改写。删除连接后关联外键设为 `NULL`，历史记录保留模型名称与运行摘要，但不会保留 API Key。
+`ModelGateway` 在 P0 只使用**账户默认连接**。每个 AgentRun 在启动时固化实际连接 ID、请求模型名和开发者选择的 `AgentExecutionProfile` 版本；即使之后修改默认连接或内部调参，历史任务也不会被静默改写。删除连接后关联外键设为 `NULL`，历史记录保留模型名称与运行摘要，但不会保留 API Key。用户只选择默认模型；学习规划/节点教学 Agent 的 System Prompt、输出 Schema、最大 Token、超时、工具 allow-list、最大工具调用数、重试和思考模式仅由开发者维护。目标级、任务级模型覆盖是后续版本能力，P0 的创建目标、出题和内容生成接口不应接受或使用覆盖字段。
 
-ModelGateway 至少维护以下任务规则；其中模型连接可由用户覆盖，预算、结构化 schema、超时和重试策略仍由平台控制：
+ModelGateway 至少维护以下任务规则；模型连接统一取账户默认连接，但预算、结构化 schema、超时、重试和工具权限由对应的内部 `AgentExecutionProfile` 控制：
 
-| `task_role` | Profile 内容 | P0 规则 |
+| Agent / `task_role` | 内部 Profile 内容 | P0 规则 |
 | --- | --- | --- |
-| `assessment_generate` | 用户选择的模型连接、最大输出 token、超时、单选题 schema | 前测 10–20 题或后测 5–10 题；可任务级切换模型；校验题量、难度和至少两个选项；失败走受控题库。 |
-| `plan_generate` | 目标/账户默认模型连接、预算、路线 schema、重试次数 | 创建目标时可覆盖账户默认；必须通过四阶段/DAG 校验。 |
-| `card_content_generate` | 用户选择的模型连接、预算、引用与 Demo schema | AI Demo 生成可任务级切换模型；只使用 RetrieverPort 返回的受控资料，实战/调试 Demo 必须经 Runner 预运行成功。 |
+| 学习规划 Agent / `assessment_generate` | 账户默认模型连接、评估提示词/Schema、最大输出 Token、超时、工具策略 | 前测 10–20 题；一次性输出题目、隐藏答案、解析和能力标签；校验题量、难度和至少两个选项。 |
+| 学习规划 Agent / `plan_generate` | 账户默认模型连接、规划提示词/Schema、预算、重试次数 | 仅在用户确认后使用目标、当前画像和前测交接快照；必须输出 node_brief 并通过四阶段/DAG 校验。 |
+| 节点教学 Agent / `card_content_generate` | 账户默认模型连接、教学提示词/Schema、预算、引用与 LocalDemoSpec | 只使用 RetrieverPort 返回的受控资料；首次生成唯一内容、Demo 与 teaching_memory；不执行 Runner 预运行，也不支持内容重生。 |
+| 节点教学 Agent / `assessment_generate` | 账户默认模型连接、后测提示词/Schema、最大输出 Token、超时 | 仅基于固定 CardContent、Demo 与 teaching_memory 生成 5–10 题后测；每次重练创建新题集，答案/解析同次隐藏保存。 |
 | `embedding` | 固定模型、维度、版本 | 和迁移/健康检查/检索集完全一致。 |
 
 单选作答始终是不可信输入：服务端只将其与隐藏答案比较，不将其拼入模型提示词、工具调用或检索请求。评分器必须校验选项属于当前题目，且只接受符合 Pydantic `AssessmentGrade` schema 的确定性结果。
@@ -1681,166 +1713,53 @@ MODEL_RUN_MAX_COST_USD=0.05
 
 用户自行选择生成 Provider 时，界面必须清晰展示连接名、Base URL 和模型名，但 API 响应永远不返回 API Key 密文、IV、认证标签或主密钥。保存阶段拒绝非 HTTPS、非 443、所有 IP 字面量、localhost、`.local`、回环与常见局域网地址，且产品永久不支持本地 vLLM；不自动发起校验请求。Worker 的受控出网层会在每次实际调用前复核全部 DNS 结果、拒绝私网/link-local/云 metadata、以已校验 IP 连接、拒绝重定向、限制响应体并写入审计。
 
-### 步骤 8：加入 Docker Compose（本地一键联调）
+### 步骤 8：使用当前 Docker Compose 基线（本地一键联调）
 
-`infra/compose.yaml` 的基线如下。镜像 tag 应在真正创建仓库时锁定为具体小版本或 digest；示例中的 `pg16` 只表达兼容的主版本。
+唯一可执行的 Compose 来源是 `infra/compose.yaml`，不要在本文复制第二份完整 YAML。它已经以本地开发为优先：Web 使用 `next dev` 和源码挂载，保存前端文件即可 Fast Refresh；生产则使用独立的 `infra/compose.production.yaml`，本地开发不启动它。
 
-```yaml
-name: learncraft
+当前本地服务如下：
 
-services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-learncraft}
-      POSTGRES_USER: ${POSTGRES_USER:-learncraft}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    networks: [private]
+| 服务 | 职责 | 本机调试端口 |
+| --- | --- | --- |
+| `postgres` | PostgreSQL + pgvector 业务事实源 | `127.0.0.1:5432` |
+| `redis` | 认证与限流；固定 DB 0 | `127.0.0.1:6379` |
+| `celery-redis` | Celery Broker；固定 DB 0 | `127.0.0.1:6380` |
+| `minio` | 本地 S3 兼容对象存储 | `127.0.0.1:9000` / `9001` |
+| `web` | Next.js UI + BFF | `127.0.0.1:3000` |
+| `agent-api` | Python 健康检查和内部调试入口 | `127.0.0.1:8000` |
+| `agent-dispatcher` | PostgreSQL Outbox → Celery 可靠投递 | 不映射端口 |
+| `agent-celery-worker` | 执行 AgentRun，固定 `concurrency=1` | 不映射端口 |
 
-  minio:
-    image: minio/minio:latest # 创建项目时改为锁定 tag/digest
-    command: server /data --console-address ":9001"
-    restart: unless-stopped
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-learncraft-minio}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
-    volumes:
-      - minio-data:/data
-    networks: [private]
-
-  web:
-    build:
-      context: ..
-      dockerfile: infra/docker/web.Dockerfile
-    env_file: ../.env
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-learncraft}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-learncraft}
-      AGENT_INTERNAL_URL: http://agent-worker:8000
-      SESSION_COOKIE_SECURE: "false" # 生产改为 true，且只经 HTTPS 访问
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "127.0.0.1:${WEB_PORT:-3000}:3000"
-    networks: [edge, private]
-
-  agent-worker:
-    build:
-      context: ..
-      dockerfile: infra/docker/agent-worker.Dockerfile
-    command: uv run learncraft-agent worker
-    env_file: ../.env
-    environment:
-      CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
-      AGENT_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-learncraft}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-learncraft}
-      DB_SEARCH_PATH: agent,public
-      LLM_PROVIDER_MODE: ${LLM_PROVIDER_MODE:-fake}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    # 不映射端口；health 仅供 private 网络中的服务探测。
-    networks: [private, egress]
-
-  code-runner:
-    build:
-      context: ..
-      dockerfile: infra/docker/code-runner.Dockerfile
-    restart: unless-stopped
-    env_file: ../.env
-    environment:
-      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:?set RUNNER_SHARED_SECRET in .env}
-      RUNNER_DEFAULT_RUNTIME: python-3.11
-      RUNNER_MAX_WALL_SECONDS: "5"
-      RUNNER_MAX_OUTPUT_BYTES: "65536"
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m
-    cap_drop: [ALL]
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 128
-    mem_limit: 512m
-    networks: [private]
-
-  migrate:
-    build:
-      context: ..
-      dockerfile: infra/docker/web.Dockerfile
-    command: pnpm db:migrate
-    env_file: ../.env
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-learncraft}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-learncraft}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    profiles: [tools]
-    networks: [private]
-
-  swagger-ui:
-    image: swaggerapi/swagger-ui:latest # 创建项目时改为锁定 tag/digest
-    environment:
-      SWAGGER_JSON: /usr/share/nginx/html/core.yaml
-    volumes:
-      - ../packages/contracts/openapi/core.yaml:/usr/share/nginx/html/core.yaml:ro
-    ports:
-      - "127.0.0.1:${SWAGGER_PORT:-8081}:8080"
-    profiles: [docs]
-    networks: [edge]
-
-volumes:
-  postgres-data:
-  minio-data:
-
-networks:
-  edge: {}
-  private:
-    internal: true
-  egress: {}
-```
-
-这份 Compose 的安全和网络含义：
-
-- 只把 Web 和 Swagger UI 绑定到本机环回地址；PostgreSQL、MinIO、Worker、Runner 不发布端口；生产则由反向代理公开 Web。
-- `agent-worker` 额外挂载 `egress`，仅用于 HTTPS 调用托管模型 API；Runner 没有 egress，也不持有数据库或 Provider Key。
-- `code-runner` 的 Compose 配置只是第二层限制。**绝不**把 Docker socket、宿主机目录、云凭据或数据库 URL 传给它。真正运行用户代码的子进程/一次性容器仍必须再设置无网络、非 root、cgroup 限制、超时、文件大小限制和 seccomp/AppArmor/gVisor 等隔离。
-- `swagger-ui` 使用 `docs` profile，解决 Next.js 不会像 FastAPI 那样自动生成 Swagger UI 的问题：OpenAPI 是契约文件，Swagger UI 只是它的本地/测试环境展示器。
+P0 不启动 `code-runner`，不提供在线执行 API；`code_runs` 仅为 P1 物理预留表。
 
 初始化与启动顺序：
 
 ```powershell
+Set-Location infra
 Copy-Item .env.example .env
-# 编辑 .env：本地强密码、RUNNER_SHARED_SECRET、LLM_PROVIDER_MODE=fake
+# 编辑 .env：本地密码、Embedding 配置、凭据加密主密钥和模型出网配置。
 
-docker compose -f infra/compose.yaml up --build -d postgres minio web agent-worker code-runner
-docker compose -f infra/compose.yaml --profile tools run --rm migrate
-docker compose -f infra/compose.yaml --profile docs up -d swagger-ui
-
-docker compose -f infra/compose.yaml ps
-docker compose -f infra/compose.yaml logs -f web agent-worker
+docker compose config
+docker compose up --build -d
+docker compose ps
+docker compose logs -f web agent-api agent-dispatcher agent-celery-worker
 ```
 
-第一次真实 Provider 联调前，在被 Git 忽略的 `infra/.env` 或部署 Secret Manager 中写入 `CREDENTIAL_ENCRYPTION_KEY`，再通过已登录用户的模型连接 API 保存测试连接。`.env.example` 始终只保留空值/占位符；用户 API Key 不应成为 Compose 环境变量、Celery 消息或日志字段。
+日常开发可以在 Docker Desktop 的 LearnCraft Compose 应用中启动或重启服务。首次启动，或 Dockerfile、依赖、Compose、环境变量变动后，应重新构建镜像；停止服务不会删除数据库、Redis 或 MinIO 的命名卷。
 
-### 步骤 9：实现 Worker、检索和 Runner 的最小可用闭环
+第一次真实 Provider 联调前，在被 Git 忽略的 `infra/.env` 或部署 Secret Manager 中写入 `CREDENTIAL_ENCRYPTION_KEY`、模型出网配置和 Tavily Key，再通过已登录用户的模型连接 API 保存账户默认连接。`.env.example` 始终只保留空值或占位符；用户 API Key 不应成为 Compose 环境变量、Celery 消息或日志字段。
+
+### 步骤 9：实现 Worker、检索与节点闭环
 
 按以下顺序替换 Fake 组件；每完成一个仍保留 Fake 实现用于测试：
 
 1. `OutboxRepository`：领取、锁定、重试、死信状态；
 2. `AgentRunRepository`：保存运行、事件、重试次数、预算和 trace；
 3. `RetrieverPort`：先读已审核种子内容，分别经 `VectorStore` 做 dense 召回、经词法检索端口做 FTS 召回，再由 `HybridRetriever` 用 RRF 融合，返回可引用定位；P0 注入 `PgvectorVectorStore`，未来可替换为 `MilvusVectorStore`。若 Provider 可返回 sparse 向量，再增加一次 `VectorStore` sparse 召回；
-4. `PlanGraph`：输入规范化 → 生成 → Pydantic schema → 四阶段/DAG/时长校验 → Internal Core API；
-5. `CardContentGraph`：检索、生成、引用校验；对实战/调试节点执行 Demo schema → Runner 预运行 → 预期输出比对 → 失败修复/模板兜底后回写；`AssessmentGraph`：按指定题量生成单选前测或路线后测，评分仍在 Web 侧确定性完成；
-6. `RunnerClient`：CodeRun 是独立 HTTP 用例，Web 通过受限协议调用 Runner，Runner 只返回结构化结果；AI Demo 生成可使用轻量 AgentRun，但实际运行不属于 LangGraph 工作流；
-7. `AdaptationPolicy`：用纯 TypeScript 领域规则消费评分和 CodeRun 结果，产生 `adaptation_events`，不要让 LLM 决定解锁权限。
+4. `LearningArchitectGraph`：前测输入规范化 → 单选题、隐藏答案/解析 Schema → Internal Core API；用户确认后，目标/画像/前测交接快照 → 路线 + node_brief → Pydantic schema → 四阶段/DAG/时长校验 → Internal Core API；
+5. `NodeTutorGraph`：目标摘要 + node_brief + 当前画像 → 检索、唯一内容/LocalDemoSpec/teaching_memory 生成、引用校验 → Internal Core API；节点完成后，固定内容/Demo/teaching_memory → 新节点后测题集。评分仍在 Web 侧确定性完成；
+6. `NodeCompletionService`：保存用户的节点完成标记，并只在此后允许发起节点后测；后测历史查询仅返回所有者的题集、作答和错题解析；P0 不实现 RunnerClient 或 CodeRun HTTP 用例；
+7. `LearningFeedbackPolicy`：用纯 TypeScript 领域规则消费节点后测评分，给出建议但不产生 `adaptation_events`、不决定解锁权限。
 
 ### 步骤 10：完成 Swagger、日志和可观察性
 
@@ -1856,27 +1775,27 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 
 | 顺序 | 操作 | 必须观察到的证据 |
 | --- | --- | --- |
-| 1 | `docker compose up` 后执行 migration/seed | PostgreSQL 有 `public`、`agent` schema；24 张应用表、vector extension、健康检查均成功。 |
+| 1 | 启动 Compose、迁移与 seed | PostgreSQL 有 `public`、`agent` schema；当前 24 张物理表、vector extension、健康检查均成功；3.4.1 的画像快照/节点后测迁移已应用。 |
 | 2 | 注册并登录测试用户 | `users.password_hash` 不是明文；浏览器仅有 HttpOnly Cookie；`GET /auth/me` 成功。 |
-| 3 | 写画像、创建目标 | 数据行 `owner_id` 正确；重复 Idempotency-Key 返回同一 Goal。 |
-| 4 | 请求前测 | Assessment/AgentRun/Outbox 状态由 `generating/queued` 变为 `ready/succeeded`；用户选定 10–20 题、仅有单选题、难度符合 `normal`/`hard` 与逐步提升规则；事件序号连续。 |
-| 5 | 提交答案 | Attempt 只产生一条；服务端确定性评分可追踪；浏览器响应没有 `answer_key_json`；评分完成后进入 `planning`。 |
-| 6 | 等待路线生成 | Plan 有 6–12 节点、四阶段、无环依赖；首节点为 `available`；模型输出校验失败时走模板/失败态。 |
-| 7 | 请求实战/调试卡内容 | `card_contents` 和 `card_content_references` 同时存在；Demo 已预运行成功，调用顺序/注释结果与 stdout 一致，每个引用可定位到种子资料。 |
-| 8 | 运行正常、超时、恶意三段代码 | 分别得到 succeeded、timeout、rejected/failed；Runner 无网络、无宿主路径泄露且资源被回收。 |
-| 9 | 完成路线并提交后测 | 用户选择 5–10 道单选后测（推荐 5–8）；80%、60%、40% 三组确定性结果分别验证掌握、复习、下一路线补强建议，且审计事件包含触发依据。 |
+| 3 | 写当前画像、创建两个目标并查看列表 | 一个用户只有一份画像且版本递增；两个 Goal 的 `owner_id` 正确；目标列表可展示；重复 Idempotency-Key 返回同一 Goal。 |
+| 4 | 请求前测 | Assessment/AgentRun/Outbox 状态由 `generating/queued` 变为 `ready/succeeded`；用户选定 10–20 题、仅有单选题、难度符合 `normal`/`hard` 与逐步提升规则；成功题集再次请求被拒绝。 |
+| 5 | 在前测生成失败或取消且没有题集时重新发起 | 允许创建新的 AgentRun；当已有成功题集时不允许重生；不会产生第二份成功前测。 |
+| 6 | 提交前测答案并查看解析 | Attempt 只产生一条；服务端确定性评分可追踪；交卷前浏览器响应没有答案/解析，交卷后仅题主看到 `answer_key` 对应答案、逐题解析、分数与薄弱点；不创建 `plan_generate`。 |
+| 7 | 用户确认生成路线并任选节点 | 点击“生成学习计划”后才创建 Learning Architect 的 `plan_generate`；Plan 有 6–12 节点、四阶段、无环依赖和 node_brief；所有节点可直接打开；模型输出校验失败时走模板或失败态。 |
+| 8 | 首次请求实战/调试节点内容 | `card_contents` 和 `card_content_references` 同时存在；LocalDemoSpec 包含文件、入口、依赖、命令、预期输出、调用顺序、中文注释与排错提示，并保存 teaching_memory；同节点再次请求返回既有成功内容而不创建第二次模型调用。 |
+| 9 | 标记节点完成、生成并提交多份后测 | 用户选择 5–10 道单选后测（推荐 5–8）；每次重练产生新 Assessment；80%、60%、40% 三组结果分别验证掌握、复习、薄弱点/重练提示；历史列表能打开每份题集、作答、错题和解析。 |
 | 10 | 用户 B 访问用户 A 的所有资源 | 一律 `404`；日志有 trace，不泄露 A 的标题、状态或内容。 |
-| 11 | 保存测试模型连接并做一次真实 Provider smoke | 数据库记录连接 ID、请求模型名、实际模型版本/费用；Key 不出现在响应、日志、Celery 消息或容器 inspect 输出。 |
+| 11 | 保存账户默认模型连接并做一次真实 Provider smoke | 数据库记录连接 ID、请求模型名、实际模型版本/费用；Key 不出现在响应、日志、Celery 消息或容器 inspect 输出。 |
 
 ### 步骤 12：测试与 CI 最小门槛
 
 | 层级 | 运行位置 | P0 必测内容 |
 | --- | --- | --- |
-| Unit | Node/Python 进程 | 领域状态机、DAG、单选题确定性评分、题量/难度边界、适应策略、预算策略、Zod/Pydantic schema。 |
+| Unit | Node/Python 进程 | 画像版本、前测唯一性/失败重试、交卷前答案隐藏/交卷后所有者解析、用户确认后才创建计划、DAG、任意节点访问、每节点唯一成功内容、固定内容后测、多份后测历史、题量/难度边界、预算策略、Zod/Pydantic schema。 |
 | Repository integration | 临时 PostgreSQL + pgvector | 迁移、trigger、约束、owner filter、Outbox 锁、向量/FTS 检索。 |
-| Contract | Web 与 Worker | `core.yaml` 生成物、单选题合同、确定性评分、RunnableDemoSpec、internal 请求/响应、事件 JSON Schema。 |
-| E2E | Compose + Fake Provider | 注册到路线、已验证 Demo、独立 CodeRun、前测与路线后测、建议的完整闭环。 |
-| Security regression | Compose/staging | 越权、会话撤销、限流、隐藏答案泄露、Runner 断网/资源耗尽。 |
+| Contract | Web 与 Worker | `core.yaml` 生成物、单选题合同、确定性评分、LocalDemoSpec、internal 请求/响应、事件 JSON Schema。 |
+| E2E | Compose + Fake Provider | 注册到目标列表、一次前测、评分解析、用户确认路线、任意节点唯一内容/本地 Demo、节点后测新题集与历史错题的完整闭环。 |
+| Security regression | Compose/staging | 越权、会话撤销、限流、隐藏答案泄露、模型密钥/SSRF 防护与本地 Demo XSS 安全渲染。 |
 | Staging smoke | 真实 Provider | 一条固定目标、固定资料、成本上限内的真实模型与 embedding 调用。 |
 
 合并前最低 CI 流水线：`lint → typecheck → unit → migration on empty DB → repository integration → contract → E2E(fake provider) → image build/scan`。真实 Provider smoke 不放在每个 Pull Request 中，改为受保护环境的定时/发布前任务，并设单次费用上限。
@@ -1889,86 +1808,84 @@ docker compose -f infra/compose.yaml logs -f web agent-worker
 
 | 维度 | P0 必须满足 | 不满足时的处理 |
 | --- | --- | --- |
-| 主闭环 | 新用户可从注册到完成至少一张学习卡的测验/代码实践；路线由前测结果生成。 | 不发布；不能用截图或手工改库代替。 |
-| 路线质量 | 每条激活路线 6–12 节点、覆盖四阶段、无环、节点状态合法。 | 阻断该路线激活，回退模板或提示重试。 |
-| 内容可信度 | 卡片中的来源引用可映射到受控资料；模型推断显式标记。 | 不展示无效/伪造引用内容。 |
-| 测验确定性评分 | 前测 10–20 题、后测 5–10 题均为单选题；题量与范围受数据库约束，评分只使用隐藏答案且公开响应不泄露答案。 | 保留作答并提示重试，不猜测性给分。 |
-| Demo 完整性 | 实战/调试卡的 AI Demo 已在 Runner 成功预运行；调用顺序、注释结果和实际输出可对应。 | 不展示为“可运行 Demo”，改走修复/模板或失败态。 |
+| 主闭环 | 新用户可从注册到完成一个节点的唯一内容、本地 Demo 与后测历史练习；前测评分解析后由用户确认生成路线。 | 不发布；不能用截图或手工改库代替。 |
+| 画像与目标 | 每账户只有一份可编辑当前画像；可创建多个目标、查看列表和详情；生成结果有画像版本与输入快照。 | 阻断目标/计划功能发布。 |
+| 前测唯一性 | 前测为 10–20 题单选；每个目标只有一份成功题集，只有在生成失败或取消且未得到题集时可重新发起。 | 阻断路线生成。 |
+| 路线质量 | 每条激活路线 6–12 节点、覆盖四阶段、无环；用户可访问任意节点。 | 阻断该路线激活，回退模板或提示重试。 |
+| 内容可信度与唯一性 | 卡片中的来源引用可映射到受控资料；模型推断显式标记；每节点仅一份成功内容/Demo，后续请求不重调模型。 | 不展示无效/伪造引用内容或第二份成功内容。 |
+| Demo 完整性 | 实战/调试卡的 LocalDemoSpec 含语言/版本、文件、入口、依赖、运行命令、预期输出、调用顺序、中文注释和排错提示。 | 不展示为本地可运行 Demo，改走修复/模板或失败态。 |
+| 节点后测 | 节点完成后可基于固定内容生成 5–10 题单选后测；答案/解析首次生成时隐藏保存，交卷后仅题主可见；用户可生成新题集并查看完整历史错题。 | 保留每份题集、已作答记录和错题解析并提示重练。 |
 | 用户隔离 | 越权访问所有私有资源均为 `404`；owner filter 有 repository test。 | 最高优先级安全缺陷，禁止上线。 |
 | 密码与会话 | 密码仅 Argon2id 哈希；Session token 仅以哈希入库；Cookie 安全属性符合环境。 | 禁止上线。 |
-| Agent 可靠性 | 所有长任务有 AgentRun、幂等键、错误分类、状态查询；失败不静默。 | 降级模板或禁用相应入口。 |
-| 模型密钥 | `CREDENTIAL_ENCRYPTION_KEY` 仅在 Web/Worker Secret；用户 API Key 仅以 AES-256-GCM 密文、IV、认证标签和版本入库，不出现在 Git、浏览器响应、日志、Celery 消息或 Runner。 | 立即轮换受影响用户 Key 与主密钥并阻断发布。 |
-| 代码安全 | Runner 的无网络、非 root、资源限制、临时空间和逃逸回归测试通过。 | 先关闭在线执行，只上线静态代码示例。 |
-| 数据库 | 空库可完整迁移/seed；迁移可重复检查；只有 Drizzle 一条迁移路径。 | 修复迁移，不允许人工补表。 |
-| 可观察性 | 任意用户请求可从 `trace_id` 追到 Web、Outbox、AgentRun 和 Runner/Provider 摘要。 | 不发布涉及异步模型任务的能力。 |
+| 模型密钥与出网 | `CREDENTIAL_ENCRYPTION_KEY` 仅在 Web/Worker Secret；用户 API Key 不出现在 Git、浏览器响应、日志或 Celery 消息；模型调用通过 SafeModelEgressClient。 | 立即轮换受影响用户 Key 与主密钥并阻断发布。 |
+| 在线执行边界 | P0 没有 code-runner 容器、CodeRun API 或服务端代码执行入口。 | 发现入口即阻断发布；P1 需重新安全评审。 |
+| 数据库 | 空库可完整迁移/seed；节点闭环所需增量迁移可重复检查；只有 Drizzle 一条迁移路径。 | 修复迁移，不允许人工补表。 |
+| 可观察性 | 任意用户请求可从 `trace_id` 追到 Web、Outbox、AgentRun 和 Provider 摘要。 | 不发布涉及异步模型任务的能力。 |
 
 ### 8.2 手工验收清单
 
-#### 账号与权限
+#### 账号、画像与目标
 
 - [ ] 使用新邮箱注册成功，重复邮箱返回 `409`。
 - [ ] 错误密码、已撤销 Session、过期 Session 都返回统一 `401`。
 - [ ] 登录响应及浏览器存储中没有 JWT、密码、哈希或原始 Session token。
-- [ ] Cookie 标志在本地/生产分别符合 `SESSION_COOKIE_SECURE` 配置。
-- [ ] 使用两个浏览器 Session 验证 A 无法读取或猜测 B 的 Goal、Plan、Assessment、CodeRun、AgentRun。
-- [ ] 注册/登录被连续错误请求时触发限流，密码不出现在日志。
+- [ ] 一个账户只存在一份当前画像；修改画像后版本递增。
+- [ ] 能创建两个不同主题的目标、进入各自详情并查看目标列表；A 无法读取 B 的 Goal、Plan、Assessment、CardContent 或 AgentRun。
 
 #### 学习闭环
 
-- [ ] 填完画像后，能够创建任意 1–200 字符的程序员技术主题目标；空白或超长 `topic` 被 `422` 拒绝。
-- [ ] 前测由用户选择 10–20 题且只有单选题；“正常/困难”难度正确生效，题序逐步提高难度；提交前无法通过 API 拿到正确答案。
-- [ ] 完成路线后，后测由用户选择 5–10 题（推荐 5–8）且只有单选题；服务端确定性评分返回分数、反馈和薄弱点，不泄露答案。
-- [ ] 前测完成后生成一条四阶段、6–12 节点的路线，首节点为 `available`。
-- [ ] 点击首节点后能看到目标、解释、示例、练习、提示和资料引用；实战/调试节点另有已验证的 AI Demo、调用顺序和逐步注释结果。
-- [ ] 每条资料引用可点击或展示来源 URL/定位；失效来源不会被标记为已验证。
-- [ ] 已验证 Demo 的调用顺序、注释结果、预期 stdout 与 Runner 实际 stdout 一致；成功代码、语法错误代码、超时代码的结果和用户文案均正确。
-- [ ] 路线后测 80%、60%、40% 的确定性结果分别触发掌握、复习、下一路线补强建议，且 `adaptation_events` 留有证据。
+- [ ] 前测由用户选择 10–20 题且只有单选题；“正常/困难”难度正确生效，题序逐步提高难度；提交前无法通过 API 拿到正确答案或解析，交卷后仅本人可看到正确答案和逐题解析。
+- [ ] 前测生成失败或取消且没有题集时可重新发起；成功题集存在后再次生成被拒绝。
+- [ ] 前测完成并展示评分解析后，只有点击“生成学习计划”才生成一条四阶段、6–12 节点且带 node_brief 的路线；任意节点可直接进入。
+- [ ] 任选节点后可看到唯一保存的目标、解释、示例、练习、提示和资料引用；实战/调试节点含完整本地 Demo、调用顺序、中文注释、命令、预期输出与排错提示；再次请求不会生成第二份内容。
+- [ ] 页面不展示运行按钮、stdout/stderr、验证 ID 或“服务器已运行成功”一类结论。
+- [ ] 用户标记节点完成后，可选择 5–10 题节点后测（推荐 5–8）；题集只基于固定内容/Demo/teaching_memory，服务端评分后仅本人可查看分数、正确答案、解析和薄弱点。
+- [ ] 后测 80%、60%、40% 的确定性结果分别展示掌握、复习、薄弱点/重练提示；每次重练生成新题集，历史列表可查看任一题集、作答和错题解析。
 
 #### Agent、模型与检索
 
 - [ ] 每项异步操作立即返回可查询的 `agent_run_id`，页面有 queued/running/succeeded/failed 状态。
 - [ ] Fake Provider 能完成所有 E2E；没有 Key 时本地启动不失败。
-- [ ] 模型连接列表、创建、更新、删除和设为默认接口均只返回安全摘要；缺少加密主密钥时创建/更新返回 503，不允许明文降级。
+- [ ] 模型连接列表、创建、更新、删除和设为默认接口均只返回安全摘要；P0 所有生成任务使用账户默认连接。
 - [ ] staging 的真实 Provider smoke 仅在用户明确触发时执行，且不超过设定 token/金额/超时预算；必须经受控 egress proxy、云网络规则与 `SafeModelEgressClient`，不得绕过 DNS/IP/重定向/审计策略。
 - [ ] `agent_runs` 记录连接 ID、请求/实际模型版本、token、估算费用、重试和错误类别，不记录 API Key/完整 prompt。
 - [ ] 检索结果在 seed golden set 上达到团队设定的最低 `recall@k` 与引用正确率，并保留评测结果。
-- [ ] P0 不存在 HNSW 索引；达到压测门槛前不以“感觉慢”为由过早优化。
 
 #### 数据库、容器与可恢复性
 
 - [ ] 全新 Docker volume 上 `migrate → seed → E2E` 一次成功。
-- [ ] 重复相同 Idempotency-Key 的建目标、生成路线、生成内容、代码运行不创建重复资源。
+- [ ] 重复相同 Idempotency-Key 的建目标、生成前测、生成路线、生成内容或生成节点后测不创建重复资源。
 - [ ] `updated_at` 通过数据库 trigger 更新；应用遗漏更新字段时测试能发现。
-- [ ] PostgreSQL、MinIO、Worker、Runner 均没有公网端口映射；只有 Web/Swagger 绑定 `127.0.0.1`（本地）。
+- [ ] 本地开放的 Web、PostgreSQL、Redis、MinIO 与 Agent API 均只绑定 `127.0.0.1`；Dispatcher 与 Celery Worker 无端口映射。
 - [ ] 断开模型 API、停止 Worker、重启 Web 三种故障下，用户看到安全失败态并可重试；已完成数据不丢失。
-- [ ] Runner 未挂载 Docker socket、宿主目录或云凭据；恶意网络/资源耗尽样例被拒绝或终止。
+- [ ] Compose 中不存在 code-runner；Web 不存在 code-runs 路由。
 
 ### 8.3 P0 Definition of Done
 
 P0 只有在以下条件同时满足时才算完成：
 
 1. 第 2 节所有“暂时需要做”的需求均有实现、测试和演示证据；
-2. 第 3 节 24 张应用表、扩展、迁移、seed、trigger 与备份/恢复演练可复现；
+2. 第 3 节当前物理 Schema、节点闭环所需增量迁移、扩展、seed、trigger 与备份/恢复演练可复现；
 3. 第 4 节公开 API 均进入 OpenAPI，并通过至少一条契约测试；
 4. 第 5 节三个核心流程可在 Compose 环境从 UI 跑通；
 5. 第 7 节的 Fake Provider E2E 与 staging 真实 Provider smoke 都通过；
-6. 第 8.1 的安全、隔离、Runner 与密钥门槛没有遗留 P0 级问题；
+6. 第 8.1 的安全、本地 Demo 边界、模型出网与密钥门槛没有遗留 P0 级问题；
 7. README 写明一次启动、迁移、seed、测试、停止和清理数据的命令。
 
 ---
 
-## 9. 开工前仅剩的两个配置决策
+## 9. 开工前的剩余实施决策
 
 已锁定的 Embedding Profile 为 `SiliconFlow / BAAI/bge-m3 / 1024 / cosine / siliconflow-bge-m3-v1`；真实 API Key 仅写入本机 `.env` 或 Secret Manager。现在不需要再等待模型或向量维度决策；创建 `0005_content_and_pgvector` 时必须使用 `vector(1024)`。
 
-其余需要在对应实现前确认的决策如下：
+在线 Sandbox 已明确后置 P1，因此不再阻塞 P0。P0 开工前需要落实的事项如下：
 
 | 决策 | 建议的 P0 做法 | 影响点 |
 | --- | --- | --- |
-| Runner 隔离实现 | 本地可先用受限子进程/一次性容器验证；生产必须采用经逃逸测试的强隔离方案。 | 是否能安全启用在线运行。 |
+| 节点闭环与双 Agent 增量迁移 | 按 3.4.1 为 Assessment、Plan、PlanNode、CardContent 增加画像/输入快照、node_brief、teaching_memory、后测来源内容和唯一成功内容约束；复用 AgentRun Profile/摘要字段。 | 两个逻辑 Agent 的结构化交接、一次前测、唯一内容与多份后测历史的数据库约束。 |
 | 首个部署域名/HTTPS | staging 和 production 使用不同 Secret 与 Cookie 配置。 | Cookie `Secure`、CORS/CSRF、反向代理、回调 URL。 |
 
-其余选择已经在本文固定：Next.js + Python Worker、PostgreSQL + pgvector、Drizzle 单一迁移、邮箱密码 Session、Docker Compose、无本地模型、用户自带 OpenAI-compatible 生成模型连接、固定平台 Embedding Profile。
+其余选择已经在本文固定：Next.js + Python Worker、PostgreSQL + pgvector、Drizzle 单一迁移、邮箱密码 Session、Docker Compose、无本地模型、账户默认的 OpenAI-compatible 生成模型连接、固定平台 Embedding Profile。P1 的在线 Sandbox 必须在实施前重新确认语言、隔离、资源限额、成本与数据保留策略。
 
 ## 10. 实施参考
 

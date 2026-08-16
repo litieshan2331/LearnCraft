@@ -1,5 +1,9 @@
 # LearnCraft MVP：DDD 项目目录与边界设计
 
+> **范围决策更新（2026-08-16，优先于本文其他 P0 描述）：**`Practice Execution` 在 P0 仅持有本地 Demo 内容产物的领域契约，不创建 `ExecutionJob`，不提供在线执行接口，也不启动 Runner 容器。Demo 必须包含代码文件、中文注释、入口、依赖与本地运行步骤、预期输出和调用顺序；真正的 Sandbox、`ExecutionJob`、stdout/stderr 和资源隔离后置 P1。`practice/` 目录与 Runner port 保留为 P1 扩展边界。
+>
+> 用户只有一份可编辑的 `LearnerProfile`；新目标和尚未生成的内容读取最新画像。前测、学习计划和已生成内容各自保存 `profile_version` 与必要输入快照，确保既有产物可追溯。每个目标只允许一份有效前测；评分后先向本人展示答案与解析，再由用户显式触发学习计划生成。每个计划节点只允许一份成功内容与本地 Demo；节点后测可以生成多份独立题集，保留历史作答和错题解析。学习计划节点允许用户任意进入，不以线性解锁作为访问前提。
+
 > 本文件只描述领域边界、代码目录和依赖规则。建议采用“Next.js BFF/界面 + Python LangGraph Agent Worker”的模块化单体形态：业务聚合由 `apps/web` 统一持有，Agent 只负责工作流编排和工具调用。这样既保留 Next.js 的前后端一体体验，也避免 TypeScript 与 Python 各自实现一套学习领域模型。
 >
 > 文档状态：实施中｜更新日期：2026-07-26
@@ -10,24 +14,24 @@
 
 | Bounded Context | 类型/优先级 | 负责什么 | MVP 状态 |
 | --- | --- | --- | --- |
-| Identity & Learner Profile（身份与学习者画像） | 支撑 | 用户、技术栈/目标/可用时间、内容偏好、难度偏好 | 必须 |
+| Identity & Learner Profile（身份与学习者画像） | 支撑 | 用户、整体编程背景、可用时间、内容偏好 | 必须；每用户仅一份当前画像 |
 | Learning Planning（学习规划） | 核心 | 学习目标、路线图、四阶段节点、节点状态和依赖 | 必须 |
 | Learning Content（学习内容与知识库） | 核心 | 受控资料目录、URL/文档导入、解析、切块、摘要、向量索引、内容包 | 必须（P0 用人工审核资料；URL/Markdown/PDF 受控入口为 P1） |
-| Model Connection（用户模型连接） | 支撑 | 用户 OpenAI-compatible Base URL、加密 API Key、账户默认模型和任务选择快照 | 必须（仅公网 HTTPS 域名；Worker 通过受控出网层实际调用） |
-| Assessment（前测与后测） | 核心 | 单选题、答题、确定性评分、掌握度，驱动路线调整 | 必须（前测 10–20 题、路线后测 5–10 题；用户选择 `normal`/`hard`，不含简答题） |
-| Practice Execution（代码实践执行） | 核心差异化 | 代码片段、运行任务、日志/结果、超时与安全策略 | MVP 只做受限 Python 3.11 Demo；实战/调试节点的 AI Demo 必须预运行验证并带调用顺序/注释结果；其他语言后置，生产沙箱必须独立 |
-| Agent Orchestration（Agent 编排） | 通用技术上下文 | LangGraph 工作流、运行状态、重试、检查点、提示词版本、工具调用 | 必须，但不拥有学习业务聚合 |
+| Model Connection（用户模型连接） | 支撑 | 用户 OpenAI-compatible Base URL、加密 API Key 与账户默认模型 | 必须（P0 所有生成任务使用账户默认连接；仅公网 HTTPS 域名；Worker 通过受控出网层实际调用） |
+| Assessment（前测与后测） | 核心 | 单选题、答题、确定性评分与薄弱点 | 必须；前测 10–20 题，节点后测 5–10 题，可重新生成后测练习，不含简答题 |
+| Practice（本地代码 Demo） | 核心差异化 | 代码文件、运行说明、调用顺序与结果解释 | P0 只生成本地 Demo 内容；`Practice Execution`、运行日志与安全策略是 P1 Sandbox 的边界 |
+| Agent Orchestration（Agent 编排） | 通用技术上下文 | 学习规划 Agent、节点教学 Agent、结构化交接快照、运行状态、重试、检查点、提示词/Profile 版本、工具调用 | 必须，但不拥有学习业务聚合；两个 Agent 运行在同一 Worker，不是两个常驻进程 |
 | Progress & Report（进度与报告） | 支撑 | 进度条、学习报告、成就 | V1.1+，由领域事件消费 |
 | Community（社区） | 支撑 | 分享、讨论、社群 | 后续 |
 
 ### 1.1 聚合与领域事件（MVP 最小集合）
 
-- **LearnerProfile**（聚合根）：`LearnerId`、目标岗位/技术栈、当前水平、每周可用时间、`ContentPreference`。发布 `LearnerProfileCompleted`。
-- **LearningPlan**（聚合根）：`PlanId`、`LearnerId`、目标、版本、状态；内部 `PlanNode` 实体包含阶段（`concept/syntax/practice/debug`）、顺序、前置节点、预计时长、状态。发布 `LearningPlanRequested`、`LearningPlanGenerated`、`PlanNodeUnlocked`。
+- **LearnerProfile**（聚合根）：`LearnerId`、整体编程背景、每周可用时间、`ContentPreference` 与单调递增的 `ProfileVersion`。发布 `LearnerProfileCompleted`；后续变更只更新当前画像，不改写已经生成的产物。
+- **LearningPlan**（聚合根）：`PlanId`、`LearnerId`、目标、生成时的画像版本与输入快照、版本、状态；内部 `PlanNode` 实体包含阶段（`concept/syntax/practice/debug`）、顺序、前置节点、预计时长、状态和由学习规划 Agent 写出的自然语言 `node_brief`。发布 `LearningPlanRequested`、`LearningPlanGenerated`；前置关系用于学习建议与展示，不作为节点访问锁。
 - **ContentSource/ContentDocument**（聚合根）：来源 URL/上传文件、抓取状态、清洗后的文档和 `ContentChunk`；向量是投影而非领域实体。发布 `ContentIngested`、`ContentIndexed`。
-- **Assessment**（聚合根）与 **Attempt**（高并发时独立聚合）：前测/路线后测、单选题、隐藏答案、答案、确定性评分与 `MasteryScore`。前测 10–20 题、后测 5–10 题，均由用户选择 `normal`/`hard`；发布 `AssessmentSubmitted`、`MasteryUpdated`。
-- **ExecutionJob**（聚合根）：用户代码或 AI Demo、运行时、资源限制、状态、stdout/stderr、产物引用；Demo 的调用顺序、注释结果和预运行验证摘要属于内容契约。发布 `ExecutionCompleted` 或 `ExecutionFailed`。
-- **AgentRun**（编排上下文聚合根）：工作流类型、关联业务对象、状态、幂等键、错误和 token 用量。它记录“如何执行”，不决定“什么是合格的学习计划”。发布 `AgentRunStarted`、`AgentRunSucceeded`、`AgentRunFailed`。
+- **Assessment**（聚合根）与 **Attempt**（高并发时独立聚合）：前测/节点后测、单选题、首次生成时即保存的隐藏答案和解析、用户答案、确定性评分与薄弱点。前测 10–20 题且每目标只能成功生成一份；节点后测 5–10 题，可创建多份独立题集用于练习。交卷前不返回答案/解析，交卷后仅向所有者返回；后测历史保留题集、作答、错题和解析。发布 `AssessmentSubmitted`、`AssessmentScored`。
+- **LocalDemo**（`CardContent` 的值对象）：代码文件、运行时版本、入口、依赖、运行步骤、预期输出、调用顺序、中文注释和常见报错排查。每个节点在 P0 只保存一份成功 `CardContent`/Demo；内部 `teaching_memory` 是后测的结构化出题依据。P0 不创建 `ExecutionJob`；该聚合及 `ExecutionCompleted`/`ExecutionFailed` 事件留给 P1 在线 Sandbox。
+- **AgentRun**（编排上下文聚合根）：工作流类型、关联业务对象、状态、幂等键、错误和 token 用量。`run_type` 派生 `learning_architect` 或 `node_tutor` 角色，`target_type + target_id` 即逻辑会话范围；输入/输出摘要保存结构化交接快照而非原始聊天记录。它记录“如何执行”，不决定“什么是合格的学习计划”。发布 `AgentRunStarted`、`AgentRunSucceeded`、`AgentRunFailed`。
 
 MVP 先将 `LearningPlan` 内的节点作为实体保存；节点很多或需要独立协作时，再拆成 `PlanNode` 聚合。`ContentChunk` 和向量索引仅作为文档的读模型/基础设施数据，不能被 UI 直接改写。
 
@@ -37,9 +41,9 @@ MVP 先将 `LearningPlan` 内的节点作为实体保存；节点很多或需要
 Identity/Profile ──(profile DTO)──> Learning Planning
 Learning Planning ──(node/content request)──> Learning Content
 Learning Planning ──(assessment request)──> Assessment
-Assessment ──(AssessmentSubmitted/MasteryUpdated)──> Learning Planning
+Assessment ──(front assessment scored)──> Learning Planning
 Learning Content ──(retrieval port)──> Agent Orchestration
-Assessment/Planning/Content/Execution <──(ACL + internal API)── Agent Orchestration
+Assessment/Planning/Content <──(ACL + internal API)── Agent Orchestration
 All contexts ──(domain events/outbox)──> Progress & Report (later)
 ```
 
@@ -82,7 +86,7 @@ learncraft/
 │  │  │  │  │  ├─ application/
 │  │  │  │  │  ├─ infrastructure/
 │  │  │  │  │  └─ interfaces/
-│  │  │  │  ├─ assessment/                  # 前测、路线后测、作答与确定性评分
+│  │  │  │  ├─ assessment/                  # 前测、节点后测、作答与确定性评分
 │  │  │  │  │  ├─ domain/
 │  │  │  │  │  ├─ application/
 │  │  │  │  │  ├─ infrastructure/
@@ -92,7 +96,7 @@ learncraft/
 │  │  │  │  │  ├─ application/
 │  │  │  │  │  ├─ infrastructure/
 │  │  │  │  │  └─ interfaces/
-│  │  │  │  ├─ practice/                    # 代码运行与 Runner 适配
+│  │  │  │  ├─ practice/                    # P0 本地 Demo 内容契约；P1 才接入 Sandbox 适配
 │  │  │  │  │  ├─ domain/
 │  │  │  │  │  ├─ application/
 │  │  │  │  │  ├─ infrastructure/
@@ -130,14 +134,14 @@ learncraft/
 │     │  ├─ application/
 │     │  │  ├─ commands/                   # Agent 命令与处理器（含 AgentRun 执行入口）
 │     │  │  ├─ dto/                        # application/workflow/队列 Pydantic DTO
-│     │  │  ├─ ports/                      # Core API、LLM、检索、执行器等抽象
+│     │  │  ├─ ports/                      # Core API、LLM、检索等抽象；P1 再增加执行器 port
 │     │  │  └─ services/                   # RunService、ModelGateway 等用例服务
 │     │  ├─ domain/                        # 仅 Agent 自有的领域概念
 │     │  │  ├─ repositories/               # AgentRun、事件、Checkpoint repository interface
 │     │  │  └─ services/                   # AgentRunPolicy、BudgetPolicy 等纯规则
 │     │  ├─ workflows/                     # LangGraph 编排
 │     │  ├─ acl/                           # Web Core DTO ↔ Agent DTO 防腐层
-│     │  ├─ tools/                         # 受控 profile、plan、retrieval、assessment、execution 工具
+│     │  ├─ tools/                         # 受控 profile、plan、retrieval、assessment 工具
 │     │  ├─ infrastructure/                # 所有第三方具体实现
 │     │  │  ├─ llm/                        # 托管模型 Provider adapter
 │     │  │  ├─ embeddings/                 # 固定 Embedding Profile adapter
@@ -171,7 +175,7 @@ learncraft/
 apps/web/src/modules/<bounded-context>/
 ├─ domain/                 # 聚合、实体、值对象、领域服务、repository interface
 ├─ application/            # command/query、事务边界、用例编排、port
-├─ infrastructure/         # Drizzle repository、Outbox、Worker/Runner adapter
+├─ infrastructure/         # Drizzle repository、Outbox、Worker adapter；P1 再增加 Sandbox adapter
 ├─ interfaces/             # Zod、Session 提取、HTTP presenter
 └─ presentation/           # 仅 Identity 当前使用：React 组件、BFF client、页面会话守卫
 ```
@@ -210,7 +214,9 @@ Browser ──Zod──> Next.js Route Handler / Core API
 
 #### 托管模型 API 与 Agent Worker 的边界
 
-`ModelGateway` 是 `agent-worker` 内部的应用服务，不是独立 Docker 服务。Provider adapter 放在 `infrastructure/llm/`，使用 OpenAI-compatible 协议调用用户选择的 Provider；`application/ports/` 与 `application/services/` 解析“任务级选择 → 目标覆盖 → 账户默认”的连接优先级，平台仍统一限制超时、预算和重试。
+所有真实 Provider 请求均固定使用 `stream=true`。`OpenAICompatibleAdapter` 通过安全出网层读取并聚合 SSE，在确认流完成后才把完整文本交给 Pydantic/领域 schema；不得把未校验的增量 JSON 直接传给 Core API 或浏览器。需要结构化结果的任务在请求载荷中设置 `response_format: {"type": "json_object"}`，以顶层 JSON 提示词、Pydantic 校验与一次受控修复共同保证持久化前的结果质量。Web 的 SSE/轮询只表达 AgentRun 状态和已验证结果，不透传 Provider 原始 token。
+
+`ModelGateway` 是 `agent-worker` 内部的应用服务，不是独立 Docker 服务。Provider adapter 放在 `infrastructure/llm/`，使用 OpenAI-compatible 协议调用用户选择的 Provider；P0 的 `application/ports/` 与 `application/services/` 只解析账户默认连接。用户只能选择默认模型；开发者通过 Worker 内部版本化 `AgentExecutionProfile` 分别控制学习规划 Agent 和节点教学 Agent 的 System Prompt、输出 Schema、Token/超时、重试、思考模式和工具 allow-list，不提供用户或管理员配置接口。每次 AgentRun 固化实际模型连接、模型名和 Profile 版本；任务级选择和目标覆盖后置到 P1。
 
 ```text
 LangGraph workflow → ModelGateway / LLM Port → OpenAICompatibleAdapter
@@ -233,8 +239,8 @@ LangGraph workflow → ModelGateway / LLM Port → OpenAICompatibleAdapter
 identity_*                 -> Identity/Profile
 learning_plans/plan_nodes  -> Planning
 content_sources/documents/chunks/embeddings -> Content
-assessments/questions/attempts/masteries     -> Assessment
-execution_jobs/artifacts  -> Practice
+assessments/items/attempts/answers           -> Assessment
+card_contents.local_demo_json                -> Practice（P0）
 agent_runs/agent_checkpoints/outbox_events   -> Agent/平台基础设施
 ```
 
@@ -245,40 +251,43 @@ agent_runs/agent_checkpoints/outbox_events   -> Agent/平台基础设施
 1. 依赖方向固定为 `interfaces → application → domain`；`infrastructure → application/domain` 实现端口。`domain` 不依赖 Next.js、React、Drizzle/Prisma、LangChain、HTTP 或环境变量。
 2. 一个 BC 不能导入另一个 BC 的 `domain`、ORM record 或内部 DTO。跨 BC 只能经 `packages/contracts`、事件总线或明确的 application facade/ACL。
 3. Route Handler、Server Action 和 Graph 节点都必须是薄适配器：鉴权/解析输入后调用 command/query handler；事务、幂等和业务不变量在 application/domain。
-4. Agent graph 只能通过 `CoreApiPort`、`RetrieverPort`、`ExecutionPort` 等端口工作。LLM 输出先经过结构化 schema、校验和安全策略，再调用 `persist` 工具；不能把未经校验的 JSON 直接写库。
+4. Agent graph 只能通过 `CoreApiPort`、`RetrieverPort` 等端口工作。LLM 输出先经过结构化 schema、校验和安全策略，再调用 `persist` 工具；不能把未经校验的 JSON 直接写库。`ExecutionPort` 是 P1 在线 Sandbox 的预留端口，不在 P0 实现。
 5. 长任务采用 `202 + agentRunId`，状态写入 `agent_runs`，前端通过轮询/SSE 获取状态。每个 command 带 `idempotency_key`；领域事件经 outbox 发布，避免事务提交与消息发布不一致。
 6. 查询可以使用读模型/SQL 直读，但写模型必须通过聚合。向量检索属于 Content 的 query port；Agent 默认经该 port/Core API 获取结果，不能直连核心写模型；如性能需要直连 pgvector，只能使用独立只读投影和凭据。相似度结果需带 `document_id/chunk_id/source_url`，以便引用溯源。
 7. 日志禁止记录完整 prompt、用户私密资料和密钥；保留 `trace_id`、`agent_run_id`、prompt 版本、模型名、token/cost 和错误类别。
 8. 测试按层分开：domain 纯单测，application 使用 fake ports，repository 做 PostgreSQL 集成测试，Agent graph 做节点/回放测试，关键流程做 Playwright E2E。
 9. 浏览器/Next.js 边界用 Zod，Python FastAPI、队列消息与 LLM 结构化输出用 Pydantic；跨语言只共享 OpenAPI/JSON Schema，禁止直接共享 ORM model 或把 Pydantic class 当作前端 DTO。
 10. MVP 的数据库迁移只能由 `db/migrations/`（Drizzle）执行；`agent-worker/alembic/` 在未完成“迁移所有权转移”决策前不得创建版本文件或运行。
-11. 用户 Provider API Key 只经模型连接 API 写入，以 AES-256-GCM 密文存储；`CREDENTIAL_ENCRYPTION_KEY` 仅由 Web 与实际模型 Worker 的 Secret 持有。浏览器响应、代码 Runner、Outbox、Celery 和领域事件均不得持有明文 Key；任务只能传受信任的连接 ID/模型名。Base URL 仅允许公网 HTTPS 域名/443；真实调用只能经 `SafeModelEgressClient` 的 DNS/IP/重定向/审计策略，生产环境还必须配置受控 egress proxy。
+11. 用户 Provider API Key 只经模型连接 API 写入，以 AES-256-GCM 密文存储；`CREDENTIAL_ENCRYPTION_KEY` 仅由 Web 与实际模型 Worker 的 Secret 持有。浏览器响应、内容产物、Outbox、Celery 和领域事件均不得持有明文 Key；任务只能传受信任的连接 ID/模型名。Base URL 仅允许公网 HTTPS 域名/443；真实调用只能经 `SafeModelEgressClient` 的 DNS/IP/重定向/审计策略，生产环境还必须配置受控 egress proxy。
 
 ## 4. MVP 的最小流程与入口
 
 ```text
-填写画像 -> POST /api/v1/profile
-         -> POST /api/v1/plans（创建 AgentRun，返回 202）
-         -> Agent intake_plan graph：读取画像 -> 检索/生成 -> 校验 JSON -> Core API 持久化
-         -> GET /api/v1/plans/:id（路线图卡片）
-点击节点 -> POST /api/v1/nodes/:id/content（生成/检索内容包）
-开始前测 -> POST /api/v1/assessments/:id/attempts -> AssessmentSubmitted
-提交代码 -> POST /api/v1/executions（受限 runner） -> ExecutionCompleted
+填写或更新画像 -> PUT /api/v1/learner-profile
+创建目标 -> POST /api/v1/learning-goals
+生成一次前测 -> POST /api/v1/learning-goals/:goalId/assessment-runs（学习规划 Agent）
+提交前测 -> AssessmentSubmitted / AssessmentScored（服务端确定性评分；向所有者展示答案/解析）
+用户确认生成计划 -> plan_generate AgentRun（学习规划 Agent）：读取当前画像与前测交接快照 -> 校验 JSON -> Core API 持久化路线与 node_brief
+         -> GET /api/v1/learning-goals/:goalId（目标与路线图）
+任选节点 -> POST /api/v1/plan-nodes/:nodeId/content-runs（节点教学 Agent：仅首次成功生成内容、本地 Demo 与 teaching_memory）
+标记完成 -> POST /api/v1/plan-nodes/:nodeId/completion
+生成并提交节点后测 -> POST /api/v1/plan-nodes/:nodeId/post-assessment-runs（节点教学 Agent；每次创建新题集） -> AssessmentSubmitted / AssessmentScored
+查看后测历史 -> GET /api/v1/plan-nodes/:nodeId/post-assessments（题集、作答、错题解析）
 ```
 
 MVP 已使用 PostgreSQL Outbox + 独立 Dispatcher + Celery Redis Broker。Web 只在同一事务中创建 `AgentRun` 和 Outbox；Dispatcher 负责可靠投递，Celery Worker 负责执行。`AgentRun` 状态机保持异步契约，未来替换 Broker（例如托管 Redis/Sentinel 或 SQS）不影响领域层。
 
 ## 5. 演进路线
 
-- **V1.1**：以 `AssessmentSubmitted`、`ExecutionCompleted` 为输入建立 Progress 投影和报告查询，不修改 Planning 聚合接口。
-- **V1.2**：将 Content ingestion、embedding、Execution runner 拆成独立 worker；引入 Redis/SQS、对象存储和真正的容器沙箱。
+- **V1.1**：以 `AssessmentScored`、节点完成事件为输入建立 Progress 投影和报告查询，不修改 Planning 聚合接口。
+- **V1.2**：将 Content ingestion、embedding、在线 Sandbox 拆成独立 worker；引入 Redis/SQS、对象存储和真正的容器沙箱。
 - **V2**：若团队/流量增加，把 `apps/web/src/modules/*` 原样迁到独立 Core API 服务；`packages/contracts` 保持稳定，前端和 Agent 无感迁移。
 - **多租户/社区**：新增 Community BC，不把帖子、评论或社交关系塞进 LearnerProfile/Planning；通过事件订阅实现成就和分享。
 
 ## 6. 建议的第一批提交顺序
 
 1. 建立 `packages/contracts`、数据库迁移骨架和 `shared` 原语。
-2. 实现 Identity/Profile、Planning 两个 BC 的 domain/application/repository，以及画像→创建路线图的假 Agent 流程。
-3. 接入 Python Agent 的 `intake_plan` graph（节点契约采用 InputNormalizer→Assessment→PlanPlanner→Validator）和 Core API ACL；加入 AgentRun 状态查询。
-4. 加入受控 Content URL/Markdown ingestion + pgvector 检索，再接节点内容生成。
-5. 加入 Assessment 前测和最小 Practice runner；最后补 E2E、限流、审计和可观测性。
+2. 实现 Identity/Profile、Goal、Assessment 两个 BC 的 domain/application/repository，以及画像→创建目标→前测的假 Agent 流程。
+3. 接入 Python Agent 的 `assessment_generate` 与 `plan_generate` graph（节点契约采用 InputNormalizer→Assessment→PlanPlanner→Validator）和 Core API ACL；加入 AgentRun 状态查询。
+4. 加入受控 Content URL/Markdown ingestion + pgvector 检索，再接任意节点的内容与本地 Demo 生成。
+5. 加入前测提交评分、计划生成、节点完成与节点后测；最后补目标列表、E2E、限流、审计和可观测性。在线 Sandbox 在 P1 再单独实施。

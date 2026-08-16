@@ -88,3 +88,4 @@ export function idempotencyKeyErrorResponse(): NextResponse {
     { field: "Idempotency-Key", message: "请提供合法的 UUID 幂等键。" },
   ]);
 }
+export { idempotencyKeySchema, learningGoalPathSchema } from './profile-schemas';

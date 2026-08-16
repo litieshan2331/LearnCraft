@@ -7,6 +7,8 @@
 
 import asyncio
 import logging
+from collections.abc import Coroutine
+from typing import Any, TypeVar
 
 from celery import Task
 
@@ -24,6 +26,16 @@ from learncraft_agent.infrastructure.persistence.repositories.sqlalchemy_agent_r
 )
 
 logger = logging.getLogger(__name__)
+
+ResultT = TypeVar('ResultT')
+_task_runner: asyncio.Runner | None = None
+
+
+def _run_coroutine(coroutine: Coroutine[Any, Any, ResultT]) -> ResultT:
+    global _task_runner
+    if _task_runner is None:
+        _task_runner = asyncio.Runner()
+    return _task_runner.run(coroutine)
 
 
 @celery_app.task(
@@ -44,7 +56,7 @@ def execute_agent_run_task(
     current_retry_count = self.request.retries
 
     try:
-        asyncio.run(
+        _run_coroutine(
             execute_agent_run(
                 task=task,
                 retry_count=current_retry_count,
@@ -54,7 +66,7 @@ def execute_agent_run_task(
     except RetryableAgentRunError as error:
         next_retry_count = current_retry_count + 1
         if current_retry_count >= settings.celery_task_max_retries:
-            asyncio.run(
+            _run_coroutine(
                 repository.mark_failed(
                     run_id=task.agent_run_id,
                     error_code="AGENT_RUN_RETRY_EXHAUSTED",
@@ -64,20 +76,20 @@ def execute_agent_run_task(
             raise
 
         delay_seconds = calculate_retry_delay_seconds(next_retry_count)
-        asyncio.run(
+        _run_coroutine(
             repository.mark_retry_scheduled(
                 run_id=task.agent_run_id,
                 retry_count=next_retry_count,
                 delay_seconds=delay_seconds,
-                error_code="AGENT_RUN_RETRYABLE_ERROR",
+                error_code=error.code,
             ),
         )
         raise self.retry(exc=error, countdown=delay_seconds) from error
     except NonRetryableAgentRunError as error:
-        asyncio.run(
+        _run_coroutine(
             repository.mark_failed(
                 run_id=task.agent_run_id,
-                error_code="AGENT_RUN_WORKFLOW_NOT_REGISTERED",
+                error_code=error.code,
                 error_summary=type(error).__name__,
             ),
         )
@@ -87,7 +99,7 @@ def execute_agent_run_task(
             "AgentRun 执行出现未分类错误",
             extra={"agent_run_id": str(task.agent_run_id)},
         )
-        asyncio.run(
+        _run_coroutine(
             repository.mark_failed(
                 run_id=task.agent_run_id,
                 error_code="AGENT_RUN_UNEXPECTED_ERROR",

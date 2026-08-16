@@ -26,7 +26,11 @@ class AgentRunExecutionState:
     """表示一个 Celery 消息当前是否还应继续执行。"""
 
     run_id: UUID
+    owner_id: UUID
     run_type: str
+    target_type: str
+    target_id: UUID
+    input_summary_json: dict[str, Any]
     status: str
     should_execute: bool
 
@@ -52,7 +56,11 @@ class SqlAlchemyAgentRunRepository:
             if agent_run.status in TERMINAL_AGENT_RUN_STATUSES:
                 return AgentRunExecutionState(
                     run_id=agent_run.id,
+                    owner_id=agent_run.owner_id,
                     run_type=agent_run.run_type,
+                    target_type=agent_run.target_type,
+                    target_id=agent_run.target_id,
+                    input_summary_json=agent_run.input_summary_json,
                     status=agent_run.status,
                     should_execute=False,
                 )
@@ -81,7 +89,11 @@ class SqlAlchemyAgentRunRepository:
 
             return AgentRunExecutionState(
                 run_id=agent_run.id,
+                owner_id=agent_run.owner_id,
                 run_type=agent_run.run_type,
+                target_type=agent_run.target_type,
+                target_id=agent_run.target_id,
+                input_summary_json=agent_run.input_summary_json,
                 status=agent_run.status,
                 should_execute=True,
             )
@@ -93,6 +105,35 @@ class SqlAlchemyAgentRunRepository:
                 select(AgentRunModel.status).where(AgentRunModel.id == run_id),
             )
         return status == "cancelled"
+
+    async def mark_succeeded(
+        self,
+        *,
+        run_id: UUID,
+        output_summary: dict[str, Any],
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        actual_model_profile: str | None = None,
+    ) -> None:
+        """持久化成功摘要与 token 用量，并追加可审计的成功事件。"""
+        async with self._session_factory() as session, session.begin():
+            agent_run = await self._get_locked_run(session, run_id)
+            if agent_run.status in TERMINAL_AGENT_RUN_STATUSES:
+                return
+            agent_run.status = "succeeded"
+            agent_run.output_summary_json = output_summary
+            agent_run.input_tokens = max(0, input_tokens)
+            agent_run.output_tokens = max(0, output_tokens)
+            agent_run.actual_model_profile = actual_model_profile
+            agent_run.error_code = None
+            agent_run.error_summary = None
+            agent_run.finished_at = datetime.now(timezone.utc)
+            await self._append_event(
+                session,
+                agent_run.id,
+                "run.succeeded",
+                {"input_tokens": agent_run.input_tokens, "output_tokens": agent_run.output_tokens},
+            )
 
     async def mark_retry_scheduled(
         self,

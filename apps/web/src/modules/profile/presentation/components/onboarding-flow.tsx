@@ -417,15 +417,20 @@ function GoalCreatedState({ goal, onCreateAnother }: { goal: LearningGoal; onCre
       <p className="mt-5 text-xs tracking-[0.18em] text-primary">GOAL CREATED</p>
       <h2 className="mt-3 font-heading text-3xl font-normal">{goal.title}</h2>
       <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-        学习目标已保存，并绑定画像版本 {goal.profile_version}。当前状态为“等待前测”；前测生成将在下一步接入。
+        学习目标已保存，并绑定画像版本 {goal.profile_version}。下一步生成前测，用真实答题结果确定路线的切入点。
       </p>
       <div className="mt-8 border-y border-border py-4 text-sm">
         <span className="text-muted-foreground">当前状态</span>
         <span className="ml-4 font-medium">等待前测</span>
       </div>
-      <Button className="mt-7 rounded-none" onClick={onCreateAnother} type="button" variant="outline">
-        创建另一个目标
-      </Button>
+      <div className='mt-7 flex flex-wrap gap-3'>
+        <Button asChild className='rounded-none'>
+          <Link href={'/goals/' + goal.id + '/assessment'}>开始前测</Link>
+        </Button>
+        <Button className='rounded-none' onClick={onCreateAnother} type='button' variant='outline'>
+          创建另一个目标
+        </Button>
+      </div>
     </div>
   );
 }

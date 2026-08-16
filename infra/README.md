@@ -1,6 +1,12 @@
 # LearnCraft 本地基础设施
 
-`compose.yaml` 提供 P0 本地开发与联调基线：PostgreSQL + pgvector、认证限流 Redis、独立的 Celery Redis Broker、MinIO、Web、Agent API、Outbox Dispatcher 与 Celery Worker。Web 默认使用 `next dev` 并挂载前端源码，以支持热更新。它不自动执行 Drizzle 迁移、不启动代码 Runner，也不调用真实模型 Provider；执行最新 Drizzle 迁移后，本地数据库包含 24 张 P0 应用表。
+## Agent 生成相关配置
+
+开发 Compose 会把 `TAVILY_API_KEY`、`TAVILY_QUOTA_REDIS_URL` 和工具预算注入 `agent-celery-worker`。Tavily 使用 Celery Redis 的 DB 0，但通过 `ratelimit:tavily:daily:` 前缀与 Celery Broker key 区分；`TAVILY_DAILY_TOOL_CALL_LIMIT` 默认是 20，`AGENT_TOOL_MAX_CALLS` 固定上限为 3。后者的执行位置是 `apps/agent-worker/src/learncraft_agent/application/services/tool_aware_generator.py`。
+
+`assessment_generate` 的结果由 Worker 通过内部共享密钥提交到 Web；Web 才负责在事务中写入题集表。首次联调前，请在 `infra/.env` 设置 `TAVILY_API_KEY`，并确认 `MODEL_EGRESS_ENABLED=true`、账户存在 active 且 default 的模型连接。没有 Tavily Key 或配额 Redis 时，任务会返回结构化失败，不会静默绕过工具限制。
+
+`compose.yaml` 提供 P0 本地开发与联调基线：PostgreSQL + pgvector、认证限流 Redis、独立的 Celery Redis Broker、MinIO、Web、Agent API、Outbox Dispatcher 与 Celery Worker。Web 默认使用 `next dev` 并挂载前端源码，以支持热更新。它不自动执行 Drizzle 迁移、不启动代码 Runner；配置 `TAVILY_API_KEY`、凭据密钥和模型出网后，可运行 `assessment_generate` 题集工作流。
 
 `private` 是本地开发服务的共享网络，并不自动将端口开放给宿主机；是否可从 Windows 访问仍只由服务的 `ports` 配置决定。当前 Web、PostgreSQL、MinIO 与 Agent Worker 都绑定到 `127.0.0.1`，只供本机开发调试，不向局域网暴露。
 
@@ -57,7 +63,7 @@ MinIO 控制台使用 `infra/.env` 中的 `MINIO_ROOT_USER` 与 `MINIO_ROOT_PASS
 
 ## Embedding Profile 与 API Key
 
-P0 已固定为 `SiliconFlow / BAAI/bge-m3 / 1024 / cosine / siliconflow-bge-m3-v1`。这些非敏感配置已经写入 `infra/.env.example`；不要在创建向量表后直接改动维度或版本。真实调用适配器尚未实现，届时只需在被 Git 忽略的 `infra/.env` 填写：
+P0 已固定为 `SiliconFlow / BAAI/bge-m3 / 1024 / cosine / siliconflow-bge-m3-v1`。这些非敏感配置已经写入 `infra/.env.example`；不要在创建向量表后直接改动维度或版本。题集模型调用使用账户默认的 OpenAI-compatible 连接；Tavily Key 只填写在被 Git 忽略的 `infra/.env`：
 
 ```dotenv
 SILICONFLOW_API_KEY=你的密钥
@@ -77,7 +83,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 
 将输出填到 `CREDENTIAL_ENCRYPTION_KEY=`，并保留 `CREDENTIAL_ENCRYPTION_KEY_VERSION=local-v1`。Web 与实际调用生成模型的 Celery Worker 必须使用同一个主密钥和版本；丢失它将无法解密既有用户连接。不要将其写进 Git、浏览器、日志或 Docker 镜像。产品永久不支持用户填写 IP 字面量、localhost、局域网、私有地址或本地 vLLM；保存阶段只接受公网 HTTPS 域名/443。真实调用必须经过 Worker 的 `SafeModelEgressClient`：每次重新解析并校验全部 DNS 结果、以已验证 IP 进行 TCP/CONNECT、保留原域名 TLS SNI、拒绝重定向、限制响应体，并向 `model_connection_egress_audits` 写入不含密钥和请求正文的 30 天审计记录。
 
-本地 `.env` 默认 `MODEL_EGRESS_ENABLED=false`，因为当前尚未接通真实 ModelGateway 工作流。后续接通时，只能由 `agent-celery-worker` 使用该客户端；不得在 Web、Agent API、Dispatcher 或 Runner 中直接调用用户 Base URL。
+本地 `.env` 默认 `MODEL_EGRESS_ENABLED=false`，需要联调 `assessment_generate` 时显式改为 `true`；真实调用只能由 `agent-celery-worker` 使用该客户端，Web、Agent API、Dispatcher 或 Runner 不得直接调用用户 Base URL。
 
 ## Redis 限流
 
@@ -91,7 +97,7 @@ Redis 使用 `infra/.env` 中的 `REDIS_PASSWORD` 启动并启用 AOF 持久化�
 
 `agent-dispatcher` 每秒使用 `FOR UPDATE SKIP LOCKED` 领取 `public.outbox_events` 中的 `agent.run.requested`。它将最小载荷投递到 `agent.run`，再标记 Outbox 为 `published`。若 Dispatcher 在“已发消息、未回写数据库”之间中断，事件会重新投递；`agent_run_id` 同时是 Celery `task_id`，Worker 通过 `agent.agent_runs` 的状态与事件序列处理这种至少一次投递。
 
-Celery Worker 固定 `concurrency=1` 与 `prefetch_multiplier=1`。任务软超时为 480 秒、硬超时为 600 秒，Redis 可见性超时为 660 秒；仅后续定义的模型限流、网络超时等临时错误会重试，默认最多 3 次。Worker 当前没有可执行的 LangGraph 业务工作流，因此不会自行创建或成功完成 AgentRun。
+Celery Worker 固定 `concurrency=1` 与 `prefetch_multiplier=1`。任务软超时为 480 秒、硬超时为 600 秒，Redis 可见性超时为 660 秒；模型 Provider 或 Web 内部服务的可恢复错误最多按配置重试 2 次。`assessment_generate` 每次 AgentRun 最多执行 3 次工具调用，Tavily 每个用户每天默认最多 20 次可见工具调用；其他工作流尚未注册时仍会失败，不会伪造成功结果。
 
 可在 Redis Insight 中连接 `127.0.0.1:${CELERY_REDIS_HOST_PORT}`、数据库 `0` 并填写 `CELERY_REDIS_PASSWORD` 查看 Broker。队列内部键统一使用 `learncraft:celery:` 前缀；不要手工删除队列或未确认消息键。
 
@@ -99,7 +105,7 @@ Celery Worker 固定 `concurrency=1` 与 `prefetch_multiplier=1`。任务软超�
 
 `compose.production.yaml` 是独立编排文件，只启动 Web、Agent API、Dispatcher 与 Celery Worker，不创建 PostgreSQL、Redis 或 MinIO。本地开发不要启动它。
 
-部署服务器时复制 `.env.production.example` 为被 Git 忽略的 `.env.production`，填写外部 PostgreSQL、认证 Redis、Celery Redis、对象存储、Provider Secret 与 `MODEL_EGRESS_PROXY_URL`，再执行：
+部署服务器时复制统一模板 `.env.example` 为被 Git 忽略的 `.env.production`，删除或替换其中的本地默认值，填写外部 PostgreSQL、认证 Redis、Celery Redis、Provider Secret 与 `MODEL_EGRESS_PROXY_URL`，再执行：
 
 ```powershell
 docker compose -f infra/compose.production.yaml --env-file infra/.env.production up --build -d

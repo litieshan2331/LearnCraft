@@ -99,6 +99,66 @@ class Settings(BaseSettings):
         le=365,
         validation_alias="MODEL_EGRESS_AUDIT_RETENTION_DAYS",
     )
+    core_internal_base_url: str = Field(
+        default="http://web:3000/internal/v1",
+        validation_alias="CORE_INTERNAL_BASE_URL",
+    )
+    internal_service_secret: SecretStr | None = Field(
+        default=None,
+        validation_alias="INTERNAL_SERVICE_SECRET",
+        repr=False,
+    )
+    tavily_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="TAVILY_API_KEY",
+        repr=False,
+    )
+    model_gateway_request_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=2,
+        validation_alias="MODEL_GATEWAY_REQUEST_MAX_RETRIES",
+    )
+    tavily_search_max_results: int = Field(
+        default=5,
+        ge=1,
+        le=5,
+        validation_alias="TAVILY_SEARCH_MAX_RESULTS",
+    )
+    tavily_extract_top_results: int = Field(
+        default=2,
+        ge=1,
+        le=2,
+        validation_alias="TAVILY_EXTRACT_TOP_RESULTS",
+    )
+    tavily_extract_chunks_per_source: int = Field(
+        default=3,
+        ge=1,
+        le=3,
+        validation_alias="TAVILY_EXTRACT_CHUNKS_PER_SOURCE",
+    )
+    agent_tool_max_calls: int = Field(
+        default=3,
+        ge=1,
+        le=3,
+        validation_alias="AGENT_TOOL_MAX_CALLS",
+    )
+    tavily_daily_tool_call_limit: int = Field(
+        default=20,
+        ge=1,
+        le=1_000,
+        validation_alias="TAVILY_DAILY_TOOL_CALL_LIMIT",
+    )
+    tavily_quota_redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias="TAVILY_QUOTA_REDIS_URL",
+    )
+    tavily_quota_key_prefix: str = Field(
+        default="ratelimit:tavily:daily:",
+        min_length=1,
+        max_length=100,
+        validation_alias="TAVILY_QUOTA_KEY_PREFIX",
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -106,7 +166,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator("siliconflow_api_key", "credential_encryption_key", mode="before")
+    @field_validator(
+        "siliconflow_api_key",
+        "credential_encryption_key",
+        "internal_service_secret",
+        "tavily_api_key",
+        mode="before",
+    )
     @classmethod
     def empty_secret_to_none(cls, value: object) -> object:
         """把 Compose 注入的空密钥统一为未配置状态。"""

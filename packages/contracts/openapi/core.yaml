@@ -19,6 +19,8 @@ tags:
     description: 当前用户的学习目标接口
   - name: 模型连接
     description: 用户自带 OpenAI-compatible API 的加密连接设置；响应永不包含 API Key。
+  - name: Assessment
+    description: 前测与路线后测的异步题集生成请求接口。
   - name: AgentRun
     description: 长任务的安全状态快照与协作式取消接口
   - name: 内部接口
@@ -241,6 +243,73 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/v1/learning-goals/{goal_id}/assessment-runs:
+    post:
+      tags: [Assessment]
+      summary: 为学习目标创建前测或后测生成 AgentRun
+      description: 仅允许当前用户为自己的学习目标创建 assessment_generate 任务。前测需要 10-20 题，后测需要 5-10 题并关联已有学习路线；任务创建后通过 AgentRun 状态接口轮询，题集由 Worker 异步生成并回写 Web。
+      operationId: create_assessment_generation_run
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/GoalId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssessmentGenerationRequest'
+      responses:
+        '202':
+          description: AgentRun 已创建并进入队列
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '200':
+          description: 同一幂等键重复请求，返回已有 AgentRun
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 未配置账户默认模型，或幂等键与已有任务内容冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/assessments/{assessment_id}:
+    get:
+      tags: [Assessment]
+      summary: 获取当前用户拥有的单个题集
+      description: 仅返回作答所需的题干、选项和题集元数据；不返回答案、解析、评分规则或生成元数据。
+      operationId: get_assessment
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AssessmentId'
+      responses:
+        '200':
+          description: 可供作答的题集
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/model-connections:
     get:
       tags: [模型连接]
@@ -498,6 +567,14 @@ components:
       in: path
       required: true
       description: AgentRun ID。
+      schema:
+        type: string
+        format: uuid
+    AssessmentId:
+      name: assessment_id
+      in: path
+      required: true
+      description: 题集 ID。
       schema:
         type: string
         format: uuid
@@ -881,6 +958,8 @@ components:
         finished_at:
           type: string
           format: date-time
+        assessment_result:
+          $ref: '#/components/schemas/AgentRunAssessmentResult'
         error:
           $ref: '#/components/schemas/AgentRunError'
         created_at:
@@ -889,6 +968,122 @@ components:
         updated_at:
           type: string
           format: date-time
+    AgentRunAssessmentResult:
+      type: object
+      additionalProperties: false
+      required: [assessment_id, question_count]
+      properties:
+        assessment_id:
+          type: string
+          format: uuid
+          description: 仅在 assessment_generate 成功后出现，可用于读取题集。
+        question_count:
+          type: integer
+          minimum: 1
+    Assessment:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - goal_id
+        - kind
+        - status
+        - question_count
+        - difficulty
+        - items
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        goal_id:
+          type: string
+          format: uuid
+        plan_id:
+          type: string
+          format: uuid
+          nullable: true
+        kind:
+          type: string
+          enum: [diagnostic, post_test, card_quiz]
+        status:
+          type: string
+          enum: [generating, ready, in_progress, submitted, grading, graded, failed, archived]
+        question_count:
+          type: integer
+          minimum: 0
+        difficulty:
+          type: string
+          enum: [normal, hard]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssessmentItem'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AssessmentItem:
+      type: object
+      additionalProperties: false
+      required: [id, ordinal, prompt, options, skill_tags, max_score]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ordinal:
+          type: integer
+          minimum: 1
+        prompt:
+          type: string
+        options:
+          type: array
+          minItems: 2
+          items:
+            $ref: '#/components/schemas/AssessmentOption'
+        skill_tags:
+          type: array
+          items:
+            type: string
+        max_score:
+          type: number
+          exclusiveMinimum: 0
+    AssessmentOption:
+      type: object
+      additionalProperties: false
+      required: [key, text]
+      properties:
+        key:
+          type: string
+          pattern: '^[A-F]$'
+        text:
+          type: string
+    AssessmentGenerationRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, question_count]
+      properties:
+        kind:
+          type: string
+          enum: [diagnostic, post_test]
+          description: diagnostic 为前测，post_test 为路线后测。
+        question_count:
+          type: integer
+          minimum: 5
+          maximum: 20
+          description: 前测为 10-20 题，后测为 5-10 题。
+        difficulty:
+          type: string
+          enum: [normal, hard]
+          default: normal
+        plan_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 后测必须填写属于当前学习目标的路线 ID；前测必须为空。
     ModelConnectionCreateRequest:
       type: object
       additionalProperties: false

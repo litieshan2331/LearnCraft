@@ -33,6 +33,11 @@ export interface AgentRunErrorSnapshot {
   retryable: boolean;
 }
 
+export interface AgentRunAssessmentResultSnapshot {
+  assessmentId: string;
+  questionCount: number;
+}
+
 export interface AgentRunSnapshot {
   id: string;
   runType: AgentRunType;
@@ -45,6 +50,7 @@ export interface AgentRunSnapshot {
   traceId: string;
   startedAt: Date | null;
   finishedAt: Date | null;
+  assessmentResult?: AgentRunAssessmentResultSnapshot;
   error?: AgentRunErrorSnapshot;
   createdAt: Date;
   updatedAt: Date;

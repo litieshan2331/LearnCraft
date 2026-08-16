@@ -196,6 +196,8 @@ function toAgentRunSnapshot(agentRun: AgentRunRecord): AgentRunSnapshot {
     throw new Error("数据库中存在不受支持的 AgentRun 类型或状态。");
   }
 
+  const assessmentResult = toAssessmentResultSnapshot(agentRun);
+
   return {
     id: agentRun.id,
     runType: agentRun.runType,
@@ -208,6 +210,7 @@ function toAgentRunSnapshot(agentRun: AgentRunRecord): AgentRunSnapshot {
     traceId: agentRun.traceId,
     startedAt: agentRun.startedAt,
     finishedAt: agentRun.finishedAt,
+    ...(assessmentResult ? { assessmentResult } : {}),
     ...(agentRun.errorCode ? {
       error: {
         code: agentRun.errorCode,
@@ -218,6 +221,36 @@ function toAgentRunSnapshot(agentRun: AgentRunRecord): AgentRunSnapshot {
     createdAt: agentRun.createdAt,
     updatedAt: agentRun.updatedAt,
   };
+}
+
+function toAssessmentResultSnapshot(agentRun: AgentRunRecord) {
+  if (agentRun.runType !== 'assessment_generate' || agentRun.status !== 'succeeded') {
+    return undefined;
+  }
+
+  const summary = agentRun.outputSummaryJson;
+  if (typeof summary !== 'object' || summary === null || Array.isArray(summary)) {
+    return undefined;
+  }
+
+  const summaryRecord = summary as { assessment_id?: unknown; question_count?: unknown };
+  const assessmentId = summaryRecord.assessment_id;
+  const questionCount = summaryRecord.question_count;
+  if (
+    typeof assessmentId !== 'string'
+    || !isUuid(assessmentId)
+    || typeof questionCount !== 'number'
+    || !Number.isInteger(questionCount)
+    || questionCount < 1
+  ) {
+    return undefined;
+  }
+
+  return { assessmentId, questionCount };
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function isSameProductionRequest(existingRun: AgentRunRecord, input: AgentRunProductionInput): boolean {

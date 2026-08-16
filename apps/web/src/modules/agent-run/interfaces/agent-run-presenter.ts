@@ -20,6 +20,12 @@ export function presentAgentRun(agentRun: AgentRunSnapshot) {
     trace_id: agentRun.traceId,
     ...(agentRun.startedAt ? { started_at: agentRun.startedAt.toISOString() } : {}),
     ...(agentRun.finishedAt ? { finished_at: agentRun.finishedAt.toISOString() } : {}),
+    ...(agentRun.assessmentResult ? {
+      assessment_result: {
+        assessment_id: agentRun.assessmentResult.assessmentId,
+        question_count: agentRun.assessmentResult.questionCount,
+      },
+    } : {}),
     ...(agentRun.error ? { error: agentRun.error } : {}),
     created_at: agentRun.createdAt.toISOString(),
     updated_at: agentRun.updatedAt.toISOString(),

@@ -11,9 +11,11 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Mapping, Sequence
+from typing import Any, Awaitable, Callable, Mapping, Sequence, TypeVar
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -35,14 +37,27 @@ from learncraft_agent.infrastructure.persistence.repositories.sqlalchemy_model_e
     SqlAlchemyModelEgressAuditRepository,
 )
 
+logger = logging.getLogger(__name__)
+ProviderResponse = TypeVar('ProviderResponse')
+
 
 class ModelEgressRequestError(RuntimeError):
     """表示已通过策略但无法安全完成模型请求的错误。"""
 
-    def __init__(self, code: str, message: str, *, retryable: bool) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        retryable: bool,
+        provider_error_code: str | None = None,
+        provider_error_message: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+        self.provider_error_code = provider_error_code
+        self.provider_error_message = provider_error_message
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +88,14 @@ class ModelProviderJsonResponse:
 
     status_code: int
     payload: Mapping[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class ModelProviderSseResponse:
+    '''表示已在受控出网层完成边界校验的 OpenAI SSE 事件序列。'''
+
+    status_code: int
+    events: tuple[Mapping[str, Any], ...]
 
 
 class SafeModelEgressClient:
@@ -115,6 +138,56 @@ class SafeModelEgressClient:
         endpoint_segments: Sequence[str],
         payload: Mapping[str, Any],
     ) -> ModelProviderJsonResponse:
+        '''向 OpenAI-compatible Provider 发起非流式 JSON 请求。'''
+        return await self._post_openai_compatible(
+            owner_id=owner_id,
+            model_connection_id=model_connection_id,
+            agent_run_id=agent_run_id,
+            base_url=base_url,
+            api_key=api_key,
+            endpoint_segments=endpoint_segments,
+            payload=payload,
+            accept='application/json',
+            response_reader=self._read_json_response,
+        )
+
+    async def post_openai_compatible_sse(
+        self,
+        *,
+        owner_id: UUID,
+        model_connection_id: UUID,
+        agent_run_id: UUID | None,
+        base_url: str,
+        api_key: str,
+        endpoint_segments: Sequence[str],
+        payload: Mapping[str, Any],
+    ) -> ModelProviderSseResponse:
+        '''向 OpenAI-compatible Provider 发起 SSE 请求并在内存中安全聚合事件。'''
+        return await self._post_openai_compatible(
+            owner_id=owner_id,
+            model_connection_id=model_connection_id,
+            agent_run_id=agent_run_id,
+            base_url=base_url,
+            api_key=api_key,
+            endpoint_segments=endpoint_segments,
+            payload=payload,
+            accept='text/event-stream',
+            response_reader=self._read_sse_response,
+        )
+
+    async def _post_openai_compatible(
+        self,
+        *,
+        owner_id: UUID,
+        model_connection_id: UUID,
+        agent_run_id: UUID | None,
+        base_url: str,
+        api_key: str,
+        endpoint_segments: Sequence[str],
+        payload: Mapping[str, Any],
+        accept: str,
+        response_reader: Callable[[httpx.Response], Awaitable[ProviderResponse]],
+    ) -> ProviderResponse:
         """以固定 IP、原始域名 SNI 和受限路径向 OpenAI-compatible Provider 发起 POST。"""
         if not self._options.enabled:
             raise ModelEgressRequestError(
@@ -180,7 +253,7 @@ class SafeModelEgressClient:
                     request_url,
                     content=orjson.dumps(payload),
                     headers={
-                        "Accept": "application/json",
+                        "Accept": accept,
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
                         "Host": endpoint.hostname,
@@ -191,7 +264,7 @@ class SafeModelEgressClient:
                 request.extensions["sni_hostname"] = endpoint.hostname
                 response = await client.send(request, stream=True)
                 try:
-                    return await self._read_json_response(response)
+                    return await response_reader(response)
                 finally:
                     await response.aclose()
         except ModelEgressRequestError:
@@ -238,10 +311,21 @@ class SafeModelEgressClient:
                 )
 
         if not 200 <= response.status_code < 300:
+            provider_error_code, provider_error_message = self._extract_provider_error_context(
+                bytes(body),
+            )
+            logger.warning(
+                'model_provider_non_success status=%s provider_error_code=%s provider_error_message=%s',
+                response.status_code,
+                provider_error_code,
+                provider_error_message,
+            )
             raise ModelEgressRequestError(
                 f"MODEL_PROVIDER_HTTP_{response.status_code}",
                 "模型服务返回了非成功状态。",
                 retryable=response.status_code == 429 or response.status_code >= 500,
+                provider_error_code=provider_error_code,
+                provider_error_message=provider_error_message,
             )
 
         try:
@@ -259,6 +343,149 @@ class SafeModelEgressClient:
                 retryable=False,
             )
         return ModelProviderJsonResponse(status_code=response.status_code, payload=decoded)
+
+    async def _read_sse_response(self, response: httpx.Response) -> ModelProviderSseResponse:
+        '''流式读取 data-only SSE，校验完成标记和总响应大小，但不持久化模型正文。'''
+        if 300 <= response.status_code < 400:
+            raise ModelEgressRequestError(
+                'MODEL_EGRESS_REDIRECT_FORBIDDEN',
+                '模型服务响应了不允许跟随的重定向。',
+                retryable=False,
+            )
+
+        content_length = response.headers.get('content-length')
+        if content_length and content_length.isdigit() and int(content_length) > self._options.max_response_bytes:
+            raise ModelEgressRequestError(
+                'MODEL_EGRESS_RESPONSE_TOO_LARGE',
+                '模型服务响应超过允许大小。',
+                retryable=False,
+            )
+
+        if not 200 <= response.status_code < 300:
+            body = await self._read_bounded_response_body(response)
+            provider_error_code, provider_error_message = self._extract_provider_error_context(body)
+            logger.warning(
+                'model_provider_non_success status=%s provider_error_code=%s provider_error_message=%s',
+                response.status_code,
+                provider_error_code,
+                provider_error_message,
+            )
+            raise ModelEgressRequestError(
+                f'MODEL_PROVIDER_HTTP_{response.status_code}',
+                '模型服务返回了非成功状态。',
+                retryable=response.status_code == 429 or response.status_code >= 500,
+                provider_error_code=provider_error_code,
+                provider_error_message=provider_error_message,
+            )
+
+        content_type = response.headers.get('content-type', '').lower()
+        if not content_type.startswith('text/event-stream'):
+            raise ModelEgressRequestError(
+                'MODEL_PROVIDER_INVALID_SSE',
+                '模型服务没有返回 SSE 流。',
+                retryable=False,
+            )
+
+        events: list[Mapping[str, Any]] = []
+        buffer = bytearray()
+        received_bytes = 0
+        saw_done = False
+        async for chunk in response.aiter_bytes():
+            received_bytes += len(chunk)
+            if received_bytes > self._options.max_response_bytes:
+                raise ModelEgressRequestError(
+                    'MODEL_EGRESS_RESPONSE_TOO_LARGE',
+                    '模型服务响应超过允许大小。',
+                    retryable=False,
+                )
+            buffer.extend(chunk)
+            while True:
+                newline_index = buffer.find(b'\n')
+                if newline_index < 0:
+                    break
+                raw_line = bytes(buffer[:newline_index]).rstrip(b'\r')
+                del buffer[: newline_index + 1]
+                if not raw_line or raw_line.startswith(b':'):
+                    continue
+                if not raw_line.startswith(b'data:'):
+                    continue
+                raw_data = raw_line[5:].lstrip()
+                if raw_data == b'[DONE]':
+                    saw_done = True
+                    continue
+                try:
+                    decoded = orjson.loads(raw_data)
+                except orjson.JSONDecodeError as error:
+                    raise ModelEgressRequestError(
+                        'MODEL_PROVIDER_INVALID_SSE',
+                        '模型服务返回了无法解析的 SSE 事件。',
+                        retryable=False,
+                    ) from error
+                if not isinstance(decoded, Mapping):
+                    raise ModelEgressRequestError(
+                        'MODEL_PROVIDER_INVALID_SSE',
+                        '模型服务返回了非对象 SSE 事件。',
+                        retryable=False,
+                    )
+                events.append(decoded)
+
+        if buffer.strip():
+            raise ModelEgressRequestError(
+                'MODEL_PROVIDER_INVALID_SSE',
+                '模型服务返回了不完整的 SSE 事件。',
+                retryable=False,
+            )
+        if not saw_done:
+            raise ModelEgressRequestError(
+                'MODEL_PROVIDER_INVALID_SSE',
+                '模型服务未正常结束 SSE 流。',
+                retryable=True,
+            )
+        if not events:
+            raise ModelEgressRequestError(
+                'MODEL_PROVIDER_INVALID_SSE',
+                '模型服务返回了空 SSE 流。',
+                retryable=False,
+            )
+        return ModelProviderSseResponse(status_code=response.status_code, events=tuple(events))
+
+    async def _read_bounded_response_body(self, response: httpx.Response) -> bytes:
+        '''读取错误响应正文并执行统一大小限制，用于脱敏 Provider 诊断。'''
+        body = bytearray()
+        async for chunk in response.aiter_bytes():
+            body.extend(chunk)
+            if len(body) > self._options.max_response_bytes:
+                raise ModelEgressRequestError(
+                    'MODEL_EGRESS_RESPONSE_TOO_LARGE',
+                    '模型服务响应超过允许大小。',
+                    retryable=False,
+                )
+        return bytes(body)
+
+    @staticmethod
+    def _extract_provider_error_context(body: bytes) -> tuple[str | None, str | None]:
+        '''提取长度受限且已脱敏的 Provider 错误信息，仅供 Worker 日志诊断。'''
+        try:
+            decoded = orjson.loads(body)
+        except orjson.JSONDecodeError:
+            return None, None
+        if not isinstance(decoded, Mapping):
+            return None, None
+
+        raw_error = decoded.get('error')
+        error_context = raw_error if isinstance(raw_error, Mapping) else decoded
+        raw_code = error_context.get('code') or error_context.get('type')
+        raw_message = error_context.get('message')
+        error_code = raw_code[:128] if isinstance(raw_code, str) else None
+        if not isinstance(raw_message, str):
+            return error_code, None
+        normalized_message = ' '.join(raw_message.split())[:240]
+        redacted_message = re.sub(
+            r'(?i)\b(?:sk|key)-[a-z0-9_-]+\b',
+            '[REDACTED]',
+            normalized_message,
+        )
+        return error_code, redacted_message
 
     async def _record_or_block(self, entry: ModelEgressAuditEntry) -> None:
         """在任何外部请求前持久化允许记录；审计不可用时以失败关闭。"""
