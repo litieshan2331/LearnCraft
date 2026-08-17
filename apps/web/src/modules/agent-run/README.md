@@ -4,7 +4,7 @@
 
 AgentRun 状态机与幂等规则放 `domain`，任务投递用例放 `application`，Drizzle/Outbox 适配放 `infrastructure`，公开状态 DTO 与 Route Handler 适配放 `interfaces`。
 
-`AgentRunService.request()` 仅供 Learning Goal、Assessment、Plan 或 Card Content 等受信任的 Web 应用用例调用：它在同一数据库事务中创建 `agent.agent_runs`、首条 `run.queued` 审计事件和 `public.outbox_events` 的 `agent.run.requested` 事件。浏览器没有可自行指定 `run_type` 的通用创建接口。
+`AgentRunService.request()` 仅供 Learning Goal、Assessment、Plan 或 Card Content 等受信任的 Web 应用用例调用：每个任务必须携带所属 `goal_id`，它在同一数据库事务中创建 `agent.agent_runs`、首条 `run.queued` 审计事件和 `public.outbox_events` 的 `agent.run.requested` 事件。浏览器没有可自行指定 `run_type` 的通用创建接口。
 
 已提供的浏览器接口为：
 

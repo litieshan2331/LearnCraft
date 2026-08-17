@@ -62,6 +62,7 @@ describe("AgentRunService", () => {
 
     await service.request({
       ownerId: "d8418b49-5ca9-4aeb-b6e0-25b35b17fb8f",
+      goalId: "04d90a58-a556-45d2-9e63-108e2a261d58",
       runType: "plan_generate",
       targetType: "learning_goal",
       targetId: "04d90a58-a556-45d2-9e63-108e2a261d58",

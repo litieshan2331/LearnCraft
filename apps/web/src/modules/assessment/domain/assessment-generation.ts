@@ -44,6 +44,7 @@ export interface AssessmentGenerationContextRepository {
 export interface AssessmentGenerationAgentRunRequester {
   request(input: {
     ownerId: string;
+    goalId: string;
     runType: "assessment_generate";
     targetType: "learning_goal";
     targetId: string;

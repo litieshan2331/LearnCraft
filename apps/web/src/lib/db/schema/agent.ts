@@ -28,6 +28,7 @@ import {
   updatedAtColumn,
 } from "./_common";
 import { users } from "./identity";
+import { learningGoals } from "./profile";
 import { userModelConnections } from "./model-connection";
 
 export const agentSchema = pgSchema("agent");
@@ -37,6 +38,9 @@ export const agentRuns = agentSchema.table("agent_runs", {
   ownerId: uuid("owner_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  goalId: uuid("goal_id")
+    .notNull()
+    .references(() => learningGoals.id, { onDelete: "cascade" }),
   runType: varchar("run_type", { length: 40 }).notNull(),
   status: varchar("status", { length: 20 }).notNull().default("queued"),
   targetType: varchar("target_type", { length: 50 }).notNull(),
@@ -91,6 +95,12 @@ export const agentRuns = agentSchema.table("agent_runs", {
   check("ck_agent_runs_retry_count", sql`${table.retryCount} >= 0`),
   index("idx_agent_runs_owner_status_created").on(
     table.ownerId,
+    table.status,
+    table.createdAt.desc(),
+  ),
+  index("idx_agent_runs_owner_goal_status_created").on(
+    table.ownerId,
+    table.goalId,
     table.status,
     table.createdAt.desc(),
   ),

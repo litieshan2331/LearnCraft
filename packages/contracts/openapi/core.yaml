@@ -190,6 +190,21 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
   /api/v1/learning-goals:
+    get:
+      tags: [学习目标]
+      summary: 查询当前用户的学习目标列表
+      operationId: list_learning_goals
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 按最近更新时间倒序的当前用户学习目标；每项包含最新前测摘要。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       tags: [学习目标]
       summary: 创建当前用户的学习目标
@@ -243,6 +258,26 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [学习目标]
+      summary: 硬删除当前用户的学习目标
+      description: 仅在目标不存在 queued 或 running AgentRun 时删除。请先取消活动任务，再重新发起删除。
+      operationId: delete_learning_goal
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/GoalId'
+      responses:
+        '204':
+          description: 学习目标及其级联业务数据、AgentRun、AgentRun 事件和关联 Outbox 已删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/GoalHasActiveRuns'
   /api/v1/learning-goals/{goal_id}/assessment-runs:
     post:
       tags: [Assessment]
@@ -629,6 +664,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    GoalHasActiveRuns:
+      description: 学习目标仍有排队或运行中的 AgentRun，必须先取消后才可硬删除。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     AgentRunNotCancellable:
       description: AgentRun 已成功、失败或过期，不能再取消。
       content:
@@ -897,6 +938,56 @@ components:
             - completed
             - archived
             - failed
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        latest_assessment:
+          description: 仅在目标列表响应中出现的最新前测摘要；不含题目、答案或解析。
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/LatestDiagnosticAssessmentSummary'
+    GoalListResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Goal'
+    LatestDiagnosticAssessmentSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - question_count
+        - difficulty
+        - score_percent
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [generating, ready, in_progress, submitted, grading, graded, failed, archived]
+        question_count:
+          type: integer
+          minimum: 1
+          nullable: true
+        difficulty:
+          type: string
+          enum: [normal, hard]
+        score_percent:
+          type: number
+          minimum: 0
+          maximum: 100
+          nullable: true
         created_at:
           type: string
           format: date-time

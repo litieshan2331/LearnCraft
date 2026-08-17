@@ -90,6 +90,7 @@ describe("AssessmentGenerationService", () => {
 
     expect(result.created).toBe(true);
     expect(requester.input).toMatchObject({
+      goalId,
       runType: "assessment_generate",
       targetType: "learning_goal",
       targetId: goalId,

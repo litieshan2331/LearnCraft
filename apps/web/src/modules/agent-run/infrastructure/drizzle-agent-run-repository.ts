@@ -37,6 +37,7 @@ export class DrizzleAgentRunRepository implements AgentRunRepository {
           .insert(agentRuns)
           .values({
             ownerId: input.ownerId,
+            goalId: input.goalId,
             runType: input.runType,
             status: "queued",
             targetType: input.targetType,
@@ -255,6 +256,7 @@ function isUuid(value: string): boolean {
 
 function isSameProductionRequest(existingRun: AgentRunRecord, input: AgentRunProductionInput): boolean {
   return existingRun.targetType === input.targetType
+    && existingRun.goalId === input.goalId
     && existingRun.targetId === input.targetId
     && existingRun.graphVersion === input.graphVersion
     && existingRun.promptVersion === (input.promptVersion ?? null)

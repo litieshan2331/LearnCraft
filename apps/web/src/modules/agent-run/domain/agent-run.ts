@@ -58,6 +58,7 @@ export interface AgentRunSnapshot {
 
 export interface AgentRunProductionInput {
   ownerId: string;
+  goalId: string;
   runType: AgentRunType;
   targetType: string;
   targetId: string;

@@ -24,6 +24,19 @@ export type CurrentLevel = (typeof CURRENT_LEVELS)[number];
 export type ContentPreference = (typeof CONTENT_PREFERENCES)[number];
 export type LearningGoalStatus = (typeof LEARNING_GOAL_STATUSES)[number];
 
+export const DIAGNOSTIC_ASSESSMENT_STATUSES = [
+  "generating",
+  "ready",
+  "in_progress",
+  "submitted",
+  "grading",
+  "graded",
+  "failed",
+  "archived",
+] as const;
+
+export type DiagnosticAssessmentStatus = (typeof DIAGNOSTIC_ASSESSMENT_STATUSES)[number];
+
 export interface LearnerProfileSnapshot {
   userId: string;
   currentLevel: CurrentLevel;
@@ -53,6 +66,20 @@ export interface LearningGoalSnapshot {
   updatedAt: Date;
 }
 
+export interface LatestDiagnosticAssessmentSnapshot {
+  id: string;
+  status: DiagnosticAssessmentStatus;
+  questionCount: number | null;
+  difficulty: "normal" | "hard";
+  scorePercent: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface LearningGoalListItemSnapshot extends LearningGoalSnapshot {
+  latestDiagnosticAssessment: LatestDiagnosticAssessmentSnapshot | null;
+}
+
 export interface SaveLearnerProfileInput {
   ownerId: string;
   currentLevel: CurrentLevel;
@@ -80,18 +107,23 @@ export interface CreateLearningGoalResult {
   created: boolean;
 }
 
+export type LearningGoalDeletionDecision = "deleted" | "not_found" | "has_active_runs";
+
 export interface ProfileRepository {
   findProfile(ownerId: string): Promise<LearnerProfileSnapshot | null>;
   saveProfile(input: SaveLearnerProfileInput): Promise<LearnerProfileSnapshot>;
   isActiveModelConnectionOwned(ownerId: string, modelConnectionId: string): Promise<boolean>;
   createGoal(input: CreateLearningGoalInput & { profileVersion: number }): Promise<CreateLearningGoalResult>;
   findOwnedGoal(ownerId: string, goalId: string): Promise<LearningGoalSnapshot | null>;
+  findOwnedGoals(ownerId: string): Promise<LearningGoalListItemSnapshot[]>;
+  deleteOwnedGoal(ownerId: string, goalId: string): Promise<LearningGoalDeletionDecision>;
 }
 
 export type ProfileApplicationErrorCode =
   | "PROFILE_REQUIRED"
   | "MODEL_CONNECTION_NOT_FOUND"
   | "LEARNING_GOAL_NOT_FOUND"
+  | "GOAL_HAS_ACTIVE_RUNS"
   | "IDEMPOTENCY_CONFLICT";
 
 export class ProfileApplicationError extends Error {
@@ -111,4 +143,8 @@ export function isContentPreference(value: string): value is ContentPreference {
 
 export function isLearningGoalStatus(value: string): value is LearningGoalStatus {
   return (LEARNING_GOAL_STATUSES as readonly string[]).includes(value);
+}
+
+export function isDiagnosticAssessmentStatus(value: string): value is DiagnosticAssessmentStatus {
+  return (DIAGNOSTIC_ASSESSMENT_STATUSES as readonly string[]).includes(value);
 }

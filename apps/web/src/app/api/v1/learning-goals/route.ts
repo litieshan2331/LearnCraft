@@ -2,6 +2,7 @@
  * 学习目标创建 Route Handler。
  *
  * 函数：
+ * - GET：读取当前登录用户的学习目标列表及每个目标最新前测摘要。
  * - POST：保存当前画像版本下的自定义主题学习目标，并用 Idempotency-Key 防止重复创建。
  */
 
@@ -14,7 +15,10 @@ import {
   idempotencyKeyErrorResponse,
   profileErrorResponse,
 } from "@/modules/profile/interfaces/profile-http";
-import { presentLearningGoal } from "@/modules/profile/interfaces/profile-presenter";
+import {
+  presentLearningGoal,
+  presentLearningGoalListItem,
+} from "@/modules/profile/interfaces/profile-presenter";
 import {
   idempotencyKeySchema,
   learningGoalCreateRequestSchema,
@@ -27,6 +31,23 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function GET(request: Request): Promise<NextResponse> {
+  try {
+    const authentication = await authenticateProfileRequest(request);
+    if (!authentication.authenticated) {
+      return authentication.response;
+    }
+
+    const goals = await getProfileService().listOwnedGoals(authentication.ownerId);
+    return applyProfileSessionRenewal(
+      NextResponse.json({ items: goals.map(presentLearningGoalListItem) }),
+      authentication,
+    );
+  } catch (error) {
+    return profileErrorResponse(error);
+  }
+}
 
 export async function POST(request: Request): Promise<NextResponse> {
   const originError = assertAllowedWriteOrigin(request);

@@ -5,13 +5,16 @@
  * - DrizzleProfileRepository：读写学习者画像、学习目标、幂等键与目标级模型连接归属。
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { getDatabase } from "@/lib/db/client";
 import {
+  assessments,
+  agentRuns,
   idempotencyKeys,
   learnerProfiles,
   learningGoals,
+  outboxEvents,
   userModelConnections,
 } from "@/lib/db/schema";
 
@@ -21,7 +24,11 @@ import {
   isLearningGoalStatus,
   type CreateLearningGoalInput,
   type CreateLearningGoalResult,
+  isDiagnosticAssessmentStatus,
   type LearnerProfileSnapshot,
+  type LearningGoalDeletionDecision,
+  type LatestDiagnosticAssessmentSnapshot,
+  type LearningGoalListItemSnapshot,
   type LearningGoalSnapshot,
   ProfileApplicationError,
   type ProfileRepository,
@@ -30,9 +37,11 @@ import {
 
 type LearnerProfileRecord = typeof learnerProfiles.$inferSelect;
 type LearningGoalRecord = typeof learningGoals.$inferSelect;
+type DiagnosticAssessmentRecord = typeof assessments.$inferSelect;
 
 const IDEMPOTENCY_SCOPE = "learning_goal.create";
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+const ACTIVE_AGENT_RUN_STATUSES = ["queued", "running"] as const;
 
 export class DrizzleProfileRepository implements ProfileRepository {
   async findProfile(ownerId: string): Promise<LearnerProfileSnapshot | null> {
@@ -168,6 +177,106 @@ export class DrizzleProfileRepository implements ProfileRepository {
     return goal ? toLearningGoalSnapshot(goal) : null;
   }
 
+  async findOwnedGoals(ownerId: string): Promise<LearningGoalListItemSnapshot[]> {
+    const database = getDatabase();
+    const goals = await database
+      .select()
+      .from(learningGoals)
+      .where(eq(learningGoals.ownerId, ownerId))
+      .orderBy(desc(learningGoals.updatedAt), desc(learningGoals.id));
+
+    if (goals.length === 0) {
+      return [];
+    }
+
+    const diagnosticAssessments = await database
+      .select()
+      .from(assessments)
+      .where(and(
+        eq(assessments.ownerId, ownerId),
+        eq(assessments.kind, "diagnostic"),
+        inArray(assessments.goalId, goals.map((goal) => goal.id)),
+      ))
+      .orderBy(desc(assessments.createdAt), desc(assessments.id));
+
+    const latestDiagnosticByGoalId = new Map<string, DiagnosticAssessmentRecord>();
+    for (const assessment of diagnosticAssessments) {
+      if (!latestDiagnosticByGoalId.has(assessment.goalId)) {
+        latestDiagnosticByGoalId.set(assessment.goalId, assessment);
+      }
+    }
+
+    return goals.map((goal) => ({
+      ...toLearningGoalSnapshot(goal),
+      latestDiagnosticAssessment: toLatestDiagnosticAssessmentSnapshot(
+        latestDiagnosticByGoalId.get(goal.id) ?? null,
+      ),
+    }));
+  }
+
+  async deleteOwnedGoal(
+    ownerId: string,
+    goalId: string,
+  ): Promise<LearningGoalDeletionDecision> {
+    const database = getDatabase();
+
+    return database.transaction(async (transaction) => {
+      const [goal] = await transaction
+        .select({ id: learningGoals.id })
+        .from(learningGoals)
+        .where(and(eq(learningGoals.id, goalId), eq(learningGoals.ownerId, ownerId)))
+        .limit(1)
+        .for("update");
+
+      if (!goal) {
+        return "not_found";
+      }
+
+      const [activeRun] = await transaction
+        .select({ id: agentRuns.id })
+        .from(agentRuns)
+        .where(and(
+          eq(agentRuns.ownerId, ownerId),
+          eq(agentRuns.goalId, goal.id),
+          inArray(agentRuns.status, ACTIVE_AGENT_RUN_STATUSES),
+        ))
+        .limit(1);
+
+      if (activeRun) {
+        return "has_active_runs";
+      }
+
+      const relatedRuns = await transaction
+        .select({ id: agentRuns.id })
+        .from(agentRuns)
+        .where(and(eq(agentRuns.ownerId, ownerId), eq(agentRuns.goalId, goal.id)));
+      const relatedRunIds = relatedRuns.map((run) => run.id);
+
+      if (relatedRunIds.length > 0) {
+        await transaction
+          .delete(outboxEvents)
+          .where(and(
+            eq(outboxEvents.aggregateType, "agent_run"),
+            inArray(outboxEvents.aggregateId, relatedRunIds),
+          ));
+      }
+
+      await transaction
+        .delete(idempotencyKeys)
+        .where(and(
+          eq(idempotencyKeys.actorKey, ownerId),
+          eq(idempotencyKeys.resourceType, "learning_goal"),
+          eq(idempotencyKeys.resourceId, goal.id),
+        ));
+
+      await transaction
+        .delete(learningGoals)
+        .where(and(eq(learningGoals.id, goal.id), eq(learningGoals.ownerId, ownerId)));
+
+      return "deleted";
+    });
+  }
+
   private async findExistingIdempotentGoal(
     transaction: Parameters<ReturnType<typeof getDatabase>["transaction"]>[0] extends (
       transaction: infer Transaction,
@@ -250,6 +359,30 @@ function toLearningGoalSnapshot(record: LearningGoalRecord): LearningGoalSnapsho
     modelConnectionId: record.modelConnectionId,
     profileVersion: record.profileVersion,
     status: record.status,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+function toLatestDiagnosticAssessmentSnapshot(
+  record: DiagnosticAssessmentRecord | null,
+): LatestDiagnosticAssessmentSnapshot | null {
+  if (!record) {
+    return null;
+  }
+  if (!isDiagnosticAssessmentStatus(record.status)) {
+    throw new Error("数据库中存在不支持的前测状态。");
+  }
+  if (record.difficulty !== "normal" && record.difficulty !== "hard") {
+    throw new Error("数据库中存在不支持的前测难度。");
+  }
+
+  return {
+    id: record.id,
+    status: record.status,
+    questionCount: record.requestedQuestionCount,
+    difficulty: record.difficulty,
+    scorePercent: record.scorePercent === null ? null : Number(record.scorePercent),
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };

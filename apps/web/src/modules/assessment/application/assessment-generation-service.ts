@@ -44,6 +44,7 @@ export class AssessmentGenerationService {
 
     return this.agentRunRequester.request({
       ownerId: input.ownerId,
+      goalId: input.goalId,
       runType: "assessment_generate",
       targetType: "learning_goal",
       targetId: input.goalId,

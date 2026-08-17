@@ -78,6 +78,8 @@ export function profileErrorResponse(error: unknown): NextResponse {
       ]);
     case "LEARNING_GOAL_NOT_FOUND":
       return apiErrorResponse(404, error.code, "学习目标不存在或你无权访问。");
+    case "GOAL_HAS_ACTIVE_RUNS":
+      return apiErrorResponse(409, error.code, "学习目标仍有运行中的任务，请先取消任务后再删除。");
     case "IDEMPOTENCY_CONFLICT":
       return apiErrorResponse(409, error.code, "同一个幂等键不能用于不同的学习目标请求。");
   }

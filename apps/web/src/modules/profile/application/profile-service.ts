@@ -11,6 +11,7 @@ import {
   type CreateLearningGoalInput,
   type CreateLearningGoalResult,
   type LearnerProfileSnapshot,
+  type LearningGoalListItemSnapshot,
   type LearningGoalSnapshot,
   ProfileApplicationError,
   type ProfileRepository,
@@ -70,6 +71,20 @@ export class ProfileService {
     }
 
     return goal;
+  }
+
+  listOwnedGoals(ownerId: string): Promise<LearningGoalListItemSnapshot[]> {
+    return this.repository.findOwnedGoals(ownerId);
+  }
+
+  async deleteOwnedGoal(ownerId: string, goalId: string): Promise<void> {
+    const decision = await this.repository.deleteOwnedGoal(ownerId, goalId);
+    if (decision === "not_found") {
+      throw new ProfileApplicationError("LEARNING_GOAL_NOT_FOUND");
+    }
+    if (decision === "has_active_runs") {
+      throw new ProfileApplicationError("GOAL_HAS_ACTIVE_RUNS");
+    }
   }
 }
 

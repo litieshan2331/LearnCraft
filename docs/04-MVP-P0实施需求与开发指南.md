@@ -816,6 +816,7 @@ CREATE INDEX idx_code_runs_owner_node_created
 CREATE TABLE agent.agent_runs (
     id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id                uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    goal_id                 uuid NOT NULL REFERENCES public.learning_goals(id) ON DELETE CASCADE,
     run_type                varchar(40) NOT NULL
                             CHECK (run_type IN (
                               'assessment_generate', 'plan_generate',
@@ -854,6 +855,9 @@ CREATE TABLE agent.agent_runs (
 
 CREATE INDEX idx_agent_runs_owner_status_created
     ON agent.agent_runs(owner_id, status, created_at DESC);
+
+CREATE INDEX idx_agent_runs_owner_goal_status_created
+    ON agent.agent_runs(owner_id, goal_id, status, created_at DESC);
 
 CREATE INDEX idx_agent_runs_target
     ON agent.agent_runs(target_type, target_id, created_at DESC);
@@ -1080,6 +1084,7 @@ HTTP/1.1 201 Created
 | `POST /api/v1/learning-goals` | 创建自定义技术主题目标 | `201` Goal |
 | `GET /api/v1/learning-goals` | 查询当前用户的目标列表 | `200` 目标摘要列表；每个目标仅返回最新前测摘要 |
 | `GET /api/v1/learning-goals/{goal_id}` | 读取目标及当前状态 | `200` Goal |
+| `DELETE /api/v1/learning-goals/{goal_id}` | 硬删除当前用户目标 | `204`；仅当没有 `queued`/`running` AgentRun 时删除。否则返回 `409 GOAL_HAS_ACTIVE_RUNS`，用户先取消任务再重试；关联业务数据、AgentRun、事件与 Outbox 一并清理。 |
 | `POST /api/v1/learning-goals/{goal_id}/assessment-runs` | 请求前测生成 | `202`；成功后从 AgentRun 的 `assessment_result.assessment_id` 读取题集 |
 | `GET /api/v1/assessments/{assessment_id}` | 读取题目或已评分结果 | `200`；交卷前不包含答案/解析，`graded` 后仅题主可读自己的作答、正确答案和逐题解析；不返回系统提示词或密钥 |
 | `POST /api/v1/assessments/{assessment_id}/attempts` | 创建/恢复一次作答 | `201` Attempt |

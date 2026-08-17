@@ -43,6 +43,13 @@
       "when": 1785653974476,
       "tag": "0005_model_connection_egress_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786979234343,
+      "tag": "0006_agent_run_goal_lifecycle",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@
  *
  * 函数：
  * - GET：仅返回当前登录用户拥有的学习目标及其当前状态。
+ * - DELETE：在没有活动 AgentRun 时硬删除当前用户的学习目标及其关联数据。
  */
 
 import { NextResponse } from "next/server";
@@ -15,7 +16,10 @@ import {
 } from "@/modules/profile/interfaces/profile-http";
 import { presentLearningGoal } from "@/modules/profile/interfaces/profile-presenter";
 import { learningGoalPathSchema } from "@/modules/profile/interfaces/profile-schemas";
-import { validationErrorResponse } from "@/modules/identity/interfaces/auth-http";
+import {
+  assertAllowedWriteOrigin,
+  validationErrorResponse,
+} from "@/modules/identity/interfaces/auth-http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +46,31 @@ export async function GET(request: Request, context: RouteContext): Promise<Next
       parsedParams.data.goal_id,
     );
     return applyProfileSessionRenewal(NextResponse.json(presentLearningGoal(goal)), authentication);
+  } catch (error) {
+    return profileErrorResponse(error);
+  }
+}
+
+export async function DELETE(request: Request, context: RouteContext): Promise<NextResponse> {
+  const originError = assertAllowedWriteOrigin(request);
+  if (originError) {
+    return originError;
+  }
+
+  try {
+    const authentication = await authenticateProfileRequest(request);
+    if (!authentication.authenticated) {
+      return authentication.response;
+    }
+
+    const params = await context.params;
+    const parsedParams = learningGoalPathSchema.safeParse({ goal_id: params.goalId });
+    if (!parsedParams.success) {
+      return applyProfileSessionRenewal(validationErrorResponse(parsedParams.error), authentication);
+    }
+
+    await getProfileService().deleteOwnedGoal(authentication.ownerId, parsedParams.data.goal_id);
+    return applyProfileSessionRenewal(new NextResponse(null, { status: 204 }), authentication);
   } catch (error) {
     return profileErrorResponse(error);
   }
