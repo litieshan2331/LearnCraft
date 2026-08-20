@@ -10,8 +10,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createAssessmentRun,
+  getAssessmentAttempt,
+  getAssessmentAttempts,
   getAgentRun,
   getAssessment,
+  submitAssessmentAttempt,
 } from "./assessment-client";
 
 afterEach(() => {
@@ -53,6 +56,31 @@ describe("assessment-client", () => {
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
       "/api/v1/agent-runs/run-1",
       "/api/v1/assessments/assessment-1",
+    ]);
+  });
+
+  it("提交作答时携带幂等键，并读取作答历史和详情", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: "attempt-1", items: [] }, 201))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ id: "attempt-1", items: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitAssessmentAttempt(
+      "assessment-1",
+      { answers: [{ assessment_item_id: "item-1", selected_option_key: "A" }] },
+      "16b28ac1-266a-43ed-b6fc-8c54ce6ae96c",
+    );
+    await getAssessmentAttempts("assessment-1");
+    await getAssessmentAttempt("attempt-1");
+
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/assessments/assessment-1/attempts");
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("Idempotency-Key")).toBe("16b28ac1-266a-43ed-b6fc-8c54ce6ae96c");
+    expect(fetchMock.mock.calls.slice(1).map(([calledPath]) => calledPath)).toEqual([
+      "/api/v1/assessments/assessment-1/attempts",
+      "/api/v1/assessment-attempts/attempt-1",
     ]);
   });
 });

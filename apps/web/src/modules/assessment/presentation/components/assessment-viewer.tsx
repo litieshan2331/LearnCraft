@@ -1,21 +1,28 @@
 /**
- * 已生成前测题集的只读展示组件。
+ * Assessment 题集作答、提交和评分结果展示组件。
  *
- * 组件：
- * - AssessmentViewer：读取并展示题目，记录当前浏览器内的临时选项状态。
- * - QuestionCard：展示单道选择题、技能标签与临时选择控件。
+ * 组件与函数：
+ * - AssessmentViewer：加载题集与历史摘要，协调选择答案和提交评分。
+ * - QuestionCard：展示提交前的单选题。
+ * - AssessmentResult：展示提交后的总分、答案、解析和错题筛选。
+ * - getAttemptIdempotencyKey：复用一次提交及安全重试期间的幂等键。
  */
 
 "use client";
 
 import { AlertCircle, ArrowLeft, BookOpenCheck, CheckCircle2, LoaderCircle } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   AssessmentApiError,
   getAssessment,
+  getAssessmentAttempt,
+  getAssessmentAttempts,
+  submitAssessmentAttempt,
   type Assessment,
+  type AssessmentAttempt,
+  type AssessmentAttemptSummary,
   type AssessmentItem,
 } from "../api/assessment-client";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
@@ -23,17 +30,31 @@ import { Button } from "@/shared/ui/primitives/button";
 
 export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: string }>) {
   const [assessment, setAssessment] = useState<Assessment | null>(null);
+  const [attempt, setAttempt] = useState<AssessmentAttempt | null>(null);
+  const [attempts, setAttempts] = useState<AssessmentAttemptSummary[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showOnlyWrong, setShowOnlyWrong] = useState(false);
+  const attemptIdempotencyKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
 
-    void getAssessment(assessmentId)
-      .then((nextAssessment) => {
+    void Promise.all([getAssessment(assessmentId), getAssessmentAttempts(assessmentId)])
+      .then(async ([nextAssessment, nextAttempts]) => ({
+        assessment: nextAssessment,
+        attempts: nextAttempts,
+        latestAttempt: nextAttempts[0]
+          ? await getAssessmentAttempt(nextAttempts[0].id)
+          : null,
+      }))
+      .then((result) => {
         if (isActive) {
-          setAssessment(nextAssessment);
+          setAssessment(result.assessment);
+          setAttempts(result.attempts);
+          setAttempt(result.latestAttempt);
         }
       })
       .catch((error: unknown) => {
@@ -56,6 +77,34 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
     () => Object.keys(selectedAnswers).length,
     [selectedAnswers],
   );
+  const allAnswered = assessment !== null && answeredCount === assessment.items.length;
+
+  async function handleSubmit(): Promise<void> {
+    if (!assessment || !allAnswered || attempt) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    try {
+      const result = await submitAssessmentAttempt(
+        assessment.id,
+        {
+          answers: assessment.items.map((item) => ({
+            assessment_item_id: item.id,
+            selected_option_key: selectedAnswers[item.id] ?? "",
+          })),
+        },
+        getAttemptIdempotencyKey(attemptIdempotencyKeyRef),
+      );
+      setAttempt(result);
+      setAttempts([toAttemptSummary(result)]);
+    } catch (error) {
+      setErrorMessage(toDisplayError(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   if (isLoading) {
     return <LoadingState />;
@@ -70,7 +119,7 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
           <AlertDescription className="mt-1 text-[#8b3f35]">{errorMessage ?? "题集不存在或你无权访问。"}</AlertDescription>
         </Alert>
         <Button asChild className="mt-6 rounded-none" variant="outline">
-          <Link href="/onboarding"><ArrowLeft aria-hidden />返回学习起点</Link>
+          <Link href="/goals"><ArrowLeft aria-hidden />返回学习目标</Link>
         </Button>
       </main>
     );
@@ -78,62 +127,159 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
-      <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" href={`/goals/${assessment.goal_id}/assessment`}>
+      <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" href="/goals">
         <ArrowLeft aria-hidden className="size-4" />
-        返回前测配置
+        返回学习目标列表
       </Link>
 
       <section className="mt-7 border border-border border-l-2 border-l-primary bg-card p-5 sm:p-8">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="max-w-2xl">
-            <div className="flex items-center gap-2 text-primary">
-              <BookOpenCheck aria-hidden className="size-4" />
-              <p className="text-xs tracking-[0.16em]">DIAGNOSTIC READY</p>
-            </div>
-            <h1 className="mt-3 font-heading text-3xl font-normal tracking-tight">你的前测题集已准备好</h1>
-            <p className="mt-3 text-sm leading-7 text-muted-foreground">
-              这份前测包含 {assessment.question_count} 道选择题。请按当前理解作答，不需要刻意追求正确率。
-            </p>
-          </div>
-          <div className="grid grid-cols-2 divide-x divide-border border border-border bg-background text-center">
-            <div className="px-4 py-3">
-              <p className="text-[11px] tracking-[0.13em] text-muted-foreground">DIFFICULTY</p>
-              <p className="mt-1 text-sm font-medium">{assessment.difficulty === "hard" ? "困难" : "正常"}</p>
-            </div>
-            <div className="px-4 py-3">
-              <p className="text-[11px] tracking-[0.13em] text-muted-foreground">SELECTED</p>
-              <p className="mt-1 text-sm font-medium">{answeredCount} / {assessment.items.length}</p>
-            </div>
-          </div>
-        </div>
+        <AssessmentHeader assessment={assessment} attempt={attempt} answeredCount={answeredCount} />
 
-        <Alert className="mt-7 rounded-none border-border bg-background" variant="default">
-          <AlertCircle aria-hidden className="size-4 text-primary" />
-          <AlertTitle>当前为题集展示阶段</AlertTitle>
-          <AlertDescription className="mt-1">
-            选择会暂存在当前浏览器，用于浏览进度；P0 尚未接入作答提交和评分接口，因此不会保存答案或显示分数。
-          </AlertDescription>
-        </Alert>
+        {errorMessage ? (
+          <Alert className="mt-7 rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+            <AlertCircle aria-hidden className="size-4" />
+            <AlertTitle className="text-[#8b3f35]">操作未完成</AlertTitle>
+            <AlertDescription className="mt-1 text-[#8b3f35]">{errorMessage}</AlertDescription>
+          </Alert>
+        ) : null}
 
-        <div className="mt-8 grid gap-5">
-          {assessment.items.map((item) => (
-            <QuestionCard
-              item={item}
-              key={item.id}
-              selectedOptionKey={selectedAnswers[item.id]}
-              onSelect={(optionKey) => setSelectedAnswers((current) => ({ ...current, [item.id]: optionKey }))}
-            />
-          ))}
-        </div>
+        {attempt ? (
+          <AssessmentResult
+            attempt={attempt}
+            attempts={attempts}
+            showOnlyWrong={showOnlyWrong}
+            onToggleWrong={() => setShowOnlyWrong((current) => !current)}
+          />
+        ) : (
+          <>
+            <Alert className="mt-7 rounded-none border-border bg-background" variant="default">
+              <AlertCircle aria-hidden className="size-4 text-primary" />
+              <AlertTitle>提交前不会显示答案或解析</AlertTitle>
+              <AlertDescription className="mt-1">
+                请按当前理解完成全部题目。提交后，系统会保存你的作答并立即给出得分和逐题解析。
+              </AlertDescription>
+            </Alert>
 
-        <div className="mt-8 flex flex-col-reverse gap-4 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">已选择 {answeredCount} / {assessment.items.length} 题。作答与评分能力将在后续迭代接入。</p>
-          <Button asChild className="h-10 rounded-none px-4" variant="outline">
-            <Link href="/onboarding"><CheckCircle2 aria-hidden />返回学习起点</Link>
-          </Button>
-        </div>
+            <div className="mt-8 grid gap-5">
+              {assessment.items.map((item) => (
+                <QuestionCard
+                  item={item}
+                  key={item.id}
+                  selectedOptionKey={selectedAnswers[item.id]}
+                  onSelect={(optionKey) => setSelectedAnswers((current) => ({ ...current, [item.id]: optionKey }))}
+                />
+              ))}
+            </div>
+
+            <div className="mt-8 flex flex-col-reverse gap-4 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">已选择 {answeredCount} / {assessment.items.length} 题。必须完成全部题目才可提交。</p>
+              <Button className="h-10 rounded-none px-4" disabled={!allAnswered || isSubmitting} onClick={() => void handleSubmit()} type="button">
+                {isSubmitting ? <LoaderCircle aria-hidden className="animate-spin" /> : <CheckCircle2 aria-hidden />}
+                {isSubmitting ? "正在评分" : "提交并查看结果"}
+              </Button>
+            </div>
+          </>
+        )}
       </section>
     </main>
+  );
+}
+
+function AssessmentHeader({
+  assessment,
+  attempt,
+  answeredCount,
+}: Readonly<{ assessment: Assessment; attempt: AssessmentAttempt | null; answeredCount: number }>) {
+  return (
+    <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+      <div className="max-w-2xl">
+        <div className="flex items-center gap-2 text-primary">
+          <BookOpenCheck aria-hidden className="size-4" />
+          <p className="text-xs tracking-[0.16em]">{attempt ? "DIAGNOSTIC RESULT" : "DIAGNOSTIC READY"}</p>
+        </div>
+        <h1 className="mt-3 font-heading text-3xl font-normal tracking-tight">{attempt ? "你的前测结果" : "你的前测题集已准备好"}</h1>
+        <p className="mt-3 text-sm leading-7 text-muted-foreground">
+          {attempt
+            ? "结果基于提交时保存的答案确定性评分，不会额外调用模型。"
+            : `这份前测包含 ${assessment.question_count} 道选择题，请按当前理解作答。`}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-border border border-border bg-background text-center">
+        <div className="px-4 py-3">
+          <p className="text-[11px] tracking-[0.13em] text-muted-foreground">{attempt ? "SCORE" : "DIFFICULTY"}</p>
+          <p className="mt-1 text-sm font-medium">{attempt ? `${attempt.score.score_percent}%` : assessment.difficulty === "hard" ? "困难" : "正常"}</p>
+        </div>
+        <div className="px-4 py-3">
+          <p className="text-[11px] tracking-[0.13em] text-muted-foreground">{attempt ? "CORRECT" : "SELECTED"}</p>
+          <p className="mt-1 text-sm font-medium">{attempt ? `${attempt.items.filter((item) => item.is_correct).length} / ${attempt.items.length}` : `${answeredCount} / ${assessment.items.length}`}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AssessmentResult({
+  attempt,
+  attempts,
+  showOnlyWrong,
+  onToggleWrong,
+}: Readonly<{
+  attempt: AssessmentAttempt;
+  attempts: AssessmentAttemptSummary[];
+  showOnlyWrong: boolean;
+  onToggleWrong: () => void;
+}>) {
+  const items = showOnlyWrong ? attempt.items.filter((item) => !item.is_correct) : attempt.items;
+  const wrongCount = attempt.items.filter((item) => !item.is_correct).length;
+
+  return (
+    <div className="mt-8">
+      <div className="grid gap-4 border-y border-border py-5 sm:grid-cols-3">
+        <ResultMetric label="总分" value={`${attempt.score.total_score} / ${attempt.score.max_score}`} />
+        <ResultMetric label="正确题数" value={`${attempt.items.length - wrongCount} / ${attempt.items.length}`} />
+        <ResultMetric label="错题数" value={String(wrongCount)} />
+      </div>
+
+      <div className="mt-7 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs tracking-[0.16em] text-primary">ANSWER REVIEW</p>
+          <h2 className="mt-2 font-heading text-2xl font-normal">逐题解析</h2>
+        </div>
+        <Button className="rounded-none" onClick={onToggleWrong} type="button" variant="outline">
+          {showOnlyWrong ? "查看全部题目" : `只看错题（${wrongCount}）`}
+        </Button>
+      </div>
+
+      {items.length > 0 ? (
+        <div className="mt-5 grid gap-5">
+          {items.map((item) => <ResultQuestionCard item={item} key={item.assessment_item_id} />)}
+        </div>
+      ) : (
+        <div className="mt-5 border border-dashed border-border bg-background px-5 py-10 text-center text-sm text-muted-foreground">本次没有错题。</div>
+      )}
+
+      <section className="mt-8 border-t border-border pt-6">
+        <p className="text-xs tracking-[0.16em] text-primary">ATTEMPT HISTORY</p>
+        <h2 className="mt-2 font-heading text-2xl font-normal">作答记录</h2>
+        <div className="mt-4 grid gap-3">
+          {attempts.map((summary) => (
+            <div className="flex flex-wrap items-center justify-between gap-3 border border-border bg-background px-4 py-3 text-sm" key={summary.id}>
+              <span>第 {summary.attempt_no} 次作答</span>
+              <span className="text-muted-foreground">{summary.score_percent}% · {summary.wrong_count} 道错题</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ResultMetric({ label, value }: Readonly<{ label: string; value: string }>) {
+  return (
+    <div>
+      <p className="text-xs tracking-[0.13em] text-muted-foreground">{label}</p>
+      <p className="mt-2 font-heading text-2xl">{value}</p>
+    </div>
   );
 }
 
@@ -151,9 +297,7 @@ function QuestionCard({
       <legend className="sr-only">第 {item.ordinal} 题</legend>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex gap-4">
-          <span className="grid size-7 shrink-0 place-items-center border border-primary text-xs font-medium text-primary">
-            {String(item.ordinal).padStart(2, "0")}
-          </span>
+          <span className="grid size-7 shrink-0 place-items-center border border-primary text-xs font-medium text-primary">{String(item.ordinal).padStart(2, "0")}</span>
           <p className="pt-0.5 leading-7">{item.prompt}</p>
         </div>
         <span className="shrink-0 text-xs text-muted-foreground">{item.max_score} 分</span>
@@ -163,32 +307,38 @@ function QuestionCard({
         {item.options.map((option) => {
           const isSelected = selectedOptionKey === option.key;
           return (
-            <label
-              className={`flex cursor-pointer items-start gap-3 border px-4 py-3 text-sm leading-6 transition-colors ${isSelected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/60"}`}
-              key={option.key}
-            >
-              <input
-                checked={isSelected}
-                className="mt-1 accent-primary"
-                name={`assessment-item-${item.id}`}
-                onChange={() => onSelect(option.key)}
-                type="radio"
-                value={option.key}
-              />
+            <label className={`flex cursor-pointer items-start gap-3 border px-4 py-3 text-sm leading-6 transition-colors ${isSelected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/60"}`} key={option.key}>
+              <input checked={isSelected} className="mt-1 accent-primary" name={`assessment-item-${item.id}`} onChange={() => onSelect(option.key)} type="radio" value={option.key} />
               <span><strong className="mr-2 font-medium text-primary">{option.key}.</strong>{option.text}</span>
             </label>
           );
         })}
       </div>
-
-      {item.skill_tags.length > 0 ? (
-        <div className="mt-4 flex flex-wrap gap-2 sm:pl-11">
-          {item.skill_tags.map((tag) => (
-            <span className="border border-border px-2 py-0.5 text-xs text-muted-foreground" key={tag}>{tag}</span>
-          ))}
-        </div>
-      ) : null}
     </fieldset>
+  );
+}
+
+function ResultQuestionCard({ item }: Readonly<{ item: AssessmentAttempt["items"][number] }>) {
+  const selectedOption = item.options.find((option) => option.key === item.selected_option_key);
+  const correctOption = item.options.find((option) => option.key === item.correct_option_key);
+  return (
+    <article className={`border p-5 ${item.is_correct ? "border-primary/50 bg-primary/5" : "border-[#d9b4a9] bg-[#fff8f5]"}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex gap-4">
+          <span className={`grid size-7 shrink-0 place-items-center border text-xs font-medium ${item.is_correct ? "border-primary text-primary" : "border-[#a94e43] text-[#a94e43]"}`}>{String(item.ordinal).padStart(2, "0")}</span>
+          <p className="pt-0.5 leading-7">{item.prompt}</p>
+        </div>
+        <span className={`text-sm font-medium ${item.is_correct ? "text-primary" : "text-[#a94e43]"}`}>{item.is_correct ? "回答正确" : "需要复习"}</span>
+      </div>
+      <div className="mt-5 grid gap-3 border-t border-current/15 pt-4 text-sm sm:grid-cols-2 sm:pl-11">
+        <p><span className="text-muted-foreground">你的答案：</span>{item.selected_option_key}. {selectedOption?.text ?? "未知选项"}</p>
+        <p><span className="text-muted-foreground">正确答案：</span>{item.correct_option_key}. {correctOption?.text ?? "未知选项"}</p>
+      </div>
+      <div className="mt-4 border-t border-current/15 pt-4 sm:pl-11">
+        <p className="text-xs tracking-[0.13em] text-muted-foreground">解析</p>
+        <p className="mt-2 text-sm leading-7">{item.explanation}</p>
+      </div>
+    </article>
   );
 }
 
@@ -201,6 +351,24 @@ function LoadingState() {
       </div>
     </main>
   );
+}
+
+function getAttemptIdempotencyKey(reference: { current: string | null }): string {
+  reference.current ??= crypto.randomUUID();
+  return reference.current;
+}
+
+function toAttemptSummary(attempt: AssessmentAttempt): AssessmentAttemptSummary {
+  return {
+    id: attempt.id,
+    assessment_id: attempt.assessment_id,
+    attempt_no: attempt.attempt_no,
+    status: attempt.status,
+    score_percent: attempt.score.score_percent,
+    wrong_count: attempt.items.filter((item) => !item.is_correct).length,
+    submitted_at: attempt.submitted_at,
+    graded_at: attempt.graded_at,
+  };
 }
 
 function toDisplayError(error: unknown): string {

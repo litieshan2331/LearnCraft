@@ -4,6 +4,7 @@
  * 导出：
  * - createAssessmentRun、getAgentRun、cancelAgentRun：创建、轮询和协作式取消前测生成任务。
  * - getAssessment：读取已生成且不包含答案的题集。
+ * - submitAssessmentAttempt、getAssessmentAttempts、getAssessmentAttempt：提交作答并读取评分结果与历史摘要。
  * - AssessmentApiError：向展示层提供稳定的接口错误信息。
  */
 
@@ -70,6 +71,57 @@ export interface Assessment {
   updated_at: string;
 }
 
+export interface AssessmentAttemptSubmissionRequest {
+  answers: Array<{
+    assessment_item_id: string;
+    selected_option_key: string;
+  }>;
+}
+
+export interface AssessmentAttemptSummary {
+  id: string;
+  assessment_id: string;
+  attempt_no: number;
+  status: "graded";
+  score_percent: number;
+  wrong_count: number;
+  submitted_at: string;
+  graded_at: string;
+}
+
+export interface AssessmentAttemptItem extends AssessmentItem {
+  assessment_item_id: string;
+  selected_option_key: string;
+  correct_option_key: string;
+  is_correct: boolean;
+  score: number;
+  explanation: string;
+  weakness_tags: string[];
+}
+
+export interface AssessmentAttempt {
+  id: string;
+  assessment_id: string;
+  attempt_no: number;
+  status: "graded";
+  score: {
+    total_score: number;
+    max_score: number;
+    score_percent: number;
+  };
+  mastery_summary: Record<string, unknown>;
+  grading_version: string;
+  submitted_at: string;
+  graded_at: string;
+  created_at: string;
+  updated_at: string;
+  items: AssessmentAttemptItem[];
+}
+
+interface AssessmentAttemptListResponse {
+  items: AssessmentAttemptSummary[];
+}
+
 interface ApiErrorResponse {
   error?: {
     code?: string;
@@ -113,6 +165,27 @@ export function cancelAgentRun(agentRunId: string): Promise<AgentRun> {
 
 export function getAssessment(assessmentId: string): Promise<Assessment> {
   return requestJson<Assessment>(`/api/v1/assessments/${assessmentId}`);
+}
+
+export function submitAssessmentAttempt(
+  assessmentId: string,
+  input: AssessmentAttemptSubmissionRequest,
+  idempotencyKey: string,
+): Promise<AssessmentAttempt> {
+  return requestJson<AssessmentAttempt>(`/api/v1/assessments/${assessmentId}/attempts`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getAssessmentAttempts(assessmentId: string): Promise<AssessmentAttemptSummary[]> {
+  const payload = await requestJson<AssessmentAttemptListResponse>(`/api/v1/assessments/${assessmentId}/attempts`);
+  return payload.items;
+}
+
+export function getAssessmentAttempt(attemptId: string): Promise<AssessmentAttempt> {
+  return requestJson<AssessmentAttempt>(`/api/v1/assessment-attempts/${attemptId}`);
 }
 
 async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {

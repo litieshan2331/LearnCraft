@@ -345,6 +345,93 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /api/v1/assessments/{assessment_id}/attempts:
+    get:
+      tags: [Assessment]
+      summary: 获取当前用户在题集下的历史作答摘要
+      operationId: list_assessment_attempts
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AssessmentId'
+      responses:
+        '200':
+          description: 当前题集已评分的历史作答，按作答序号倒序返回。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssessmentAttemptList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Assessment]
+      summary: 提交完整选择答案并完成确定性评分
+      description: 仅可提交题集中的全部单选题一次。服务端根据生成题集时已保存的答案键评分；成功响应才包含正确答案和解析，不会额外调用模型。
+      operationId: submit_assessment_attempt
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AssessmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssessmentAttemptSubmissionRequest'
+      responses:
+        '201':
+          description: 作答已保存并完成评分。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssessmentAttempt'
+        '200':
+          description: 同一幂等键安全重试，返回原有评分结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssessmentAttempt'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 题集不可提交、已提交，或幂等键与不同答案冲突。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/assessment-attempts/{attempt_id}:
+    get:
+      tags: [Assessment]
+      summary: 获取单次作答的评分详情和错题解析
+      operationId: get_assessment_attempt
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AssessmentAttemptId'
+      responses:
+        '200':
+          description: 仅向作答所有者返回提交后的答案、正确答案、解析和得分。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssessmentAttempt'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/model-connections:
     get:
       tags: [模型连接]
@@ -610,6 +697,14 @@ components:
       in: path
       required: true
       description: 题集 ID。
+      schema:
+        type: string
+        format: uuid
+    AssessmentAttemptId:
+      name: attempt_id
+      in: path
+      required: true
+      description: 题集作答 ID。
       schema:
         type: string
         format: uuid
@@ -1152,6 +1247,161 @@ components:
           pattern: '^[A-F]$'
         text:
           type: string
+    AssessmentAttemptSubmissionRequest:
+      type: object
+      additionalProperties: false
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          minItems: 1
+          maxItems: 20
+          description: 必须覆盖题集中的每一道题，同一题目不得重复出现。
+          items:
+            type: object
+            additionalProperties: false
+            required: [assessment_item_id, selected_option_key]
+            properties:
+              assessment_item_id:
+                type: string
+                format: uuid
+              selected_option_key:
+                type: string
+                pattern: '^[A-F]$'
+    AssessmentAttemptList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssessmentAttemptSummary'
+    AssessmentAttemptSummary:
+      type: object
+      additionalProperties: false
+      required: [id, assessment_id, attempt_no, status, score_percent, wrong_count, submitted_at, graded_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        assessment_id:
+          type: string
+          format: uuid
+        attempt_no:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [graded]
+        score_percent:
+          type: number
+          minimum: 0
+          maximum: 100
+        wrong_count:
+          type: integer
+          minimum: 0
+        submitted_at:
+          type: string
+          format: date-time
+        graded_at:
+          type: string
+          format: date-time
+    AssessmentAttempt:
+      type: object
+      additionalProperties: false
+      required: [id, assessment_id, attempt_no, status, score, mastery_summary, grading_version, submitted_at, graded_at, created_at, updated_at, items]
+      properties:
+        id:
+          type: string
+          format: uuid
+        assessment_id:
+          type: string
+          format: uuid
+        attempt_no:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [graded]
+        score:
+          type: object
+          additionalProperties: false
+          required: [total_score, max_score, score_percent]
+          properties:
+            total_score:
+              type: number
+              minimum: 0
+            max_score:
+              type: number
+              exclusiveMinimum: 0
+            score_percent:
+              type: number
+              minimum: 0
+              maximum: 100
+        mastery_summary:
+          type: object
+          additionalProperties: true
+        grading_version:
+          type: string
+        submitted_at:
+          type: string
+          format: date-time
+        graded_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssessmentAttemptItem'
+    AssessmentAttemptItem:
+      type: object
+      additionalProperties: false
+      required: [assessment_item_id, ordinal, prompt, options, skill_tags, max_score, selected_option_key, correct_option_key, is_correct, score, explanation, weakness_tags]
+      properties:
+        assessment_item_id:
+          type: string
+          format: uuid
+        ordinal:
+          type: integer
+          minimum: 1
+        prompt:
+          type: string
+        options:
+          type: array
+          minItems: 2
+          items:
+            $ref: '#/components/schemas/AssessmentOption'
+        skill_tags:
+          type: array
+          items:
+            type: string
+        max_score:
+          type: number
+          exclusiveMinimum: 0
+        selected_option_key:
+          type: string
+          pattern: '^[A-F]$'
+        correct_option_key:
+          type: string
+          pattern: '^[A-F]$'
+        is_correct:
+          type: boolean
+        score:
+          type: number
+          minimum: 0
+        explanation:
+          type: string
+        weakness_tags:
+          type: array
+          items:
+            type: string
     AssessmentGenerationRequest:
       type: object
       additionalProperties: false

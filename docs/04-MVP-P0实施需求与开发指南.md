@@ -1086,10 +1086,10 @@ HTTP/1.1 201 Created
 | `GET /api/v1/learning-goals/{goal_id}` | 读取目标及当前状态 | `200` Goal |
 | `DELETE /api/v1/learning-goals/{goal_id}` | 硬删除当前用户目标 | `204`；仅当没有 `queued`/`running` AgentRun 时删除。否则返回 `409 GOAL_HAS_ACTIVE_RUNS`，用户先取消任务再重试；关联业务数据、AgentRun、事件与 Outbox 一并清理。 |
 | `POST /api/v1/learning-goals/{goal_id}/assessment-runs` | 请求前测生成 | `202`；成功后从 AgentRun 的 `assessment_result.assessment_id` 读取题集 |
-| `GET /api/v1/assessments/{assessment_id}` | 读取题目或已评分结果 | `200`；交卷前不包含答案/解析，`graded` 后仅题主可读自己的作答、正确答案和逐题解析；不返回系统提示词或密钥 |
-| `POST /api/v1/assessments/{assessment_id}/attempts` | 创建/恢复一次作答 | `201` Attempt |
-| `PUT /api/v1/assessment-attempts/{attempt_id}/answers/{item_id}` | 保存单题答案 | `200` Answer 摘要 |
-| `POST /api/v1/assessment-attempts/{attempt_id}/submit` | 提交并确定性评分 | `200`；返回 attempt 状态、得分、薄弱点、正确答案和逐题解析；不调用模型 |
+| `GET /api/v1/assessments/{assessment_id}` | 读取题目 | `200`；交卷前仅返回题干和选项，绝不包含答案或解析 |
+| `POST /api/v1/assessments/{assessment_id}/attempts` | 一次性提交完整答案并确定性评分 | `201`；保存唯一 Attempt，立即返回得分、正确答案、逐题解析和薄弱点；不调用模型。相同幂等键重试返回 `200` 原结果 |
+| `GET /api/v1/assessments/{assessment_id}/attempts` | 查询题集作答历史摘要 | `200`；返回该题集当前用户的已评分 Attempt、得分和错题数量 |
+| `GET /api/v1/assessment-attempts/{attempt_id}` | 读取单次作答评分详情 | `200`；仅题主可查看自己的选择、正确答案、逐题解析和分数 |
 
 创建目标示例：
 
@@ -1144,26 +1144,39 @@ HTTP/1.1 201 Created
 ```
 
 ```http
-POST /api/v1/assessment-attempts/{attempt_id}/submit
+POST /api/v1/assessments/{assessment_id}/attempts
 Idempotency-Key: 45eea8f4-1b19-4512-a702-5dd991e28122
 Content-Type: application/json
 
 {
   "answers": [
     {
-      "item_id": "choice-item-uuid",
-      "answer": { "selected_option_id": "B" }
+      "assessment_item_id": "choice-item-uuid",
+      "selected_option_key": "B"
     }
   ]
 }
 
-HTTP/1.1 200 OK
+HTTP/1.1 201 Created
 
 {
-  "attempt_id": "attempt-uuid",
+  "id": "attempt-uuid",
+  "assessment_id": "assessment-uuid",
   "status": "graded",
-  "score_percent": 100,
-  "weakness_tags": []
+  "score": {
+    "total_score": 10,
+    "max_score": 12,
+    "score_percent": 83.33
+  },
+  "items": [
+    {
+      "assessment_item_id": "choice-item-uuid",
+      "selected_option_key": "B",
+      "correct_option_key": "B",
+      "is_correct": true,
+      "explanation": "列表使用中括号表示。"
+    }
+  ]
 }
 ```
 

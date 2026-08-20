@@ -22,6 +22,9 @@ export default function LearnLayout({ children }: Readonly<{ children: React.Rea
               <Link className="text-muted-foreground transition-colors hover:text-foreground" href="/onboarding">
                 学习起点
               </Link>
+              <Link className="text-muted-foreground transition-colors hover:text-foreground" href="/goals">
+                我的目标
+              </Link>
               <Link className="text-muted-foreground transition-colors hover:text-foreground" href="/settings/models">
                 模型连接
               </Link>

@@ -3,7 +3,8 @@
  *
  * 导出：
  * - getLearnerProfile、saveLearnerProfile：读取和保存当前用户画像。
- * - createLearningGoal、getLearningGoal：创建和读取当前用户的学习目标。
+ * - createLearningGoal、getLearningGoal、getLearningGoals：创建和读取当前用户的学习目标。
+ * - deleteLearningGoal：删除没有进行中任务的学习目标。
  * - ProfileApiError：向展示层提供稳定的接口错误信息。
  */
 
@@ -55,6 +56,30 @@ export interface LearningGoal {
   updated_at: string;
 }
 
+export type LatestAssessmentStatus =
+  | "generating"
+  | "ready"
+  | "in_progress"
+  | "submitted"
+  | "grading"
+  | "graded"
+  | "failed"
+  | "archived";
+
+export interface LatestAssessmentSummary {
+  id: string;
+  status: LatestAssessmentStatus;
+  question_count: number | null;
+  difficulty: "normal" | "hard";
+  score_percent: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LearningGoalListItem extends LearningGoal {
+  latest_assessment: LatestAssessmentSummary | null;
+}
+
 export interface LearningGoalCreateRequest {
   topic: string;
   title: string;
@@ -67,6 +92,10 @@ export interface LearningGoalCreateRequest {
 
 interface LearnerProfileResponse {
   profile: LearnerProfile | null;
+}
+
+interface LearningGoalListResponse {
+  items: LearningGoalListItem[];
 }
 
 interface ApiErrorResponse {
@@ -115,6 +144,17 @@ export function getLearningGoal(goalId: string): Promise<LearningGoal> {
   return requestJson<LearningGoal>(`/api/v1/learning-goals/${goalId}`);
 }
 
+export async function getLearningGoals(): Promise<LearningGoalListItem[]> {
+  const payload = await requestJson<LearningGoalListResponse>("/api/v1/learning-goals");
+  return payload.items;
+}
+
+export function deleteLearningGoal(goalId: string): Promise<void> {
+  return requestJson<void>(`/api/v1/learning-goals/${goalId}`, {
+    method: "DELETE",
+  });
+}
+
 async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -127,6 +167,10 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
 
   if (!response.ok) {
     throw await createApiError(response);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;
