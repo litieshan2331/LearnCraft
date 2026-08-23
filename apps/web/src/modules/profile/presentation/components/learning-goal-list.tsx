@@ -5,7 +5,7 @@
  * - LearningGoalList：加载并展示当前用户的全部学习目标。
  * - GoalCard：展示单个目标、前测状态和可执行操作。
  * - formatUpdatedAt：将更新时间格式化为中文日期。
- * - getGoalStatusLabel、getAssessmentStatusLabel：转换业务状态文案。
+ * - getAssessmentStatusLabel：转换前测状态文案。
  */
 
 "use client";
@@ -19,7 +19,6 @@ import {
   getLearningGoals,
   ProfileApiError,
   type LearningGoalListItem,
-  type LearningGoalStatus,
   type LatestAssessmentStatus,
 } from "../api/profile-client";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
@@ -159,12 +158,9 @@ function GoalCard({
 
   return (
     <article className="border border-border border-l-2 border-l-primary bg-card p-5 sm:p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="truncate text-xs tracking-[0.16em] text-primary">{goal.topic}</p>
-          <h2 className="mt-3 font-heading text-2xl font-normal tracking-tight">{goal.title}</h2>
-        </div>
-        <span className="shrink-0 border border-border px-2 py-1 text-xs text-muted-foreground">{getGoalStatusLabel(goal.status)}</span>
+      <div className="min-w-0">
+        <p className="truncate text-xs tracking-[0.16em] text-primary">{goal.topic}</p>
+        <h2 className="mt-3 font-heading text-2xl font-normal tracking-tight">{goal.title}</h2>
       </div>
 
       <p className="mt-4 line-clamp-2 text-sm leading-7 text-muted-foreground">{goal.description}</p>
@@ -243,19 +239,6 @@ function EmptyState() {
   );
 }
 
-function getGoalStatusLabel(status: LearningGoalStatus): string {
-  const labels: Record<LearningGoalStatus, string> = {
-    draft: "草稿",
-    assessment_pending: "等待前测",
-    assessment_in_progress: "前测生成中",
-    planning: "规划中",
-    active: "学习中",
-    completed: "已完成",
-    archived: "已归档",
-    failed: "需要处理",
-  };
-  return labels[status];
-}
 
 function getAssessmentStatusLabel(status: LatestAssessmentStatus): string {
   const labels: Record<LatestAssessmentStatus, string> = {

@@ -79,9 +79,9 @@ export function LearningGoalDetail({ goalId }: Readonly<{ goalId: string }>) {
           <p className="text-xs tracking-[0.14em] text-primary">DESIRED OUTCOME</p>
           <p className="mt-3 leading-8">{goal.desired_outcome}</p>
         </div>
-        <div className="mt-7 grid gap-4 border-t border-border pt-6 text-sm sm:grid-cols-2">
-          <div><p className="text-xs text-muted-foreground">目标状态</p><p className="mt-1">{getGoalStatusLabel(goal.status)}</p></div>
-          <div><p className="text-xs text-muted-foreground">目标日期</p><p className="mt-1">{goal.target_date ?? "未设置"}</p></div>
+        <div className="mt-7 border-t border-border pt-6 text-sm">
+          <p className="text-xs text-muted-foreground">目标日期</p>
+          <p className="mt-1">{goal.target_date ?? "未设置"}</p>
         </div>
         {primaryAction.href ? (
           <Button asChild className="mt-8 rounded-none">
@@ -109,18 +109,4 @@ function getPrimaryAction(
     return { label: "开始前测", href: `/goals/${goal.id}/assessment` };
   }
   return { label: "返回目标列表", href: "/goals" };
-}
-
-function getGoalStatusLabel(status: LearningGoal["status"]): string {
-  const labels: Record<LearningGoal["status"], string> = {
-    draft: "草稿",
-    assessment_pending: "等待前测",
-    assessment_in_progress: "前测生成中",
-    planning: "规划中",
-    active: "学习中",
-    completed: "已完成",
-    archived: "已归档",
-    failed: "需要处理",
-  };
-  return labels[status];
 }

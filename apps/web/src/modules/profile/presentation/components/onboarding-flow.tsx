@@ -346,7 +346,7 @@ function LearningGoalForm({
 
         <Field data-invalid={Boolean(form.formState.errors.title)}>
           <FieldLabel htmlFor="goal-title">目标名称</FieldLabel>
-          <Input id="goal-title" maxLength={200} placeholder="例如：用 6 周完成一个 Vue 3 数据看板" {...form.register("title")} />
+          <Input id="goal-title" maxLength={200} placeholder="例如：熟练掌握TypeScript语言和Next.js框架" {...form.register("title")} />
           <FieldError errors={[form.formState.errors.title]} />
         </Field>
 

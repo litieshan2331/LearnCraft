@@ -7,6 +7,7 @@
 `assessment_generate` 的结果由 Worker 通过内部共享密钥提交到 Web；Web 才负责在事务中写入题集表。首次联调前，请在 `infra/.env` 设置 `TAVILY_API_KEY`，并确认 `MODEL_EGRESS_ENABLED=true`、账户存在 active 且 default 的模型连接。没有 Tavily Key 或配额 Redis 时，任务会返回结构化失败，不会静默绕过工具限制。
 
 `compose.yaml` 提供 P0 本地开发与联调基线：PostgreSQL + pgvector、认证限流 Redis、独立的 Celery Redis Broker、MinIO、Web、Agent API、Outbox Dispatcher 与 Celery Worker。Web 默认使用 `next dev` 并挂载前端源码，以支持热更新。它不自动执行 Drizzle 迁移、不启动代码 Runner；配置 `TAVILY_API_KEY`、凭据密钥和模型出网后，可运行 `assessment_generate` 题集工作流。
+Python Agent 的开发源码 `apps/agent-worker/src` 同样会被挂载：`agent-api` 使用 Uvicorn 重载，`agent-dispatcher` 与 `agent-celery-worker` 使用 `watchfiles` 重启各自的子进程。保存 `.py` 文件不需要重启 Docker 容器，也不会自动执行数据库迁移。
 
 `private` 是本地开发服务的共享网络，并不自动将端口开放给宿主机；是否可从 Windows 访问仍只由服务的 `ports` 配置决定。当前 Web、PostgreSQL、MinIO 与 Agent Worker 都绑定到 `127.0.0.1`，只供本机开发调试，不向局域网暴露。
 
@@ -29,9 +30,13 @@ docker compose ps
 
 日常可在 Docker Desktop 的 LearnCraft Compose 应用中直接启动、停止或重启服务。首次启动，或 Dockerfile、依赖、`compose.yaml` 改动后，需要在 Docker Desktop 重新构建镜像，或执行 `docker compose up --build -d`。请勿随意删除 Compose 应用；停止服务不会移除数据库和 MinIO 的命名卷。
 
-## Web 热更新开发模式
+## Web 与 Python Agent 热更新开发模式
 
 本地 `compose.yaml` 已直接采用开发模式：Web 使用 `next dev`，并挂载 `apps/web` 与 `packages/contracts`。日常开发只使用这一份 Compose 文件，不再使用 `compose.dev.yaml`；因此保存 `apps/web/src` 下的 `.ts`、`.tsx` 或 `.css` 文件后，Next.js 会执行 Fast Refresh。
+保存 `apps/agent-worker/src` 中的 `.py` 文件后，`agent-api` 会由 Uvicorn 自动重载；`agent-dispatcher` 和 `agent-celery-worker` 会由 `watchfiles` 优雅重启其子进程，Docker 容器本身保持运行。正在执行的 AgentRun 可能因 Worker 子进程重启而中断并按既有重试策略恢复，因此联调中的长任务应避免在保存时依赖不中断执行。
+
+`apps/agent-worker/pyproject.toml`、`uv.lock`、Dockerfile、`compose.yaml` 或环境变量变更仍需执行 `docker compose up --build -d`；数据库迁移继续由手动执行的 `pnpm db:migrate` 管理。
+
 
 在仓库根目录执行：
 

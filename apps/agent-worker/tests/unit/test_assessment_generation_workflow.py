@@ -16,6 +16,7 @@ from learncraft_agent.infrastructure.persistence.repositories.sqlalchemy_agent_r
 )
 from learncraft_agent.workflows.assessment_generate import (
     AssessmentGenerationInput,
+    AssessmentQuestionSet,
     AssessmentGenerationWorkflow,
 )
 
@@ -56,3 +57,28 @@ def test_assessment_request_allows_model_to_decide_tavily_usage() -> None:
     assert '不要为调用工具而调用工具' in request.messages[0].content
     assert 'schema_version' in request.messages[0].content
     assert 'questions' in request.messages[0].content
+    assert '简体中文' in request.messages[0].content
+    assert '双重转义' in request.messages[0].content
+
+
+def test_assessment_question_set_normalizes_double_escaped_markdown_newlines() -> None:
+    '''整段题干被双重转义时应在入库前还原结构换行，代码字符串的转义语义不变。'''
+    source_question = {
+        'prompt': r'请阅读这段 TypeScript 代码：\n\n```ts\nconst separator = "\\n";\n```',
+        'options': [
+            {'key': 'A', 'text': '第一个选项'},
+            {'key': 'B', 'text': '第二个选项'},
+        ],
+        'answer_key': 'A',
+        'explanation': r'代码中的换行展示如下：\n\n```ts\nconsole.log("ok");\n```',
+        'skill_tags': ['TypeScript'],
+        'max_score': 1,
+    }
+
+    question_set = AssessmentQuestionSet.model_validate({
+        'questions': [source_question for _ in range(5)],
+    })
+
+    question = question_set.questions[0]
+    assert question.prompt == '请阅读这段 TypeScript 代码：\n\n```ts\nconst separator = "\\n";\n```'
+    assert question.explanation == '代码中的换行展示如下：\n\n```ts\nconsole.log("ok");\n```'

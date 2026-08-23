@@ -137,10 +137,22 @@ services:
     build:
       context: ..
       dockerfile: infra/docker/agent-worker.Dockerfile
+    command:
+      - uvicorn
+      - learncraft_agent.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/src
     restart: unless-stopped
     environment:
       APP_VERSION: ${APP_VERSION:-0.1.0}
       GIT_SHA: ${GIT_SHA:-unknown}
+      # Windows Docker 绑定挂载使用轮询，保证保存 Python 文件后触发 Uvicorn 重载。
+      WATCHFILES_FORCE_POLLING: "true"
       CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
     depends_on:
@@ -149,6 +161,11 @@ services:
     ports:
       # 仅供本机独立调试 Worker 接口，不能从局域网访问。
       - "127.0.0.1:${AGENT_WORKER_HOST_PORT:-8000}:8000"
+    volumes:
+      # 仅挂载 Python 源码；依赖仍来自镜像，依赖变更需重新构建。
+      - type: bind
+        source: ../apps/agent-worker/src
+        target: /app/src
     healthcheck:
       test: ["CMD", "python", "-c", "from urllib.request import urlopen; response = urlopen('http://127.0.0.1:8000/health'); raise SystemExit(0 if response.status == 200 else 1)"]
       interval: 10s
@@ -161,7 +178,19 @@ services:
     build:
       context: ..
       dockerfile: infra/docker/agent-worker.Dockerfile
-    command: ["learncraft-agent-dispatcher"]
+    command:
+      - watchfiles
+      - --filter
+      - python
+      - --ignore-permission-denied
+      - --grace-period
+      - "1"
+      - --sigint-timeout
+      - "30"
+      - --target-type
+      - command
+      - learncraft-agent-dispatcher
+      - /app/src
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -180,12 +209,19 @@ services:
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
       OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-900}
       OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-10}
+      # Windows Docker 绑定挂载使用轮询，保证保存 Python 文件后重启 Dispatcher 子进程。
+      WATCHFILES_FORCE_POLLING: "true"
     depends_on:
       postgres:
         condition: service_healthy
       celery-redis:
         condition: service_healthy
     stop_grace_period: 30s
+    volumes:
+      # 只挂载 Python 源码；依赖仍来自镜像，依赖变更需重新构建。
+      - type: bind
+        source: ../apps/agent-worker/src
+        target: /app/src
     networks: [private]
 
   agent-celery-worker:
@@ -193,14 +229,23 @@ services:
       context: ..
       dockerfile: infra/docker/agent-worker.Dockerfile
     command:
-      - celery
-      - -A
-      - learncraft_agent.core.celery_app:celery_app
-      - worker
-      - --loglevel=INFO
+      - watchfiles
+      - --filter
+      - python
+      - --ignore-permission-denied
+      - --grace-period
+      - "1"
+      - --sigint-timeout
+      - "600"
+      - --target-type
+      - command
+      - "celery -A learncraft_agent.core.celery_app:celery_app worker --loglevel=INFO"
+      - /app/src
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Windows Docker 绑定挂载使用轮询，保证保存 Python 文件后重启 Celery Worker 子进程。
+      WATCHFILES_FORCE_POLLING: "true"
       CELERY_BROKER_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
       CELERY_QUEUE_NAME: ${CELERY_QUEUE_NAME:-agent.run}
       CELERY_REDIS_KEY_PREFIX: ${CELERY_REDIS_KEY_PREFIX:-learncraft:celery:}
@@ -245,6 +290,11 @@ services:
       web:
         condition: service_healthy
     stop_grace_period: 11m
+    volumes:
+      # 只挂载 Python 源码；依赖仍来自镜像，依赖变更需重新构建。
+      - type: bind
+        source: ../apps/agent-worker/src
+        target: /app/src
     networks: [private, egress]
 
 networks:

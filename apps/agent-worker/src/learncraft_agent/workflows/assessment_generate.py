@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from learncraft_agent.acl.web_core_internal_client import WebCoreInternalClient
 from learncraft_agent.application.ports.model_gateway import ModelCompletionRequest, ModelGatewayError, ModelMessage, ModelProviderConnection
@@ -20,6 +20,31 @@ from learncraft_agent.infrastructure.llm.openai_compatible_model_gateway import 
 from learncraft_agent.infrastructure.llm.safe_egress_client import get_safe_model_egress_client
 from learncraft_agent.infrastructure.mcp.tavily_remote_mcp import TAVILY_SEARCH_TOOL, TavilyRemoteMcpToolGateway
 from learncraft_agent.infrastructure.persistence.repositories.sqlalchemy_agent_run_repository import AgentRunExecutionState
+
+
+def _normalize_double_escaped_markdown_newlines(value: str) -> str:
+    '''还原整段 Markdown 中被模型双重转义的结构换行，同时保留代码字符串自己的转义语义。'''
+    if '\n' in value or r'\n' not in value or '```' not in value:
+        return value
+
+    normalized: list[str] = []
+    index = 0
+    while index < len(value):
+        if value.startswith(r'\r\n', index):
+            normalized.append('\n')
+            index += 4
+            continue
+        if value.startswith(r'\n', index):
+            normalized.append('\n')
+            index += 2
+            continue
+        if value.startswith(r'\\', index):
+            normalized.append('\\')
+            index += 2
+            continue
+        normalized.append(value[index])
+        index += 1
+    return ''.join(normalized)
 
 
 class AssessmentGenerationInput(BaseModel):
@@ -62,6 +87,12 @@ class AssessmentQuestion(BaseModel):
     explanation: str = Field(min_length=1, max_length=2_000)
     skill_tags: list[str] = Field(default_factory=list, max_length=10)
     max_score: float = Field(default=1, gt=0, le=100)
+    @field_validator('prompt', 'explanation')
+    @classmethod
+    def normalize_markdown_newlines(cls, value: str) -> str:
+        '''在持久化前规范化整段 Markdown 的双重换行转义，不因该格式问题阻断入库。'''
+        return _normalize_double_escaped_markdown_newlines(value)
+
 
     @model_validator(mode='after')
     def validate_answer_key(self) -> 'AssessmentQuestion':
@@ -124,7 +155,10 @@ class AssessmentGenerationWorkflow:
         '''构造允许模型按主题时效性自主使用搜索，并最终输出 JSON 的模型请求。'''
         empty = ''
         system = (
-            '你是 LearnCraft 程序员学习评估题目设计师。题目必须是单选题，最终只输出一个严格 JSON 对象，不要输出 Markdown 或解释文字。'
+            '你是 LearnCraft 程序员学习评估题目设计师。题目必须是单选题，最终只输出一个严格 JSON 对象，不要输出对象外的 Markdown 或解释文字。'
+            '所有面向学习者的自然语言，包括题干、选项、解析与能力标签，必须使用简体中文；技术专有名词可保留英文。'
+            '题干或解析需要展示代码时，使用标准 Markdown 三反引号代码围栏；语言标签、代码、命令和标识符保持英文。'
+            'JSON 字符串中的结构换行必须使用单层转义 \\n，绝不能使用双重转义 \\\\n；代码中原本需要表示换行字符时保留其自身的转义语义。'
             '当主题涉及近期版本、快速变化的 API、兼容性、官方规范，或你对事实没有足够把握时，使用 tavily_search 获取可靠资料。'
             '对于稳定且你有足够把握的基础知识，可直接生成题目；不要为调用工具而调用工具。'
             'JSON 顶层只能包含 schema_version 和 questions：schema_version 固定为 assessment.single_choice.v1；questions 必须是题目数组。'

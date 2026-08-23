@@ -160,7 +160,7 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
               </AlertDescription>
             </Alert>
 
-            <div className="mt-8 grid gap-5">
+            <div className="mt-8 grid min-w-0 gap-5">
               {assessment.items.map((item) => (
                 <QuestionCard
                   item={item}
@@ -293,12 +293,12 @@ function QuestionCard({
   onSelect: (optionKey: string) => void;
 }>) {
   return (
-    <fieldset className="border border-border bg-background p-5">
+    <fieldset className="min-w-0 max-w-full border border-border bg-background p-5">
       <legend className="sr-only">第 {item.ordinal} 题</legend>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex gap-4">
+        <div className="flex min-w-0 flex-1 gap-4">
           <span className="grid size-7 shrink-0 place-items-center border border-primary text-xs font-medium text-primary">{String(item.ordinal).padStart(2, "0")}</span>
-          <p className="pt-0.5 leading-7">{item.prompt}</p>
+          <AssessmentRichText className="min-w-0 flex-1 pt-0.5 leading-7" content={item.prompt} />
         </div>
         <span className="shrink-0 text-xs text-muted-foreground">{item.max_score} 分</span>
       </div>
@@ -309,7 +309,7 @@ function QuestionCard({
           return (
             <label className={`flex cursor-pointer items-start gap-3 border px-4 py-3 text-sm leading-6 transition-colors ${isSelected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/60"}`} key={option.key}>
               <input checked={isSelected} className="mt-1 accent-primary" name={`assessment-item-${item.id}`} onChange={() => onSelect(option.key)} type="radio" value={option.key} />
-              <span><strong className="mr-2 font-medium text-primary">{option.key}.</strong>{option.text}</span>
+              <div className="min-w-0 flex-1"><strong className="mr-2 font-medium text-primary">{option.key}.</strong><AssessmentRichText className="mt-0.5" content={option.text} /></div>
             </label>
           );
         })}
@@ -324,9 +324,9 @@ function ResultQuestionCard({ item }: Readonly<{ item: AssessmentAttempt["items"
   return (
     <article className={`border p-5 ${item.is_correct ? "border-primary/50 bg-primary/5" : "border-[#d9b4a9] bg-[#fff8f5]"}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex gap-4">
+        <div className="flex min-w-0 flex-1 gap-4">
           <span className={`grid size-7 shrink-0 place-items-center border text-xs font-medium ${item.is_correct ? "border-primary text-primary" : "border-[#a94e43] text-[#a94e43]"}`}>{String(item.ordinal).padStart(2, "0")}</span>
-          <p className="pt-0.5 leading-7">{item.prompt}</p>
+          <AssessmentRichText className="min-w-0 flex-1 pt-0.5 leading-7" content={item.prompt} />
         </div>
         <span className={`text-sm font-medium ${item.is_correct ? "text-primary" : "text-[#a94e43]"}`}>{item.is_correct ? "回答正确" : "需要复习"}</span>
       </div>
@@ -336,7 +336,7 @@ function ResultQuestionCard({ item }: Readonly<{ item: AssessmentAttempt["items"
       </div>
       <div className="mt-4 border-t border-current/15 pt-4 sm:pl-11">
         <p className="text-xs tracking-[0.13em] text-muted-foreground">解析</p>
-        <p className="mt-2 text-sm leading-7">{item.explanation}</p>
+        <AssessmentRichText className="mt-2 text-sm leading-7" content={item.explanation} />
       </div>
     </article>
   );
@@ -376,4 +376,90 @@ function toDisplayError(error: unknown): string {
     return error.message;
   }
   return error instanceof Error ? error.message : "题集暂时无法读取，请稍后重试。";
+}
+
+function AssessmentRichText({
+  content,
+  className,
+}: Readonly<{ content: string; className?: string }>) {
+  const segments = normalizeAssessmentMarkdown(content).split(/```([a-zA-Z0-9_+-]*)\n([\s\S]*?)```/g);
+
+  return (
+    <div className={className}>
+      {segments.map((segment, index) => {
+        if (index % 3 === 0) {
+          return <AssessmentPlainText content={segment} key={`text-${index}`} />;
+        }
+        if (index % 3 === 1) {
+          const code = segments[index + 1] ?? "";
+          return (
+            <AssessmentCodeBlock
+              content={code}
+              key={`code-${index}`}
+              language={segment || null}
+            />
+          );
+        }
+        return null;
+      })}
+    </div>
+  );
+}
+
+function normalizeAssessmentMarkdown(content: string): string {
+  if (content.includes("\n") || !content.includes("\\n") || !content.includes("```")) {
+    return content;
+  }
+
+  let normalized = "";
+  for (let index = 0; index < content.length;) {
+    if (content.startsWith("\\r\\n", index)) {
+      normalized += "\n";
+      index += 4;
+      continue;
+    }
+    if (content.startsWith("\\n", index)) {
+      normalized += "\n";
+      index += 2;
+      continue;
+    }
+    if (content.startsWith("\\\\", index)) {
+      normalized += "\\";
+      index += 2;
+      continue;
+    }
+    normalized += content[index];
+    index += 1;
+  }
+  return normalized;
+}
+
+function AssessmentPlainText({ content }: Readonly<{ content: string }>) {
+  const trimmedContent = content.trim();
+  if (!trimmedContent) {
+    return null;
+  }
+
+  return (
+    <p>
+      {trimmedContent.split("\n").map((line, index) => (
+        <span key={`${index}-${line}`}>
+          {index > 0 ? <br /> : null}
+          {line}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+function AssessmentCodeBlock({
+  content,
+  language,
+}: Readonly<{ content: string; language: string | null }>) {
+  return (
+    <div className="max-w-full overflow-hidden border border-border bg-[#1e201b] text-[#f4f1e8]">
+      {language ? <p className="border-b border-white/15 px-3 py-1.5 font-mono text-xs lowercase text-[#c9c6ba]">{language}</p> : null}
+      <pre className="max-w-full overflow-x-auto p-4 font-mono text-sm leading-6"><code>{content}</code></pre>
+    </div>
+  );
 }
