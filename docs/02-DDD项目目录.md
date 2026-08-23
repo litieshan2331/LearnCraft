@@ -1,4 +1,12 @@
 # LearnCraft MVP：DDD 项目目录与边界设计
+> **当前范围决策更新（2026-08-23，优先于本文后续所有 P0 描述）：**
+>
+> - `LearningPlan` 包含 6–12 个按依赖排序的主题节点；`PlanNode` 不再表达四阶段，而是承载一个可独立学习的知识主题。
+> - 学习规划 Agent 只创建路线；节点教学 Agent 在节点首次打开时按需生成唯一内容，并以 `foundation`、`worked_example`、`pitfalls_debug` 三段式内容合同交接给前端。
+> - `worked_example` 是页面内可读代码示例，含调用顺序、预期输出和解释；P0 不再要求代码文件、依赖、运行命令或本地运行。
+> - 用户阅读后可标记已学完，并自行选择是否生成节点后测；后测不再作为内容生成或阅读完成后的自动步骤。
+>
+> 本更新取代本文中关于 `concept/syntax/practice/debug`、`LocalDemo` 与强制节点后测的旧约定。
 
 > **范围决策更新（2026-08-16，优先于本文其他 P0 描述）：**`Practice Execution` 在 P0 仅持有本地 Demo 内容产物的领域契约，不创建 `ExecutionJob`，不提供在线执行接口，也不启动 Runner 容器。Demo 必须包含代码文件、中文注释、入口、依赖与本地运行步骤、预期输出和调用顺序；真正的 Sandbox、`ExecutionJob`、stdout/stderr 和资源隔离后置 P1。`practice/` 目录与 Runner port 保留为 P1 扩展边界。
 >
