@@ -34,7 +34,7 @@
 | 阶段 | `run_type` | 触发时机 | 主要输出 |
 | --- | --- | --- | --- |
 | 节点知识生成 | `card_content_generate` | 用户首次打开节点 | `foundation`、`worked_example`、`pitfalls_debug`、引用和 `teaching_memory` |
-| 节点后测生成 | `assessment_generate` | 用户标记完成后主动选择后测 | 5–10 道单选题、隐藏答案、逐题解析 |
+| 节点后测生成 | `posttest_generate` | 用户标记完成后主动选择后测 | 5–10 道单选题、隐藏答案、逐题解析 |
 
 节点内容和节点后测可以创建不同的 `AgentRun`，但必须共享：
 
@@ -69,7 +69,7 @@
 | `trace_id` | 一次用户请求链路的追踪 ID |
 | `agent_run_id` | 当前 AgentRun |
 | `agent_role` | `learning_architect` 或 `node_tutor` |
-| `run_type` | `assessment_generate`、`plan_generate` 或 `card_content_generate` |
+| `run_type` | `assessment_generate`、`plan_generate`、`card_content_generate` 或 `posttest_generate` |
 | `logical_session_key` | `goal:{goal_id}` 或 `node:{plan_node_id}` |
 | `attempt` | 首轮为 0，修复轮次从 1 开始 |
 | `generation_path` | `model_knowledge`、`model_with_tavily` 或 `tavily_recovery` |
@@ -156,7 +156,7 @@ Dispatcher → Celery → learning_architect
 ```json
 {
   "event_type": "agent_run_succeeded",
-  "agent_run_id": "run_assessment_001",
+  "agent_run_id": "run_pretest_001",
   "agent_role": "learning_architect",
   "run_type": "assessment_generate",
   "logical_session_key": "goal:goal_123",
@@ -210,7 +210,7 @@ Dispatcher → Celery → learning_architect
 {
   "event_type": "agent_run_succeeded",
   "agent_run_id": "run_plan_001",
-  "parent_agent_run_id": "run_assessment_001",
+  "parent_agent_run_id": "run_pretest_001",
   "agent_role": "learning_architect",
   "run_type": "plan_generate",
   "logical_session_key": "goal:goal_123",
@@ -285,17 +285,17 @@ Dispatcher → Celery → node_tutor
 用户标记节点完成，并主动选择生成后测
         │
         ▼
-Web 创建 assessment_generate AgentRun + Outbox
+Web 创建 posttest_generate AgentRun + Outbox
         │
         ▼
 Dispatcher → Celery → node_tutor
 ```
 
-后测不是节点内容生成完成后的自动步骤。每次用户主动重练都创建新的 `Assessment` 和新的 `assessment_generate AgentRun`，保留历史题集和作答记录。
+后测不是节点内容生成完成后的自动步骤。每次用户主动重练都创建新的 `Assessment` 和新的 `posttest_generate AgentRun`，保留历史题集和作答记录。
 
 ### 8.2 日志顺序
 
-1. `agent_run_created`：记录 `assessment_generate`、`agent_role=node_tutor`、`logical_session_key=node:{plan_node_id}`、`source_card_content_id` 和题量范围。
+1. `agent_run_created`：记录 `posttest_generate`、`agent_role=node_tutor`、`logical_session_key=node:{plan_node_id}`、`source_card_content_id` 和题量范围。
 2. `agent_run_started`：恢复节点教学 Agent 的 Checkpoint namespace，记录后测 Profile 版本。
 3. `context_loaded`：记录固定内容版本、Demo 版本、`teaching_memory` 版本、引用快照和题集序号。
 4. `model_call_started`：记录模型、Prompt 版本、后测 Schema、预算和工具策略。
@@ -313,9 +313,9 @@ Dispatcher → Celery → node_tutor
 ```json
 {
   "event_type": "agent_run_succeeded",
-  "agent_run_id": "run_post_assessment_001",
+  "agent_run_id": "run_posttest_001",
   "agent_role": "node_tutor",
-  "run_type": "assessment_generate",
+  "run_type": "posttest_generate",
   "logical_session_key": "node:node_123",
   "generation_path": "tavily_recovery",
   "fallback_used": true,

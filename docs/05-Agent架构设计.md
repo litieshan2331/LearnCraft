@@ -21,7 +21,7 @@ Web / BFF
   ├─ 创建 assessment_generate（前测）
   ├─ 创建 plan_generate（路线）
   ├─ 创建 card_content_generate（节点内容）
-  └─ 创建 assessment_generate（节点后测）
+  └─ 创建 posttest_generate（节点后测）
                  │
                  ▼
           AgentRun + Outbox
@@ -44,6 +44,67 @@ Web/BFF 在同一事务内完成请求校验、创建 `AgentRun` 和写入 Outbo
 | 共享 Agent 基础设施 | 运行管理、队列、重试、模型连接、追踪、预算、Checkpoint | 路线合格性或教学内容质量等业务定义 |
 
 Worker 只能经 `CoreApiPort`、`RetrieverPort` 等端口或 ACL 与 Core 通信，不能导入 Web 的领域对象、共享 ORM Model，或绕过应用服务写入 `learning_plans`、`plan_nodes`、`card_contents` 等核心业务表。
+
+### 2.1 可复用的 BaseAgent
+
+两个业务 Agent 共享同一个 `BaseAgent` 执行框架。`BaseAgent` 是通用执行壳，不包含前测、路线、节点内容或后测的业务规则；业务差异由工作流、Schema、Validator 和持久化 Port 注入。
+
+```text
+BaseAgent
+├─ AgentRun 生命周期
+├─ 上下文与 LangGraph Checkpoint
+├─ ModelGateway 调用
+├─ Tavily MCP 工具调用
+├─ Schema / 业务校验
+├─ 有限修复与最终兜底
+├─ 日志、Token、费用和耗时
+└─ 结果持久化 Port
+
+LearningArchitectAgent
+├─ assessment_generate → PretestWorkflow
+└─ plan_generate → PlanGenerationWorkflow
+
+NodeTutorAgent
+├─ card_content_generate → CardContentWorkflow
+└─ posttest_generate → PosttestWorkflow
+```
+
+推荐使用依赖注入和工作流注册表复用 BaseAgent：
+
+```python
+# 共享 BaseAgent 执行框架不直接包含业务规则。
+
+workflow_registry = {
+    ("learning_architect", "assessment_generate"): PretestWorkflow,
+    ("learning_architect", "plan_generate"): PlanGenerationWorkflow,
+    ("node_tutor", "card_content_generate"): CardContentWorkflow,
+    ("node_tutor", "posttest_generate"): PosttestWorkflow,
+}
+```
+
+`BaseAgent` 统一执行以下流程：
+
+```text
+创建/恢复 AgentRun
+  ↓
+加载逻辑会话上下文
+  ↓
+调用业务 Workflow
+  ↓
+模型生成（工具由模型自主选择）
+  ↓
+Schema + 业务校验
+  ↓
+有限修复
+  ↓
+主流程最终校验仍失败 → 强制 Tavily MCP 兜底
+  ↓
+兜底后最终校验
+  ↓
+通过对应 Persistence Port 写入 Core
+```
+
+四个 `run_type` 使用同一套生命周期和日志机制，但拥有独立的输入 DTO、输出 Schema、业务 Validator、Prompt/Profile 和持久化方法。`learning_architect` 使用 `goal:{goal_id}` 作为逻辑会话，`node_tutor` 使用 `node:{plan_node_id}` 作为逻辑会话；共享 BaseAgent 不代表共享两个业务 Agent 的上下文。
 
 ## 3. Route Planner Agent
 
@@ -161,7 +222,7 @@ Node Tutor 在用户首次请求某节点内容时按需执行；同一节点已
 用户标记完成并主动选择生成后测
            │
            ▼
-节点教学 Agent：assessment_generate
+节点教学 Agent：posttest_generate
    ├─ 读取固定内容、Demo 和 teaching_memory
    └─ 生成新的节点后测题集
 ```

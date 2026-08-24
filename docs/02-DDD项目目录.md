@@ -296,6 +296,6 @@ MVP 已使用 PostgreSQL Outbox + 独立 Dispatcher + Celery Redis Broker。Web 
 
 1. 建立 `packages/contracts`、数据库迁移骨架和 `shared` 原语。
 2. 实现 Identity/Profile、Goal、Assessment 两个 BC 的 domain/application/repository，以及画像→创建目标→前测的假 Agent 流程。
-3. 接入 Python Agent 的 `assessment_generate` 与 `plan_generate` graph（节点契约采用 InputNormalizer→Assessment→PlanPlanner→Validator）和 Core API ACL；加入 AgentRun 状态查询。
+3. 接入 Python Agent 的 `assessment_generate`、`plan_generate`、`posttest_generate` graph（节点契约采用 InputNormalizer→Assessment→PlanPlanner→Validator）和 Core API ACL；加入 AgentRun 状态查询。
 4. 加入受控 Content URL/Markdown ingestion + pgvector 检索，再接任意节点的内容与本地 Demo 生成。
 5. 加入前测提交评分、计划生成、节点完成与节点后测；最后补目标列表、E2E、限流、审计和可观测性。在线 Sandbox 在 P1 再单独实施。

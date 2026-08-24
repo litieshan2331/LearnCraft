@@ -2,7 +2,7 @@
 > **当前范围决策更新（2026-08-24，优先于后文所有 P0 描述）：**
 >
 > - 路线由 6–12 个主题节点组成；在实现 `plan_generate` 前，必须通过新的 Drizzle 增量迁移移除 `plan_nodes.phase` 的四阶段语义，并补齐路线快照与 `node_brief`。
-> - 学习规划 Agent 负责同一 `goal_id` 逻辑会话中的前测与路线生成；节点教学 Agent 负责同一 `plan_node_id` 逻辑会话中的节点内容与用户主动触发的后测。
+> - 学习规划 Agent 负责同一 `goal_id` 逻辑会话中的前测与路线生成；节点教学 Agent 负责同一 `plan_node_id` 逻辑会话中的节点内容与用户主动触发的后测。P0 中 `assessment_generate` 专指前测生成，`posttest_generate` 专指节点后测生成。
 > - 节点内容固定为 `foundation`、`worked_example`、`pitfalls_debug`；前端决定单页、分节或分页，模型不生成页面编号。
 > - `worked_example` 只展示代码、调用顺序、预期输出和解释；P0 不再要求本地运行、文件清单、依赖安装或运行命令。
 > - 用户阅读后主动标记已学完，并自行选择是否生成节点后测；后测不自动生成。
@@ -830,7 +830,7 @@ CREATE TABLE agent.agent_runs (
     run_type                varchar(40) NOT NULL
                             CHECK (run_type IN (
                               'assessment_generate', 'plan_generate',
-                              'card_content_generate', 'adaptation'
+                              'card_content_generate', 'posttest_generate', 'adaptation'
                             )),
     status                  varchar(20) NOT NULL DEFAULT 'queued'
                             CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'expired')),
@@ -932,7 +932,7 @@ CREATE INDEX idx_idempotency_keys_expiry
 
 `outbox_events` 的最小可靠投递流程为：同一数据库事务中完成核心聚合变更、创建 `agent.agent_runs` 和 `INSERT outbox_events`；独立 `agent-dispatcher` 使用 `SELECT ... FOR UPDATE SKIP LOCKED` 领取 `agent.run.requested`，投递到 Celery 后回写状态。Celery Worker 仅推进 `agent.agent_runs` 与 `agent.agent_run_events`，再经内部 Core API 持久化结构化业务结果。Dispatcher 在“已发送、未回写”间中断时允许重复投递，`agent_run_id` 同时作为 Celery `task_id` 与幂等边界。`outbox_events` 是跨上下文基础设施例外，不是 Worker 可以任意修改核心表的通行证。
 
-P0 的 `assessment_items` 仅允许 `single_choice`：题目首次生成时，`answer_key_json` 保存隐藏正确选项，`explanation`/等价解析字段保存逐题解释；服务端同步完成确定性评分，并在 `grading_metadata_json` 保存评分器与题目/答案版本标识。交卷前绝不返回答案或解析，交卷后仅题主可读取。`rubric_json` 是为避免破坏旧迁移而保留的历史兼容列，P0 不读取或写入它。节点后测的每次生成创建新的 `assessment_generate` AgentRun 和新的 Assessment；评分不创建 AgentRun。当前 `card_quiz` 命名与节点后测语义的收敛要求以 3.4.1 的增量迁移为准。
+P0 的 `assessment_items` 仅允许 `single_choice`：题目首次生成时，`answer_key_json` 保存隐藏正确选项，`explanation`/等价解析字段保存逐题解释；服务端同步完成确定性评分，并在 `grading_metadata_json` 保存评分器与题目/答案版本标识。交卷前绝不返回答案或解析，交卷后仅题主可读取。`rubric_json` 是为避免破坏旧迁移而保留的历史兼容列，P0 不读取或写入它。节点后测的每次生成创建新的 `posttest_generate` AgentRun 和新的 Assessment；评分不创建 AgentRun。当前 `card_quiz` 命名与节点后测语义的收敛要求以 3.4.1 的增量迁移为准。
 
 ### 3.8 `updated_at` Trigger 与迁移顺序
 
@@ -1707,7 +1707,7 @@ ModelGateway 至少维护以下任务规则；模型连接统一取账户默认�
 | 学习规划 Agent / `assessment_generate` | 账户默认模型连接、评估提示词/Schema、最大输出 Token、超时、工具策略 | 前测 10–20 题；一次性输出题目、隐藏答案、解析和能力标签；校验题量、难度和至少两个选项。 |
 | 学习规划 Agent / `plan_generate` | 账户默认模型连接、规划提示词/Schema、预算、重试次数和 Tavily 策略 | 仅在用户确认后使用目标、当前画像和前测交接快照；必须输出书籍章节目录式路线和 `node_brief`，并通过章节顺序、主题覆盖和 DAG 校验。首轮与修复阶段可由模型自主调用 Tavily，主流程最终校验失败时强制调用 Tavily MCP 重建。 |
 | 节点教学 Agent / `card_content_generate` | 账户默认模型连接、教学提示词/Schema、预算、引用、Tavily 策略与 LocalDemoSpec | 模型可先使用自身训练知识并自行决定是否调用 Tavily；主流程最终校验失败时强制调用 Tavily MCP 的广搜、缩搜和资源阅读能力重建。最终仍只保存通过内容、引用、Demo 与 `teaching_memory`；不执行 Runner 预运行，也不支持内容重生。 |
-| 节点教学 Agent / `assessment_generate` | 账户默认模型连接、后测提示词/Schema、最大输出 Token、超时、Tavily 策略 | 仅基于固定 CardContent、Demo 与 `teaching_memory` 生成 5–10 题后测；首轮与修复阶段可由模型自主调用 Tavily，主流程最终校验失败时强制阅读相关引用来源后重建；每次重练创建新题集，答案/解析同次隐藏保存。 |
+| 节点教学 Agent / `posttest_generate` | 账户默认模型连接、后测提示词/Schema、最大输出 Token、超时、Tavily 策略 | 仅基于固定 CardContent、Demo 与 `teaching_memory` 生成 5–10 题后测；首轮与修复阶段可由模型自主调用 Tavily，主流程最终校验失败时强制阅读相关引用来源后重建；每次重练创建新题集，答案/解析同次隐藏保存。 |
 | `embedding` | 固定模型、维度、版本 | 和迁移/健康检查/检索集完全一致。 |
 
 单选作答始终是不可信输入：服务端只将其与隐藏答案比较，不将其拼入模型提示词、工具调用或检索请求。评分器必须校验选项属于当前题目，且只接受符合 Pydantic `AssessmentGrade` schema 的确定性结果。
