@@ -146,8 +146,20 @@ class OpenAiCompatibleModelGateway:
         if OpenAiCompatibleModelGateway._uses_deepseek_v4(request):
             payload['thinking'] = {'type': request.thinking_mode}
         if request.response_format == 'json_object':
+            OpenAiCompatibleModelGateway._ensure_json_prompt(payload["messages"])
             payload['response_format'] = {'type': 'json_object'}
         return payload
+
+    @staticmethod
+    def _ensure_json_prompt(messages: list[dict[str, Any]]) -> None:
+        """为要求小写 json 提示词的兼容 Provider 注入最小格式提示。"""
+        for message in messages:
+            content = message.get("content")
+            if message.get("role") in {"system", "user"} and isinstance(content, str):
+                if "json" not in content:
+                    message["content"] = f"{content}\nReturn a valid json object."
+                return
+        messages.insert(0, {"role": "system", "content": "Return a valid json object."})
 
     @staticmethod
     def _uses_deepseek_v4(request: ModelCompletionRequest) -> bool:

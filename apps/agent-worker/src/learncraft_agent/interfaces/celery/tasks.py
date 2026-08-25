@@ -70,7 +70,7 @@ def execute_agent_run_task(
                 repository.mark_failed(
                     run_id=task.agent_run_id,
                     error_code="AGENT_RUN_RETRY_EXHAUSTED",
-                    error_summary=type(error).__name__,
+                    error_summary=str(error),
                 ),
             )
             raise
@@ -90,7 +90,7 @@ def execute_agent_run_task(
             repository.mark_failed(
                 run_id=task.agent_run_id,
                 error_code=error.code,
-                error_summary=type(error).__name__,
+                error_summary=str(error),
             ),
         )
         raise
@@ -103,7 +103,7 @@ def execute_agent_run_task(
             repository.mark_failed(
                 run_id=task.agent_run_id,
                 error_code="AGENT_RUN_UNEXPECTED_ERROR",
-                error_summary=type(error).__name__,
+                error_summary=str(error),
             ),
         )
         raise

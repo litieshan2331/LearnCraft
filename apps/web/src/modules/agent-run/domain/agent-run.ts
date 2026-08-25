@@ -39,6 +39,11 @@ export interface AgentRunAssessmentResultSnapshot {
   questionCount: number;
 }
 
+export interface AgentRunPlanResultSnapshot {
+  learningPlanId: string;
+  nodeCount: number;
+}
+
 export interface AgentRunSnapshot {
   id: string;
   runType: AgentRunType;
@@ -52,6 +57,7 @@ export interface AgentRunSnapshot {
   startedAt: Date | null;
   finishedAt: Date | null;
   assessmentResult?: AgentRunAssessmentResultSnapshot;
+  planResult?: AgentRunPlanResultSnapshot;
   error?: AgentRunErrorSnapshot;
   createdAt: Date;
   updatedAt: Date;

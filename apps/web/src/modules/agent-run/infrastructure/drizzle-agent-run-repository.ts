@@ -198,6 +198,7 @@ function toAgentRunSnapshot(agentRun: AgentRunRecord): AgentRunSnapshot {
   }
 
   const assessmentResult = toAssessmentResultSnapshot(agentRun);
+  const planResult = toPlanResultSnapshot(agentRun);
 
   return {
     id: agentRun.id,
@@ -212,6 +213,7 @@ function toAgentRunSnapshot(agentRun: AgentRunRecord): AgentRunSnapshot {
     startedAt: agentRun.startedAt,
     finishedAt: agentRun.finishedAt,
     ...(assessmentResult ? { assessmentResult } : {}),
+    ...(planResult ? { planResult } : {}),
     ...(agentRun.errorCode ? {
       error: {
         code: agentRun.errorCode,
@@ -250,6 +252,32 @@ function toAssessmentResultSnapshot(agentRun: AgentRunRecord) {
   return { assessmentId, questionCount };
 }
 
+function toPlanResultSnapshot(agentRun: AgentRunRecord) {
+  if (agentRun.runType !== "plan_generate" || agentRun.status !== "succeeded") {
+    return undefined;
+  }
+
+  const summary = agentRun.outputSummaryJson;
+  if (typeof summary !== "object" || summary === null || Array.isArray(summary)) {
+    return undefined;
+  }
+
+  const summaryRecord = summary as { learning_plan_id?: unknown; node_count?: unknown };
+  const learningPlanId = summaryRecord.learning_plan_id;
+  const nodeCount = summaryRecord.node_count;
+  if (
+    typeof learningPlanId !== "string"
+    || !isUuid(learningPlanId)
+    || typeof nodeCount !== "number"
+    || !Number.isInteger(nodeCount)
+    || nodeCount < 6
+    || nodeCount > 12
+  ) {
+    return undefined;
+  }
+
+  return { learningPlanId, nodeCount };
+}
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

@@ -74,6 +74,8 @@ def test_deepseek_v4_payload_keeps_thinking_auto_tools_and_reasoning() -> None:
     assert payload['stream'] is True
     assert payload['stream_options'] == {'include_usage': True}
     assert payload['response_format'] == {'type': 'json_object'}
+    assert "json" in payload['messages'][0]['content']
+
     assert payload['tool_choice'] == 'auto'
     assert payload['tools'][0]['function']['name'] == 'tavily_search'
     assert payload['messages'][1]['content'] == ''

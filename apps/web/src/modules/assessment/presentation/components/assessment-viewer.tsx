@@ -251,7 +251,7 @@ function AssessmentResult({
       </div>
 
       {items.length > 0 ? (
-        <div className="mt-5 grid gap-5">
+        <div className="mt-5 grid min-w-0 gap-5">
           {items.map((item) => <ResultQuestionCard item={item} key={item.assessment_item_id} />)}
         </div>
       ) : (
@@ -322,7 +322,7 @@ function ResultQuestionCard({ item }: Readonly<{ item: AssessmentAttempt["items"
   const selectedOption = item.options.find((option) => option.key === item.selected_option_key);
   const correctOption = item.options.find((option) => option.key === item.correct_option_key);
   return (
-    <article className={`border p-5 ${item.is_correct ? "border-primary/50 bg-primary/5" : "border-[#d9b4a9] bg-[#fff8f5]"}`}>
+    <article className={`min-w-0 max-w-full border p-5 ${item.is_correct ? "border-primary/50 bg-primary/5" : "border-[#d9b4a9] bg-[#fff8f5]"}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 gap-4">
           <span className={`grid size-7 shrink-0 place-items-center border text-xs font-medium ${item.is_correct ? "border-primary text-primary" : "border-[#a94e43] text-[#a94e43]"}`}>{String(item.ordinal).padStart(2, "0")}</span>

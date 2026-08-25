@@ -26,6 +26,12 @@ export function presentAgentRun(agentRun: AgentRunSnapshot) {
         question_count: agentRun.assessmentResult.questionCount,
       },
     } : {}),
+    ...(agentRun.planResult ? {
+      plan_result: {
+        learning_plan_id: agentRun.planResult.learningPlanId,
+        node_count: agentRun.planResult.nodeCount,
+      },
+    } : {}),
     ...(agentRun.error ? { error: agentRun.error } : {}),
     created_at: agentRun.createdAt.toISOString(),
     updated_at: agentRun.updatedAt.toISOString(),

@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
@@ -127,7 +129,19 @@ class TavilyRemoteMcpToolGateway(ToolGateway):
             query = arguments.get("query")
             if not isinstance(query, str) or not 1 <= len(query.strip()) <= 500:
                 raise TavilyMcpToolError("TAVILY_QUERY_INVALID", "搜索 query 必须是 1-500 个字符。")
-            return await self._search_then_extract(query.strip())
+            last_error: Exception | None = None
+            for attempt in range(2):
+                try:
+                    return await self._search_then_extract(query.strip())
+                except TavilyMcpToolError:
+                    raise
+                except Exception as error:
+                    last_error = error
+                    if attempt == 0:
+                        await asyncio.sleep(1)
+            if last_error is not None:
+                raise last_error
+            raise TavilyMcpToolError("TAVILY_MCP_CALL_FAILED", "联网搜索工具执行失败。")
         except TavilyMcpToolError as error:
             return ToolExecutionResult(ok=False, code=error.code, message=str(error))
         except (orjson.JSONDecodeError, TypeError, ValueError):

@@ -322,6 +322,50 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /api/v1/learning-goals/{goal_id}/plans:
+    post:
+      tags: [Planning]
+      summary: 在前测评分完成后创建学习路线生成 AgentRun
+      description: 仅允许当前用户为自己的学习目标创建 plan_generate 任务。请求前必须存在已评分前测；任务创建后通过 AgentRun 状态接口轮询，并在成功时返回 learning_plan_id。
+      operationId: create_learning_plan_generation_run
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/GoalId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanGenerationRequest'
+      responses:
+        '202':
+          description: AgentRun 已创建并进入队列
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '200':
+          description: 同一幂等键重复请求，返回已有 AgentRun
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 前测尚未评分、未配置默认模型连接，或幂等键与已有任务内容冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/plan-nodes/{node_id}/post-assessment-runs:
     post:
       tags: [Assessment]
@@ -1199,6 +1243,8 @@ components:
           format: date-time
         assessment_result:
           $ref: '#/components/schemas/AgentRunAssessmentResult'
+        plan_result:
+          $ref: '#/components/schemas/AgentRunPlanResult'
         error:
           $ref: '#/components/schemas/AgentRunError'
         created_at:
@@ -1219,6 +1265,18 @@ components:
         question_count:
           type: integer
           minimum: 1
+    AgentRunPlanResult:
+      type: object
+      additionalProperties: false
+      required: [learning_plan_id, node_count]
+      properties:
+        learning_plan_id:
+          type: string
+          format: uuid
+        node_count:
+          type: integer
+          minimum: 6
+          maximum: 12
     Assessment:
       type: object
       additionalProperties: false
@@ -1481,6 +1539,10 @@ components:
           type: string
           enum: [normal, hard]
           default: normal
+    PlanGenerationRequest:
+      type: object
+      additionalProperties: false
+      description: 用户已确认生成学习路线；目标、当前画像与已评分前测由服务端读取并冻结为 AgentRun 输入快照。
     PosttestGenerationRequest:
       type: object
       additionalProperties: false

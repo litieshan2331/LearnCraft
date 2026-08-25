@@ -114,9 +114,9 @@ class Settings(BaseSettings):
         repr=False,
     )
     model_gateway_request_max_retries: int = Field(
-        default=2,
+        default=5,
         ge=0,
-        le=2,
+        le=5,
         validation_alias="MODEL_GATEWAY_REQUEST_MAX_RETRIES",
     )
     tavily_search_max_results: int = Field(
@@ -138,9 +138,9 @@ class Settings(BaseSettings):
         validation_alias="TAVILY_EXTRACT_CHUNKS_PER_SOURCE",
     )
     agent_tool_max_calls: int = Field(
-        default=3,
+        default=6,
         ge=1,
-        le=3,
+        le=6,
         validation_alias="AGENT_TOOL_MAX_CALLS",
     )
     tavily_daily_tool_call_limit: int = Field(

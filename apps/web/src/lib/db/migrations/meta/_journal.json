@@ -57,6 +57,13 @@
       "when": 1787583477698,
       "tag": "0007_posttest_generation",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787663961862,
+      "tag": "0008_plan_generate_schema",
+      "breakpoints": true
     }
   ]
 }
