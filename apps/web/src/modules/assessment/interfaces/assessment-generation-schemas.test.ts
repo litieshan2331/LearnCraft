@@ -2,7 +2,7 @@
  * Assessment 生成请求 schema 单元测试。
  *
  * 测试：
- * - assessmentGenerationRequestSchema：验证前测/后测题量、难度和路线字段的边界。
+ * - assessmentGenerationRequestSchema：验证前测题量和难度边界。
  */
 
 import { describe, expect, it } from "vitest";
@@ -19,18 +19,13 @@ describe("assessmentGenerationRequestSchema", () => {
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.difficulty).toBe("normal");
-      expect(parsed.data.plan_id).toBeNull();
     }
   });
 
-  it("拒绝不符合题量范围的前测和缺少路线的后测", () => {
+  it("拒绝不符合题量范围的前测", () => {
     expect(assessmentGenerationRequestSchema.safeParse({
       kind: "diagnostic",
       question_count: 9,
-    }).success).toBe(false);
-    expect(assessmentGenerationRequestSchema.safeParse({
-      kind: "post_test",
-      question_count: 5,
     }).success).toBe(false);
   });
 });

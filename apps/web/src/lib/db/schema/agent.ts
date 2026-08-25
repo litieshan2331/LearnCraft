@@ -82,7 +82,7 @@ export const agentRuns = agentSchema.table("agent_runs", {
     "ck_agent_runs_type",
     sql`${table.runType} in (
       'assessment_generate', 'plan_generate',
-      'card_content_generate', 'adaptation'
+      'card_content_generate', 'posttest_generate', 'adaptation'
     )`,
   ),
   check(

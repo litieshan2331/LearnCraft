@@ -1,14 +1,12 @@
-'''前测与后测题集生成工作流。
+'''前测题集生成工作流。
 
-职责：读取 AgentRun 输入，调用账户默认模型和 Tavily MCP，并将经过校验的单选题集交给 Web 持久化。
+职责：读取 AgentRun 输入，调用账户默认模型和 Tavily MCP，并将经过校验的前测单选题集交给 Web 持久化。
 主要类型：AssessmentGenerationInput、AssessmentQuestionSet、AssessmentGenerationWorkflow。
 '''
 
 from __future__ import annotations
 
 from typing import Any, Literal
-from uuid import UUID
-
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from learncraft_agent.acl.web_core_internal_client import WebCoreInternalClient
@@ -48,7 +46,7 @@ def _normalize_double_escaped_markdown_newlines(value: str) -> str:
 
 
 class AssessmentGenerationInput(BaseModel):
-    '''定义前测或后测生成的开放式主题与数量。'''
+    '''定义前测生成的主题、学习背景与题目数量。'''
     model_config = ConfigDict(extra='ignore', frozen=True)
     topic: str = Field(min_length=1, max_length=300)
     title: str | None = Field(default=None, max_length=300)
@@ -58,16 +56,13 @@ class AssessmentGenerationInput(BaseModel):
     overall_experience: str | None = Field(default=None, max_length=1_000)
     question_count: int = Field(ge=5, le=20)
     difficulty: Literal['normal', 'hard'] = 'normal'
-    kind: Literal['diagnostic', 'post_test']
-    plan_id: UUID | None = None
+    kind: Literal['diagnostic']
 
     @model_validator(mode='after')
     def validate_question_count(self) -> 'AssessmentGenerationInput':
-        '''按前测或后测的产品约束校验题量。'''
-        if self.kind == 'diagnostic' and not 10 <= self.question_count <= 20:
+        '''校验前测题量必须在 10-20 题范围内。'''
+        if not 10 <= self.question_count <= 20:
             raise ValueError('diagnostic 题量必须为 10-20')
-        if self.kind == 'post_test' and not 5 <= self.question_count <= 10:
-            raise ValueError('post_test 题量必须为 5-10')
         return self
 
 
@@ -110,7 +105,7 @@ class AssessmentQuestionSet(BaseModel):
 
 
 class AssessmentGenerationWorkflow:
-    '''执行 assessment_generate：模型按主题时效性自主决定是否使用 Tavily，工具总调用不超过三次。'''
+    '''执行 assessment_generate 前测：模型按主题时效性自主决定是否使用 Tavily，工具总调用不超过三次。'''
 
     async def run(self, state: AgentRunExecutionState) -> dict[str, Any]:
         '''生成并持久化题集，返回 AgentRun 输出摘要。'''
@@ -137,7 +132,7 @@ class AssessmentGenerationWorkflow:
                 'kind': value.kind,
                 'question_count': value.question_count,
                 'difficulty': value.difficulty,
-                'plan_id': str(value.plan_id) if value.plan_id else None,
+                'plan_id': None,
                 'schema_version': question_set.schema_version,
                 'questions': [question.model_dump(mode='json') for question in question_set.questions],
                 'generation_metadata': {

@@ -2,7 +2,7 @@
  * Assessment 生成应用服务。
  *
  * 导出：
- * - AssessmentGenerationService：校验目标/路线上下文并创建 assessment_generate AgentRun。
+ * - AssessmentGenerationService：校验目标上下文并创建前测 assessment_generate AgentRun。
  */
 
 import type { AgentRunProductionResult } from "@/modules/agent-run/domain/agent-run";
@@ -36,12 +36,6 @@ export class AssessmentGenerationService {
       throw new AssessmentGenerationApplicationError("DEFAULT_MODEL_CONNECTION_REQUIRED");
     }
 
-    if (input.kind === "post_test") {
-      if (!input.planId || !await this.contextRepository.hasOwnedPlan(input.ownerId, input.goalId, input.planId)) {
-        throw new AssessmentGenerationApplicationError("LEARNING_PLAN_NOT_FOUND");
-      }
-    }
-
     return this.agentRunRequester.request({
       ownerId: input.ownerId,
       goalId: input.goalId,
@@ -64,7 +58,6 @@ export class AssessmentGenerationService {
         question_count: input.questionCount,
         difficulty: input.difficulty,
         kind: input.kind,
-        plan_id: input.planId,
       },
     });
   }

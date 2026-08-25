@@ -11,7 +11,6 @@ import { getDatabase } from "@/lib/db/client";
 import {
   learnerProfiles,
   learningGoals,
-  learningPlans,
   userModelConnections,
 } from "@/lib/db/schema";
 
@@ -38,21 +37,6 @@ export class DrizzleAssessmentGenerationContextRepository implements AssessmentG
       .limit(1);
 
     return record ?? null;
-  }
-
-  async hasOwnedPlan(ownerId: string, goalId: string, planId: string): Promise<boolean> {
-    const database = getDatabase();
-    const [record] = await database
-      .select({ id: learningPlans.id })
-      .from(learningPlans)
-      .where(and(
-        eq(learningPlans.id, planId),
-        eq(learningPlans.goalId, goalId),
-        eq(learningPlans.ownerId, ownerId),
-      ))
-      .limit(1);
-
-    return Boolean(record);
   }
 
   async hasDefaultModelConnection(ownerId: string): Promise<boolean> {

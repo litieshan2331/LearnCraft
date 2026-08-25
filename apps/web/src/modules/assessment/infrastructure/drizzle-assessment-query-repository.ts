@@ -60,6 +60,8 @@ function toAssessmentSnapshot(
     id: assessment.id,
     goalId: assessment.goalId,
     planId: assessment.planId,
+    planNodeId: assessment.planNodeId,
+    sourceCardContentId: assessment.sourceCardContentId,
     kind: assessment.kind,
     status: assessment.status,
     requestedQuestionCount: assessment.requestedQuestionCount,

@@ -12,6 +12,7 @@ export const AGENT_RUN_TYPES = [
   "assessment_generate",
   "plan_generate",
   "card_content_generate",
+  "posttest_generate",
   "adaptation",
 ] as const;
 

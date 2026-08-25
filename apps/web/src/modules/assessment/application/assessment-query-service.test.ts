@@ -18,6 +18,8 @@ const assessment: AssessmentSnapshot = {
   id: "f18621a7-4309-4a04-9769-4d602966a574",
   goalId: "04d90a58-a556-45d2-9e63-108e2a261d58",
   planId: null,
+  planNodeId: null,
+  sourceCardContentId: null,
   kind: "diagnostic",
   status: "ready",
   requestedQuestionCount: 10,

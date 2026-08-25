@@ -281,8 +281,8 @@ paths:
   /api/v1/learning-goals/{goal_id}/assessment-runs:
     post:
       tags: [Assessment]
-      summary: 为学习目标创建前测或后测生成 AgentRun
-      description: 仅允许当前用户为自己的学习目标创建 assessment_generate 任务。前测需要 10-20 题，后测需要 5-10 题并关联已有学习路线；任务创建后通过 AgentRun 状态接口轮询，题集由 Worker 异步生成并回写 Web。
+      summary: 为学习目标创建前测生成 AgentRun
+      description: 仅允许当前用户为自己的学习目标创建 assessment_generate 前测任务。前测需要 10-20 题；任务创建后通过 AgentRun 状态接口轮询，题集由 Worker 异步生成并回写 Web。
       operationId: create_assessment_generation_run
       security:
         - sessionCookie: []
@@ -295,6 +295,50 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AssessmentGenerationRequest'
+      responses:
+        '202':
+          description: AgentRun 已创建并进入队列
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '200':
+          description: 同一幂等键重复请求，返回已有 AgentRun
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 未配置账户默认模型，或幂等键与已有任务内容冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/plan-nodes/{node_id}/post-assessment-runs:
+    post:
+      tags: [Assessment]
+      summary: 为已完成学习节点创建后测生成 AgentRun
+      description: 仅允许当前用户为已完成且拥有成功节点内容的 plan_node 创建 posttest_generate 任务。后测需要 5-10 题，并由 Worker 绑定该节点的 source_card_content_id；任务创建后通过 AgentRun 状态接口轮询。
+      operationId: create_posttest_generation_run
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PlanNodeId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PosttestGenerationRequest'
       responses:
         '202':
           description: AgentRun 已创建并进入队列
@@ -681,6 +725,14 @@ components:
       in: path
       required: true
       description: 学习目标 ID。
+      schema:
+        type: string
+        format: uuid
+    PlanNodeId:
+      name: node_id
+      in: path
+      required: true
+      description: 学习路线节点 ID。
       schema:
         type: string
         format: uuid
@@ -1112,6 +1164,7 @@ components:
             - assessment_generate
             - plan_generate
             - card_content_generate
+            - posttest_generate
             - adaptation
         status:
           type: string
@@ -1187,6 +1240,14 @@ components:
           type: string
           format: uuid
         plan_id:
+          type: string
+          format: uuid
+          nullable: true
+        plan_node_id:
+          type: string
+          format: uuid
+          nullable: true
+        source_card_content_id:
           type: string
           format: uuid
           nullable: true
@@ -1409,22 +1470,31 @@ components:
       properties:
         kind:
           type: string
-          enum: [diagnostic, post_test]
-          description: diagnostic 为前测，post_test 为路线后测。
+          enum: [diagnostic]
+          description: diagnostic 为前测。
         question_count:
           type: integer
-          minimum: 5
+          minimum: 10
           maximum: 20
-          description: 前测为 10-20 题，后测为 5-10 题。
+          description: 前测为 10-20 题。
         difficulty:
           type: string
           enum: [normal, hard]
           default: normal
-        plan_id:
+    PosttestGenerationRequest:
+      type: object
+      additionalProperties: false
+      required: [question_count]
+      properties:
+        question_count:
+          type: integer
+          minimum: 5
+          maximum: 10
+          description: 节点后测为 5-10 题。
+        difficulty:
           type: string
-          format: uuid
-          nullable: true
-          description: 后测必须填写属于当前学习目标的路线 ID；前测必须为空。
+          enum: [normal, hard]
+          default: normal
     ModelConnectionCreateRequest:
       type: object
       additionalProperties: false
@@ -1551,6 +1621,7 @@ components:
             - assessment_generate
             - plan_generate
             - card_content_generate
+            - posttest_generate
             - adaptation
         result:
           type: object

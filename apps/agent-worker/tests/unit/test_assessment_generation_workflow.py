@@ -8,7 +8,9 @@
 
 from uuid import uuid4
 
-from pydantic import SecretStr
+import pytest
+
+from pydantic import SecretStr, ValidationError
 
 from learncraft_agent.application.ports.model_gateway import ModelProviderConnection
 from learncraft_agent.infrastructure.persistence.repositories.sqlalchemy_agent_run_repository import (
@@ -59,6 +61,16 @@ def test_assessment_request_allows_model_to_decide_tavily_usage() -> None:
     assert 'questions' in request.messages[0].content
     assert '简体中文' in request.messages[0].content
     assert '双重转义' in request.messages[0].content
+
+
+def test_assessment_input_rejects_post_test_kind() -> None:
+    '''前测工作流不再接受 post_test 题集类型。'''
+    with pytest.raises(ValidationError):
+        AssessmentGenerationInput(
+            topic='TypeScript 类型系统',
+            question_count=5,
+            kind='post_test',
+        )
 
 
 def test_assessment_question_set_normalizes_double_escaped_markdown_newlines() -> None:

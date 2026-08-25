@@ -28,6 +28,7 @@ import {
   updatedAtColumn,
 } from "./_common";
 import { learningPlans, planNodes } from "./planning";
+import { cardContents } from "./content";
 import { learningGoals } from "./profile";
 import { users } from "./identity";
 
@@ -42,6 +43,9 @@ export const assessments = pgTable("assessments", {
   planId: uuid("plan_id").references(() => learningPlans.id, { onDelete: "cascade" }),
   planNodeId: uuid("plan_node_id").references(() => planNodes.id, {
     onDelete: "cascade",
+  }),
+  sourceCardContentId: uuid("source_card_content_id").references(() => cardContents.id, {
+    onDelete: "restrict",
   }),
   kind: varchar("kind", { length: 30 }).notNull(),
   requestedQuestionCount: integer("requested_question_count"),
@@ -84,16 +88,20 @@ export const assessments = pgTable("assessments", {
   check(
     "ck_assessment_scope",
     sql`(
-      ${table.kind} = 'diagnostic'
+      (${table.kind} = 'diagnostic'
       and ${table.planId} is null
       and ${table.planNodeId} is null
+      and ${table.sourceCardContentId} is null
     ) or (
       ${table.kind} = 'post_test'
-      and ${table.planId} is not null
-      and ${table.planNodeId} is null
+      and ${table.planId} is null
+      and ${table.planNodeId} is not null
+      and ${table.sourceCardContentId} is not null
     ) or (
-      ${table.kind} = 'card_quiz' and ${table.planNodeId} is not null
-    )`,
+      ${table.kind} = 'card_quiz'
+      and ${table.planNodeId} is not null
+      and ${table.sourceCardContentId} is null
+    ))`,
   ),
   index("idx_assessments_owner_goal_kind").on(
     table.ownerId,

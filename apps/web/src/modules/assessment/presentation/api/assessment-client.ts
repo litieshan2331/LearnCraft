@@ -13,12 +13,15 @@ export type AssessmentDifficulty = "normal" | "hard";
 export type AgentRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "expired";
 
 export interface AssessmentGenerationRequest {
-  kind: AssessmentKind;
+  kind: "diagnostic";
   question_count: number;
   difficulty: AssessmentDifficulty;
-  plan_id?: string | null;
 }
 
+export interface PosttestGenerationRequest {
+  question_count: number;
+  difficulty: AssessmentDifficulty;
+}
 export interface AgentRun {
   id: string;
   run_type: string;
@@ -62,6 +65,8 @@ export interface Assessment {
   id: string;
   goal_id: string;
   plan_id: string | null;
+  plan_node_id: string | null;
+  source_card_content_id: string | null;
   kind: AssessmentKind | "card_quiz";
   status: string;
   question_count: number;
@@ -153,6 +158,17 @@ export function createAssessmentRun(
   });
 }
 
+export function createPosttestRun(
+  planNodeId: string,
+  input: PosttestGenerationRequest,
+  idempotencyKey: string,
+): Promise<AgentRun> {
+  return requestJson<AgentRun>("/api/v1/plan-nodes/" + planNodeId + "/post-assessment-runs", {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(input),
+  });
+}
 export function getAgentRun(agentRunId: string): Promise<AgentRun> {
   return requestJson<AgentRun>(`/api/v1/agent-runs/${agentRunId}`);
 }

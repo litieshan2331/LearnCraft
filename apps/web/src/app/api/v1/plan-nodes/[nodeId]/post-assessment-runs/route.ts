@@ -1,18 +1,17 @@
 /**
- * 学习目标的 assessment_generate AgentRun 创建 Route Handler。
+ * 学习节点的 posttest_generate AgentRun 创建 Route Handler。
  *
  * 函数：
- * - POST：为当前用户的学习目标创建前测生成任务，并返回可轮询的 AgentRun 快照。
+ * - POST：为已完成且拥有成功内容的节点创建后测生成任务。
  */
 
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
-import { getAssessmentGenerationService } from "@/modules/assessment/infrastructure/assessment-generation-service-factory";
-import { assessmentGenerationErrorResponse } from "@/modules/assessment/interfaces/assessment-generation-http";
-import { assessmentGenerationRequestSchema } from "@/modules/assessment/interfaces/assessment-generation-schemas";
-import {
-  AssessmentGenerationApplicationError,
-} from "@/modules/assessment/domain/assessment-generation";
+import { getPosttestGenerationService } from "@/modules/assessment/infrastructure/posttest-generation-service-factory";
+import { posttestGenerationErrorResponse } from "@/modules/assessment/interfaces/posttest-generation-http";
+import { posttestGenerationRequestSchema } from "@/modules/assessment/interfaces/posttest-generation-schemas";
+import { PosttestGenerationApplicationError } from "@/modules/assessment/domain/posttest-generation";
 import {
   agentRunErrorResponse,
   applyAgentRunSessionRenewal,
@@ -24,13 +23,13 @@ import {
   malformedJsonResponse,
   validationErrorResponse,
 } from "@/modules/identity/interfaces/auth-http";
-import { idempotencyKeyErrorResponse, idempotencyKeySchema, learningGoalPathSchema } from "@/modules/profile/interfaces/profile-http";
+import { idempotencyKeyErrorResponse, idempotencyKeySchema } from "@/modules/profile/interfaces/profile-http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface RouteContext {
-  params: Promise<{ goalId: string }>;
+  params: Promise<{ nodeId: string }>;
 }
 
 export async function POST(request: Request, context: RouteContext): Promise<NextResponse> {
@@ -45,10 +44,10 @@ export async function POST(request: Request, context: RouteContext): Promise<Nex
     return idempotencyKeyErrorResponse();
   }
 
-  const params = await context.params;
-  const parsedGoalId = learningGoalPathSchema.safeParse({ goal_id: params.goalId });
-  if (!parsedGoalId.success) {
-    return validationErrorResponse(parsedGoalId.error);
+  const { nodeId } = await context.params;
+  const parsedNodeId = z.uuid().safeParse(nodeId);
+  if (!parsedNodeId.success) {
+    return validationErrorResponse(parsedNodeId.error);
   }
 
   const body = await request.json().catch(() => null);
@@ -56,7 +55,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Nex
     return malformedJsonResponse();
   }
 
-  const parsedInput = assessmentGenerationRequestSchema.safeParse(body);
+  const parsedInput = posttestGenerationRequestSchema.safeParse(body);
   if (!parsedInput.success) {
     return validationErrorResponse(parsedInput.error);
   }
@@ -67,10 +66,9 @@ export async function POST(request: Request, context: RouteContext): Promise<Nex
       return authentication.response;
     }
 
-    const result = await getAssessmentGenerationService().request({
+    const result = await getPosttestGenerationService().request({
       ownerId: authentication.ownerId,
-      goalId: parsedGoalId.data.goal_id,
-      kind: parsedInput.data.kind,
+      planNodeId: parsedNodeId.data,
       questionCount: parsedInput.data.question_count,
       difficulty: parsedInput.data.difficulty,
       idempotencyKey: parsedIdempotencyKey.data,
@@ -81,8 +79,8 @@ export async function POST(request: Request, context: RouteContext): Promise<Nex
       authentication,
     );
   } catch (error) {
-    if (error instanceof AssessmentGenerationApplicationError) {
-      return assessmentGenerationErrorResponse(error);
+    if (error instanceof PosttestGenerationApplicationError) {
+      return posttestGenerationErrorResponse(error);
     }
     return agentRunErrorResponse(error);
   }

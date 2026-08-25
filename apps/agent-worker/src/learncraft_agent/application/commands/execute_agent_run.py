@@ -10,12 +10,13 @@
 
 from learncraft_agent.acl.web_core_internal_client import CoreInternalClientError
 from learncraft_agent.application.dto.agent_run_task import AgentRunRequestedTask
+from learncraft_agent.application.services.base_agent import AgentWorkflowNotRegisteredError
+from learncraft_agent.application.services.learning_architect_agent import LearningArchitectAgent
 from learncraft_agent.application.ports.model_gateway import ModelGatewayError
 from learncraft_agent.infrastructure.llm.credential_decryptor import CredentialDecryptionError
 from learncraft_agent.infrastructure.persistence.repositories.sqlalchemy_agent_run_repository import (
     SqlAlchemyAgentRunRepository,
 )
-from learncraft_agent.workflows.assessment_generate import AssessmentGenerationWorkflow
 
 
 class RetryableAgentRunError(RuntimeError):
@@ -49,27 +50,26 @@ async def execute_agent_run(
     if await repository.is_cancelled(task.agent_run_id):
         return
 
-    if execution_state.run_type == 'assessment_generate':
-        try:
-            result = await AssessmentGenerationWorkflow().run(execution_state)
-            await repository.mark_succeeded(
-                run_id=execution_state.run_id,
-                output_summary=result,
-                actual_model_profile=str(result.get('model_id')) if result.get('model_id') else None,
-            )
-            return
-        except ModelGatewayError as error:
-            if error.retryable:
-                raise RetryableAgentRunError(error.code, str(error)) from error
-            raise NonRetryableAgentRunError(error.code, str(error)) from error
-        except CoreInternalClientError as error:
-            if error.retryable:
-                raise RetryableAgentRunError(error.code, str(error)) from error
-            raise NonRetryableAgentRunError(error.code, str(error)) from error
-        except CredentialDecryptionError as error:
-            raise NonRetryableAgentRunError(error.code, str(error)) from error
-
-    raise NonRetryableAgentRunError(
-        'AGENT_RUN_WORKFLOW_NOT_REGISTERED',
-        f"尚未为 run_type={execution_state.run_type} 注册 LangGraph 工作流。",
-    )
+    try:
+        result = await LearningArchitectAgent().run(execution_state)
+        await repository.mark_succeeded(
+            run_id=execution_state.run_id,
+            output_summary=result,
+            actual_model_profile=str(result.get('model_id')) if result.get('model_id') else None,
+        )
+        return
+    except AgentWorkflowNotRegisteredError as error:
+        raise NonRetryableAgentRunError(
+            'AGENT_RUN_WORKFLOW_NOT_REGISTERED',
+            str(error),
+        ) from error
+    except ModelGatewayError as error:
+        if error.retryable:
+            raise RetryableAgentRunError(error.code, str(error)) from error
+        raise NonRetryableAgentRunError(error.code, str(error)) from error
+    except CoreInternalClientError as error:
+        if error.retryable:
+            raise RetryableAgentRunError(error.code, str(error)) from error
+        raise NonRetryableAgentRunError(error.code, str(error)) from error
+    except CredentialDecryptionError as error:
+        raise NonRetryableAgentRunError(error.code, str(error)) from error

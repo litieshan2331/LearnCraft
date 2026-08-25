@@ -88,7 +88,7 @@ class Settings(BaseSettings):
         validation_alias="MODEL_EGRESS_READ_TIMEOUT_SECONDS",
     )
     model_egress_max_response_bytes: int = Field(
-        default=4 * 1024 * 1024,
+        default=8 * 1024 * 1024,
         ge=1024,
         le=16 * 1024 * 1024,
         validation_alias="MODEL_EGRESS_MAX_RESPONSE_BYTES",

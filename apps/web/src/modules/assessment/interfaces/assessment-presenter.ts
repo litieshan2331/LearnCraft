@@ -12,6 +12,8 @@ export function presentAssessment(assessment: AssessmentSnapshot) {
     id: assessment.id,
     goal_id: assessment.goalId,
     plan_id: assessment.planId,
+    plan_node_id: assessment.planNodeId,
+    source_card_content_id: assessment.sourceCardContentId,
     kind: assessment.kind,
     status: assessment.status,
     question_count: assessment.requestedQuestionCount ?? assessment.items.length,

@@ -3,7 +3,7 @@
  *
  * 测试：
  * - AssessmentGenerationService.request：验证目标上下文、默认模型和 AgentRun 输入快照。
- * - AssessmentGenerationService.request：验证后测必须绑定当前目标下的学习路线。
+
  */
 
 import { describe, expect, it } from "vitest";
@@ -14,7 +14,6 @@ import type {
 } from "@/modules/agent-run/domain/agent-run";
 
 import {
-  AssessmentGenerationApplicationError,
   type AssessmentGenerationAgentRunRequester,
   type AssessmentGenerationContextRepository,
 } from "../domain/assessment-generation";
@@ -22,7 +21,6 @@ import { AssessmentGenerationService } from "./assessment-generation-service";
 
 const goalId = "04d90a58-a556-45d2-9e63-108e2a261d58";
 const ownerId = "d8418b49-5ca9-4aeb-b6e0-25b35b17fb8f";
-const planId = "1c6a5f2b-88e7-489f-9a8f-03b1d1f95840";
 
 const agentRun: AgentRunSnapshot = {
   id: "a3da445d-3c9f-43e4-95b6-8b6a2e746a6f",
@@ -42,8 +40,6 @@ const agentRun: AgentRunSnapshot = {
 
 class FakeContextRepository implements AssessmentGenerationContextRepository {
   hasModel = true;
-  hasPlan = true;
-
   async findOwnedGoalContext() {
     return {
       topic: "TypeScript",
@@ -53,10 +49,6 @@ class FakeContextRepository implements AssessmentGenerationContextRepository {
       backgroundSummary: "有 JavaScript 基础。",
       overallExperience: "intermediate",
     };
-  }
-
-  async hasOwnedPlan() {
-    return this.hasPlan;
   }
 
   async hasDefaultModelConnection() {
@@ -84,7 +76,6 @@ describe("AssessmentGenerationService", () => {
       kind: "diagnostic",
       questionCount: 10,
       difficulty: "hard",
-      planId: null,
       idempotencyKey: "b9a3bbb1-0b6d-476d-9038-c50b192df519",
     });
 
@@ -101,26 +92,8 @@ describe("AssessmentGenerationService", () => {
         question_count: 10,
         difficulty: "hard",
         kind: "diagnostic",
-        plan_id: null,
       },
     });
   });
 
-  it("拒绝没有当前目标路线的后测请求", async () => {
-    const contextRepository = new FakeContextRepository();
-    contextRepository.hasPlan = false;
-    const service = new AssessmentGenerationService(contextRepository, new FakeAgentRunRequester());
-
-    await expect(service.request({
-      ownerId,
-      goalId,
-      kind: "post_test",
-      questionCount: 5,
-      difficulty: "normal",
-      planId,
-      idempotencyKey: "b9a3bbb1-0b6d-476d-9038-c50b192df519",
-    })).rejects.toMatchObject({
-      code: "LEARNING_PLAN_NOT_FOUND",
-    } satisfies Partial<AssessmentGenerationApplicationError>);
-  });
 });

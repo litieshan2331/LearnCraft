@@ -50,6 +50,13 @@
       "when": 1786979234343,
       "tag": "0006_agent_run_goal_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787583477698,
+      "tag": "0007_posttest_generation",
+      "breakpoints": true
     }
   ]
 }

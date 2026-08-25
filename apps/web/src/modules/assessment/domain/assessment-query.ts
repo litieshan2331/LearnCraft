@@ -40,6 +40,8 @@ export interface AssessmentSnapshot {
   id: string;
   goalId: string;
   planId: string | null;
+  planNodeId: string | null;
+  sourceCardContentId: string | null;
   kind: AssessmentKind;
   status: AssessmentStatus;
   requestedQuestionCount: number | null;
