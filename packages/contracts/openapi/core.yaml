@@ -366,6 +366,52 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /api/v1/learning-plans/{plan_id}:
+    get:
+      tags: [Planning]
+      summary: 获取当前用户拥有的学习计划及章节目录
+      description: 仅返回当前用户拥有的学习计划、路线元数据和按章节顺序排列的节点摘要。
+      operationId: get_learning_plan
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+      responses:
+        '200':
+          description: 学习计划详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/plan-nodes/{node_id}:
+    get:
+      tags: [Planning]
+      summary: 获取当前用户拥有的单个学习章节
+      description: 返回章节详情、所属学习计划状态及前置章节 ID。
+      operationId: get_plan_node
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PlanNodeId'
+      responses:
+        '200':
+          description: 学习章节详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanNode'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/plan-nodes/{node_id}/post-assessment-runs:
     post:
       tags: [Assessment]
@@ -772,6 +818,14 @@ components:
       schema:
         type: string
         format: uuid
+    PlanId:
+      name: plan_id
+      in: path
+      required: true
+      description: 学习计划 ID。
+      schema:
+        type: string
+        format: uuid
     PlanNodeId:
       name: node_id
       in: path
@@ -1088,6 +1142,7 @@ components:
         - desired_outcome
         - profile_version
         - status
+        - active_learning_plan_id
         - created_at
         - updated_at
       properties:
@@ -1129,6 +1184,11 @@ components:
             - completed
             - archived
             - failed
+        active_learning_plan_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 当前有效学习路线；尚未成功生成时为 null。
         created_at:
           type: string
           format: date-time
@@ -1557,6 +1617,110 @@ components:
           type: string
           enum: [normal, hard]
           default: normal
+    LearningPlanNode:
+      type: object
+      additionalProperties: false
+      required: [id, plan_id, node_key, ordinal, title, node_brief, learning_objective, difficulty, estimated_minutes, completion_criteria, status, content_status, prerequisite_node_ids]
+      properties:
+        id:
+          type: string
+          format: uuid
+        plan_id:
+          type: string
+          format: uuid
+        node_key:
+          type: string
+          maxLength: 120
+        ordinal:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+        node_brief:
+          type: string
+        learning_objective:
+          type: string
+        rationale:
+          type: string
+          nullable: true
+        difficulty:
+          type: integer
+          minimum: 1
+          maximum: 5
+        estimated_minutes:
+          type: integer
+          minimum: 1
+        completion_criteria:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+        content_status:
+          type: string
+        prerequisite_node_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        goal_id:
+          type: string
+          format: uuid
+        plan_title:
+          type: string
+        plan_status:
+          type: string
+    LearningPlan:
+      type: object
+      additionalProperties: false
+      required: [id, goal_id, version, title, summary, status, profile_version, schema_version, nodes, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        goal_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        status:
+          type: string
+        profile_version:
+          type: integer
+          minimum: 1
+        schema_version:
+          type: string
+        nodes:
+          type: array
+          minItems: 6
+          maxItems: 12
+          items:
+            $ref: '#/components/schemas/LearningPlanNode'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PlanNode:
+      allOf:
+        - $ref: '#/components/schemas/LearningPlanNode'
+        - type: object
+          required: [goal_id, plan_title, plan_status]
+          properties:
+            goal_id:
+              type: string
+              format: uuid
+            plan_title:
+              type: string
+            plan_status:
+              type: string
     ModelConnectionCreateRequest:
       type: object
       additionalProperties: false

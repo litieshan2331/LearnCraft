@@ -52,6 +52,7 @@ export interface LearningGoal {
   model_connection_id: string | null;
   profile_version: number;
   status: LearningGoalStatus;
+  active_learning_plan_id: string | null;
   created_at: string;
   updated_at: string;
 }

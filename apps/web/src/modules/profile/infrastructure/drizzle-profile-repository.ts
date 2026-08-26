@@ -14,6 +14,7 @@ import {
   idempotencyKeys,
   learnerProfiles,
   learningGoals,
+  learningPlans,
   outboxEvents,
   userModelConnections,
 } from "@/lib/db/schema";
@@ -174,7 +175,21 @@ export class DrizzleProfileRepository implements ProfileRepository {
       .where(and(eq(learningGoals.id, goalId), eq(learningGoals.ownerId, ownerId)))
       .limit(1);
 
-    return goal ? toLearningGoalSnapshot(goal) : null;
+    if (!goal) {
+      return null;
+    }
+
+    const [activePlan] = await database
+      .select({ id: learningPlans.id })
+      .from(learningPlans)
+      .where(and(
+        eq(learningPlans.ownerId, ownerId),
+        eq(learningPlans.goalId, goal.id),
+        eq(learningPlans.status, "active"),
+      ))
+      .limit(1);
+
+    return toLearningGoalSnapshot(goal, activePlan?.id ?? null);
   }
 
   async findOwnedGoals(ownerId: string): Promise<LearningGoalListItemSnapshot[]> {
@@ -206,8 +221,18 @@ export class DrizzleProfileRepository implements ProfileRepository {
       }
     }
 
+    const activePlans = await database
+      .select({ id: learningPlans.id, goalId: learningPlans.goalId })
+      .from(learningPlans)
+      .where(and(
+        eq(learningPlans.ownerId, ownerId),
+        eq(learningPlans.status, "active"),
+        inArray(learningPlans.goalId, goals.map((goal) => goal.id)),
+      ));
+    const activePlanIdByGoalId = new Map(activePlans.map((plan) => [plan.goalId, plan.id]));
+
     return goals.map((goal) => ({
-      ...toLearningGoalSnapshot(goal),
+      ...toLearningGoalSnapshot(goal, activePlanIdByGoalId.get(goal.id) ?? null),
       latestDiagnosticAssessment: toLatestDiagnosticAssessmentSnapshot(
         latestDiagnosticByGoalId.get(goal.id) ?? null,
       ),
@@ -342,7 +367,10 @@ function toLearnerProfileSnapshot(record: LearnerProfileRecord): LearnerProfileS
   };
 }
 
-function toLearningGoalSnapshot(record: LearningGoalRecord): LearningGoalSnapshot {
+function toLearningGoalSnapshot(
+  record: LearningGoalRecord,
+  activeLearningPlanId: string | null = null,
+): LearningGoalSnapshot {
   if (!record.topic.trim() || !isLearningGoalStatus(record.status)) {
     throw new Error("学习目标包含不支持的主题或状态。");
   }
@@ -359,6 +387,7 @@ function toLearningGoalSnapshot(record: LearningGoalRecord): LearningGoalSnapsho
     modelConnectionId: record.modelConnectionId,
     profileVersion: record.profileVersion,
     status: record.status,
+    activeLearningPlanId,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };

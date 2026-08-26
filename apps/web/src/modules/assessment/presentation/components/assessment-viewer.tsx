@@ -4,7 +4,7 @@
  * 组件与函数：
  * - AssessmentViewer：加载题集与历史摘要，协调选择答案和提交评分。
  * - QuestionCard：展示提交前的单选题。
- * - AssessmentResult：展示提交后的总分、答案、解析和错题筛选。
+ * - AssessmentResult：展示提交后的总分、答案、解析、错题筛选和前测路线生成入口。
  * - getAttemptIdempotencyKey：复用一次提交及安全重试期间的幂等键。
  */
 
@@ -25,11 +25,17 @@ import {
   type AssessmentAttemptSummary,
   type AssessmentItem,
 } from "../api/assessment-client";
+import {
+  getLearningGoal,
+  type LearningGoal,
+} from "@/modules/profile/presentation/api/profile-client";
+import { PlanGenerationAction } from "@/modules/planning/presentation/components/plan-generation-action";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
 
 export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: string }>) {
   const [assessment, setAssessment] = useState<Assessment | null>(null);
+  const [goal, setGoal] = useState<LearningGoal | null>(null);
   const [attempt, setAttempt] = useState<AssessmentAttempt | null>(null);
   const [attempts, setAttempts] = useState<AssessmentAttemptSummary[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
@@ -45,6 +51,7 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
     void Promise.all([getAssessment(assessmentId), getAssessmentAttempts(assessmentId)])
       .then(async ([nextAssessment, nextAttempts]) => ({
         assessment: nextAssessment,
+        goal: await getLearningGoal(nextAssessment.goal_id).catch(() => null),
         attempts: nextAttempts,
         latestAttempt: nextAttempts[0]
           ? await getAssessmentAttempt(nextAttempts[0].id)
@@ -53,6 +60,7 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
       .then((result) => {
         if (isActive) {
           setAssessment(result.assessment);
+          setGoal(result.goal);
           setAttempts(result.attempts);
           setAttempt(result.latestAttempt);
         }
@@ -147,6 +155,9 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
           <AssessmentResult
             attempt={attempt}
             attempts={attempts}
+            activePlanId={goal?.active_learning_plan_id ?? null}
+            goalId={assessment.goal_id}
+            showPlanGeneration={assessment.kind === "diagnostic" && goal !== null}
             showOnlyWrong={showOnlyWrong}
             onToggleWrong={() => setShowOnlyWrong((current) => !current)}
           />
@@ -221,11 +232,17 @@ function AssessmentHeader({
 function AssessmentResult({
   attempt,
   attempts,
+  activePlanId,
+  goalId,
+  showPlanGeneration,
   showOnlyWrong,
   onToggleWrong,
 }: Readonly<{
   attempt: AssessmentAttempt;
   attempts: AssessmentAttemptSummary[];
+  activePlanId: string | null;
+  goalId: string;
+  showPlanGeneration: boolean;
   showOnlyWrong: boolean;
   onToggleWrong: () => void;
 }>) {
@@ -240,6 +257,7 @@ function AssessmentResult({
         <ResultMetric label="错题数" value={String(wrongCount)} />
       </div>
 
+      {showPlanGeneration ? <PlanGenerationAction activePlanId={activePlanId} goalId={goalId} /> : null}
       <div className="mt-7 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs tracking-[0.16em] text-primary">ANSWER REVIEW</p>

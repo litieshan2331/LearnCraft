@@ -6,4 +6,6 @@
 
 前测题集生成后，`GET /api/v1/assessments/{assessment_id}` 仍只返回题干和选项。用户必须通过 `POST /api/v1/assessments/{assessment_id}/attempts` 一次提交完整答案并携带 UUID `Idempotency-Key`；服务端同步完成确定性评分，成功响应才返回正确答案和解析。`GET /api/v1/assessments/{assessment_id}/attempts` 返回当前题集的作答摘要，`GET /api/v1/assessment-attempts/{attempt_id}` 返回仅作答所有者可见的评分详情。
 
+学习路线生成成功后，`GET /api/v1/learning-plans/{plan_id}` 返回书籍章节式路线目录，`GET /api/v1/plan-nodes/{node_id}` 返回单个章节详情；两者都按 Session 所有权过滤。路线展示页面位于 `/learning-plans/{plan_id}`。
+
 具体接口字段以 `packages/contracts/openapi/core.yaml` 为准。

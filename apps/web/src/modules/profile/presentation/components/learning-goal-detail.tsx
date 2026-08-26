@@ -2,7 +2,7 @@
  * 学习目标详情组件。
  *
  * 组件：
- * - LearningGoalDetail：读取并展示单个学习目标的完整信息及前测入口。
+ * - LearningGoalDetail：读取并展示单个学习目标，并在前测评分后提供路线生成入口。
  */
 
 "use client";
@@ -18,6 +18,7 @@ import {
   type LearningGoal,
   type LatestAssessmentSummary,
 } from "../api/profile-client";
+import { PlanGenerationAction } from "@/modules/planning/presentation/components/plan-generation-action";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
 
@@ -65,6 +66,7 @@ export function LearningGoalDetail({ goalId }: Readonly<{ goalId: string }>) {
   }
 
   const primaryAction = getPrimaryAction(goal, latestAssessment);
+  const planGenerationAvailable = Boolean(goal.active_learning_plan_id) || latestAssessment?.status === "graded";
 
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-12 sm:px-10 sm:py-16">
@@ -83,7 +85,16 @@ export function LearningGoalDetail({ goalId }: Readonly<{ goalId: string }>) {
           <p className="text-xs text-muted-foreground">目标日期</p>
           <p className="mt-1">{goal.target_date ?? "未设置"}</p>
         </div>
-        {primaryAction.href ? (
+        {planGenerationAvailable ? (
+          <>
+            <PlanGenerationAction activePlanId={goal.active_learning_plan_id} goalId={goal.id} />
+            {latestAssessment ? (
+              <Button asChild className="mt-3 rounded-none" variant="outline">
+                <Link href={"/assessments/" + latestAssessment.id}>查看前测<ArrowRight aria-hidden className="size-4" /></Link>
+              </Button>
+            ) : null}
+          </>
+        ) : primaryAction.href ? (
           <Button asChild className="mt-8 rounded-none">
             <Link href={primaryAction.href}>{primaryAction.label}<ArrowRight aria-hidden className="size-4" /></Link>
           </Button>

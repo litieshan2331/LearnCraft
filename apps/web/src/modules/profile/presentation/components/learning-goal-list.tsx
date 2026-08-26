@@ -205,6 +205,9 @@ function GoalCard({
 }
 
 function getPrimaryAction(goal: LearningGoalListItem): { label: string; href: string | null } {
+  if (goal.active_learning_plan_id) {
+    return { label: "查看学习路线", href: "/learning-plans/" + goal.active_learning_plan_id };
+  }
   const assessment = goal.latest_assessment;
   if (assessment && ["ready", "in_progress", "submitted", "grading", "graded"].includes(assessment.status)) {
     return { label: "查看前测", href: `/assessments/${assessment.id}` };

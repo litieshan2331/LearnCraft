@@ -1,0 +1,131 @@
+/**
+ * 学习章节详情展示组件。
+ *
+ * 组件与函数：
+ * - PlanNodeView：读取并展示单个章节的学习目标、完成标准和路线归属信息。
+ * - formatStatus：将稳定状态值转换为中文展示文案。
+ */
+
+"use client";
+
+import { AlertCircle, ArrowLeft, BookOpen, Clock3, LoaderCircle, Target } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
+import { Button } from "@/shared/ui/primitives/button";
+
+import {
+  getPlanNode,
+  PlanningApiError,
+  type PlanNode,
+} from "../api/planning-client";
+
+export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
+  const [node, setNode] = useState<PlanNode | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void getPlanNode(nodeId)
+      .then((nextNode) => {
+        if (active) {
+          setNode(nextNode);
+        }
+      })
+      .catch((requestError: unknown) => {
+        if (active) {
+          setError(requestError instanceof PlanningApiError ? requestError.message : "学习章节暂时无法读取，请稍后重试。");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [nodeId]);
+
+  if (error) {
+    return (
+      <main className="mx-auto w-full max-w-4xl px-6 py-12 sm:px-10 sm:py-16">
+        <Alert className="rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+          <AlertCircle aria-hidden className="size-4" />
+          <AlertTitle className="text-[#8b3f35]">无法读取学习章节</AlertTitle>
+          <AlertDescription className="mt-1 text-[#8b3f35]">{error}</AlertDescription>
+        </Alert>
+        <Button asChild className="mt-6 rounded-none" variant="outline">
+          <Link href="/goals"><ArrowLeft aria-hidden className="size-4" />返回学习目标</Link>
+        </Button>
+      </main>
+    );
+  }
+
+  if (!node) {
+    return <div className="grid min-h-96 place-items-center"><LoaderCircle aria-hidden className="size-5 animate-spin text-primary" /></div>;
+  }
+
+  const prerequisiteLabel = node.prerequisite_node_ids.length > 0
+    ? String(node.prerequisite_node_ids.length) + " 个前置章节"
+    : "无前置章节";
+
+  return (
+    <main className="mx-auto w-full max-w-4xl px-6 py-10 sm:px-10 sm:py-14">
+      <Button asChild className="rounded-none" variant="ghost">
+        <Link href={"/learning-plans/" + node.plan_id}><ArrowLeft aria-hidden className="size-4" />返回学习路线</Link>
+      </Button>
+
+      <header className="mt-7 border border-border border-l-2 border-l-primary bg-card p-6 sm:p-9">
+        <div className="flex flex-wrap items-center gap-3 text-xs tracking-[0.16em] text-primary">
+          <span className="inline-flex items-center gap-2"><BookOpen aria-hidden className="size-4" />{node.plan_title}</span>
+          <span className="text-muted-foreground">第 {node.ordinal} 章</span>
+          <span className="text-muted-foreground">{formatStatus(node.status)}</span>
+        </div>
+        <h1 className="mt-4 font-heading text-4xl font-normal tracking-tight">{node.title}</h1>
+        <p className="mt-5 max-w-3xl text-sm leading-8 text-muted-foreground">{node.node_brief}</p>
+      </header>
+
+      <section className="mt-8 grid gap-5 sm:grid-cols-2">
+        <article className="border border-border bg-card p-5">
+          <p className="inline-flex items-center gap-2 text-xs tracking-[0.14em] text-primary"><Target aria-hidden className="size-4" />LEARNING OBJECTIVE</p>
+          <p className="mt-4 leading-8">{node.learning_objective}</p>
+        </article>
+        <article className="border border-border bg-card p-5">
+          <p className="inline-flex items-center gap-2 text-xs tracking-[0.14em] text-primary"><Clock3 aria-hidden className="size-4" />STUDY ESTIMATE</p>
+          <p className="mt-4 text-lg">{node.estimated_minutes} 分钟</p>
+          <p className="mt-2 text-sm text-muted-foreground">难度 {node.difficulty}/5 · {prerequisiteLabel}</p>
+        </article>
+      </section>
+
+      <section className="mt-5 border border-border bg-card p-5 sm:p-7">
+        <p className="text-xs tracking-[0.14em] text-primary">COMPLETION CRITERIA</p>
+        <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-7">
+          {node.completion_criteria.map((criterion) => <li key={criterion}>{criterion}</li>)}
+        </ul>
+      </section>
+
+      {node.rationale ? (
+        <section className="mt-5 border border-border bg-card p-5 sm:p-7">
+          <p className="text-xs tracking-[0.14em] text-primary">WHY THIS CHAPTER</p>
+          <p className="mt-4 text-sm leading-7 text-muted-foreground">{node.rationale}</p>
+        </section>
+      ) : null}
+
+      <p className="mt-6 text-sm text-muted-foreground">节点内容：{formatStatus(node.content_status)}。知识内容生成将在此章节页后续接入。</p>
+    </main>
+  );
+}
+
+function formatStatus(value: string): string {
+  const labels: Record<string, string> = {
+    active: "进行中",
+    available: "可学习",
+    in_progress: "学习中",
+    completed: "已完成",
+    needs_review: "需复习",
+    generating: "生成中",
+    ready: "已准备",
+    not_requested: "未请求",
+    failed: "生成失败",
+    superseded: "历史版本",
+  };
+  return labels[value] ?? value;
+}

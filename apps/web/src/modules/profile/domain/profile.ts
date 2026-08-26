@@ -62,6 +62,7 @@ export interface LearningGoalSnapshot {
   modelConnectionId: string | null;
   profileVersion: number;
   status: LearningGoalStatus;
+  activeLearningPlanId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -38,6 +38,7 @@ export function presentLearningGoal(goal: LearningGoalSnapshot) {
     model_connection_id: goal.modelConnectionId,
     profile_version: goal.profileVersion,
     status: goal.status,
+    active_learning_plan_id: goal.activeLearningPlanId,
     created_at: goal.createdAt.toISOString(),
     updated_at: goal.updatedAt.toISOString(),
   };
