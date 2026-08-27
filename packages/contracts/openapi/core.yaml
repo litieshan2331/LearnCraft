@@ -19,6 +19,10 @@ tags:
     description: 当前用户的学习目标接口
   - name: 模型连接
     description: 用户自带 OpenAI-compatible API 的加密连接设置；响应永不包含 API Key。
+  - name: Planning
+    description: 学习路线、章节目录与章节详情接口。
+  - name: Content
+    description: 节点知识内容生成与阅读接口。
   - name: Assessment
     description: 前测与路线后测的异步题集生成请求接口。
   - name: AgentRun
@@ -412,6 +416,50 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /api/v1/plan-nodes/{node_id}/content-runs:
+    post:
+      tags: [Content]
+      summary: 为当前有效路线的节点创建知识内容生成 AgentRun
+      description: 仅允许当前用户首次请求节点内容；节点已有成功内容时不创建第二次模型任务。失败内容可使用新的幂等键重试。
+      operationId: create_card_content_generation_run
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PlanNodeId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardContentGenerationRequest'
+      responses:
+        '202':
+          description: AgentRun 已创建并进入队列
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '200':
+          description: 同一幂等键重复请求，返回已有 AgentRun
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 节点内容已经可用、正在生成，或未配置账户默认模型连接
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/plan-nodes/{node_id}/post-assessment-runs:
     post:
       tags: [Assessment]
@@ -752,6 +800,43 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/AgentRunNotCancellable'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /internal/v1/agent-runs/{agent_run_id}/card-content-result:
+    post:
+      tags: [内部接口]
+      summary: Worker 回写已校验的节点知识内容
+      description: 仅允许 Agent Worker 在私有网络中调用；结果必须绑定 card_content_generate AgentRun 的 plan_node。
+      operationId: submit_card_content_result
+      x-internal: true
+      security:
+        - internalServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/AgentRunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardContentGenerationResult'
+      responses:
+        '200':
+          description: 节点内容已幂等持久化
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [card_content_id, status]
+                properties:
+                  card_content_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+        '401':
+          $ref: '#/components/responses/InternalAuthenticationFailed'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
   /internal/v1/agent-runs/{agent_run_id}/results:
@@ -1603,6 +1688,10 @@ components:
       type: object
       additionalProperties: false
       description: 用户已确认生成学习路线；目标、当前画像与已评分前测由服务端读取并冻结为 AgentRun 输入快照。
+    CardContentGenerationRequest:
+      type: object
+      additionalProperties: false
+      description: 首次请求节点知识内容；目标、画像和节点快照由服务端读取并冻结为 AgentRun 输入。
     PosttestGenerationRequest:
       type: object
       additionalProperties: false
@@ -1836,6 +1925,59 @@ components:
           description: 面向用户的安全错误摘要，不得含 Provider 原始响应、密钥或内部连接信息。
         retryable:
           type: boolean
+    CardContentGenerationResult:
+      type: object
+      additionalProperties: false
+      required: [plan_node_id, schema_version, foundation, worked_example, pitfalls_debug, source_refs, teaching_memory]
+      properties:
+        plan_node_id:
+          type: string
+          format: uuid
+        schema_version:
+          type: string
+          enum: [card_content.v1]
+        foundation:
+          type: string
+        worked_example:
+          type: object
+          required: [explanation, code, call_sequence, expected_output]
+          properties:
+            explanation:
+              type: string
+            code:
+              type: string
+            call_sequence:
+              type: array
+              items:
+                type: string
+            expected_output:
+              type: string
+        pitfalls_debug:
+          type: string
+        source_refs:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        teaching_memory:
+          type: object
+          required: [key_concepts, common_mistakes, assessment_targets]
+          properties:
+            key_concepts:
+              type: array
+              items:
+                type: string
+            common_mistakes:
+              type: array
+              items:
+                type: string
+            assessment_targets:
+              type: array
+              items:
+                type: string
+        generation_metadata:
+          type: object
+          additionalProperties: true
     AgentRunResultSubmission:
       type: object
       additionalProperties: false

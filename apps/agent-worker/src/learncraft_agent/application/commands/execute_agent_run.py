@@ -12,6 +12,7 @@ from learncraft_agent.acl.web_core_internal_client import CoreInternalClientErro
 from learncraft_agent.application.dto.agent_run_task import AgentRunRequestedTask
 from learncraft_agent.application.services.base_agent import AgentWorkflowNotRegisteredError
 from learncraft_agent.application.services.learning_architect_agent import LearningArchitectAgent
+from learncraft_agent.application.services.node_tutor_agent import NodeTutorAgent
 from learncraft_agent.application.ports.model_gateway import ModelGatewayError
 from learncraft_agent.infrastructure.llm.credential_decryptor import CredentialDecryptionError
 from learncraft_agent.infrastructure.persistence.repositories.sqlalchemy_agent_run_repository import (
@@ -51,7 +52,8 @@ async def execute_agent_run(
         return
 
     try:
-        result = await LearningArchitectAgent().run(execution_state)
+        agent = NodeTutorAgent() if execution_state.run_type in {"card_content_generate", "posttest_generate"} else LearningArchitectAgent()
+        result = await agent.run(execution_state)
         await repository.mark_succeeded(
             run_id=execution_state.run_id,
             output_summary=result,

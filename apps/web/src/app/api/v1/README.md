@@ -8,4 +8,6 @@
 
 学习路线生成成功后，`GET /api/v1/learning-plans/{plan_id}` 返回书籍章节式路线目录，`GET /api/v1/plan-nodes/{node_id}` 返回单个章节详情；两者都按 Session 所有权过滤。路线展示页面位于 `/learning-plans/{plan_id}`。
 
+`POST /api/v1/plan-nodes/{node_id}/content-runs` 使用 UUID `Idempotency-Key` 创建节点知识内容任务，仅允许当前有效路线中尚无成功内容的节点发起；Worker 会异步执行 Node Tutor 并回写内容状态。
+
 具体接口字段以 `packages/contracts/openapi/core.yaml` 为准。

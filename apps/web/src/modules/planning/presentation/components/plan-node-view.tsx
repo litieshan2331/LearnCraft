@@ -2,7 +2,7 @@
  * 学习章节详情展示组件。
  *
  * 组件与函数：
- * - PlanNodeView：读取并展示单个章节的学习目标、完成标准和路线归属信息。
+ * - PlanNodeView：读取章节详情，并发起或观察节点知识内容生成任务。
  * - formatStatus：将稳定状态值转换为中文展示文案。
  */
 
@@ -10,8 +10,9 @@
 
 import { AlertCircle, ArrowLeft, BookOpen, Clock3, LoaderCircle, Target } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { CardContentGenerationAction } from "@/modules/content/presentation/components/card-content-generation-action";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
 
@@ -42,6 +43,11 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
     return () => {
       active = false;
     };
+  }, [nodeId]);
+  const refreshNode = useCallback(() => {
+    void getPlanNode(nodeId)
+      .then((nextNode) => setNode(nextNode))
+      .catch(() => undefined);
   }, [nodeId]);
 
   if (error) {
@@ -109,7 +115,11 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
         </section>
       ) : null}
 
-      <p className="mt-6 text-sm text-muted-foreground">节点内容：{formatStatus(node.content_status)}。知识内容生成将在此章节页后续接入。</p>
+      <CardContentGenerationAction
+        contentStatus={node.content_status}
+        onCompleted={refreshNode}
+        planNodeId={node.id}
+      />
     </main>
   );
 }
