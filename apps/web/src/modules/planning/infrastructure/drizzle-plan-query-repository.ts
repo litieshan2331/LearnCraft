@@ -9,6 +9,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { getDatabase } from "@/lib/db/client";
 import {
+  cardContents,
   learningPlans,
   planNodePrerequisites,
   planNodes,
@@ -71,11 +72,17 @@ export class DrizzlePlanQueryRepository implements PlanQueryRepository {
         planTitle: learningPlans.title,
         planStatus: learningPlans.status,
         goalId: learningPlans.goalId,
+        cardContentId: cardContents.id,
       })
       .from(planNodes)
       .innerJoin(learningPlans, and(
         eq(learningPlans.id, planNodes.planId),
         eq(learningPlans.ownerId, ownerId),
+      ))
+      .leftJoin(cardContents, and(
+        eq(cardContents.planNodeId, planNodes.id),
+        eq(cardContents.ownerId, ownerId),
+        eq(cardContents.status, "ready"),
       ))
       .where(and(
         eq(planNodes.id, nodeId),
@@ -97,6 +104,7 @@ export class DrizzlePlanQueryRepository implements PlanQueryRepository {
       goalId: record.goalId,
       planTitle: record.planTitle,
       planStatus: record.planStatus,
+      cardContentId: record.cardContentId ?? null,
     };
   }
 }
@@ -145,6 +153,7 @@ async function withPrerequisiteIds(
     completionCriteria: toCriteria(node.completionCriteria),
     status: node.status,
     contentStatus: node.contentStatus,
+    cardContentId: null,
     prerequisiteNodeIds: prerequisitesByNode.get(node.id) ?? [],
   }));
 }

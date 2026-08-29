@@ -11,3 +11,5 @@
 `POST /api/v1/plan-nodes/{node_id}/content-runs` 使用 UUID `Idempotency-Key` 创建节点知识内容任务，仅允许当前有效路线中尚无成功内容的节点发起；Worker 会异步执行 Node Tutor 并回写内容状态。
 
 具体接口字段以 `packages/contracts/openapi/core.yaml` 为准。
+
+生成节点知识内容并回写成功后，`GET /api/v1/card-contents/{card_content_id}` 仅向内容所有者返回 ready 内容、示例和来源引用，不返回 teaching_memory 或生成元数据。

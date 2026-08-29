@@ -3,7 +3,7 @@
  *
  * 测试：
  * - createCardContentGenerationRun：发送内容生成路径、幂等键和空对象请求体。
- * - getCardContentGenerationRun：读取受保护的 AgentRun 状态。
+ * - getCardContentGenerationRun、getCardContent：读取任务状态和已成功内容。
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createCardContentGenerationRun,
   getCardContentGenerationRun,
+  getCardContent,
 } from "./content-client";
 
 afterEach(() => {
@@ -35,13 +36,19 @@ describe("content-client", () => {
     expect(JSON.parse(init.body as string)).toEqual({});
   });
 
-  it("读取节点内容任务时调用受保护的 AgentRun 接口", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "run-1", status: "running" }));
+  it("读取节点内容任务和已成功内容时调用对应受保护接口", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: "run-1", status: "running" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "content-1", status: "ready" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await getCardContentGenerationRun("run-1");
+    await getCardContent("content-1");
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/agent-runs/run-1");
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      "/api/v1/agent-runs/run-1",
+      "/api/v1/card-contents/content-1",
+    ]);
   });
 });
 

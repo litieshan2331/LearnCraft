@@ -197,12 +197,12 @@
 
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
-| P0-POST-001 | 节点完成后生成后测。 | 用户标记任意节点完成后，可选择 5–10 题，推荐 5–8 题；节点教学 Agent 仅基于该节点固定内容、Demo 与 `teaching_memory` 出单选题，plan_node_id 必填；每次重练生成独立题集。 |
+| P0-POST-001 | 节点内容生成后生成后测。 | 任意节点存在 ready 内容后即可选择 5–10 题，推荐 5–8 题；节点教学 Agent 仅基于该节点固定内容、Demo 与 `teaching_memory` 出单选题，plan_node_id 必填；每次重练生成独立题集。 |
 | P0-POST-002 | 提交后获得评分、解析和历史错题。 | 题目首次生成时已保存答案与解析；服务端确定性评分，交卷后仅向作答用户返回总分、正确答案、逐题解析和薄弱点。节点页可查看历史后测题集、作答、错题和解析；不再次调用模型。 |
 | P0-POST-003 | 节点完成条件明确。 | 节点完成由用户显式标记；后测分数不限制访问其他节点；不满足时允许复习和重新生成后测，不丢历史结果。 |
 | P0-POST-004 | 后续建议可审计。 | 每一次掌握、复习或提高下一次内容生成难度的建议都记录触发证据、策略版本和结果；不修改当前路线。 |
 
-**暂时需要做：**前测与节点后测共用的单选题和确定性评分合同、生成时一次性保存答案/解析、交卷后按所有权暴露解析、题量边界、用户完成标记、同节点后测新题集重生、历史题集/错题查看、规则驱动建议和用户可见理由。
+**暂时需要做：**前测与节点后测共用的单选题和确定性评分合同、生成时一次性保存答案/解析、交卷后按所有权暴露解析、题量边界、用户完成标记（仅个人记录）、同节点后测新题集重生、历史题集/错题查看、规则驱动建议和用户可见理由。
 
 **暂时不需要做：**完整学习报告、徽章/积分、同伴对比、复杂知识追踪算法、教师审批。
 
@@ -1786,7 +1786,7 @@ docker compose logs -f web agent-api agent-dispatcher agent-celery-worker
 3. `RetrieverPort`：先读已审核种子内容，分别经 `VectorStore` 做 dense 召回、经词法检索端口做 FTS 召回，再由 `HybridRetriever` 用 RRF 融合，返回可引用定位；P0 注入 `PgvectorVectorStore`，未来可替换为 `MilvusVectorStore`。若 Provider 可返回 sparse 向量，再增加一次 `VectorStore` sparse 召回；
 4. `LearningArchitectGraph`：前测输入规范化 → 单选题、隐藏答案/解析 Schema → Internal Core API；用户确认后，目标/画像/前测交接快照 → 书籍章节式路线 + node_brief → Pydantic schema → 章节顺序/主题覆盖/DAG/时长校验；主流程最终校验仍失败时强制执行 Tavily 广搜、缩搜和资源阅读后重建，再经 Internal Core API 持久化；
 5. `NodeTutorGraph`：目标摘要 + node_brief + 当前画像 → 模型生成（可自行决定是否调用 Tavily）→ 唯一内容/teaching_memory 生成、引用校验；主流程最终校验仍失败时强制执行 Tavily“先广搜、后缩搜、资源阅读”后重建，再经 Internal Core API 持久化；节点完成后，固定内容/teaching_memory → 新节点后测题集。评分仍在 Web 侧确定性完成；
-6. `NodeCompletionService`：保存用户的节点完成标记，并只在此后允许发起节点后测；后测历史查询仅返回所有者的题集、作答和错题解析；P0 不实现 RunnerClient 或 CodeRun HTTP 用例；
+6. `NodeCompletionService`：保存用户的节点完成标记，，不限制内容生成或节点后测；后测历史查询仅返回所有者的题集、作答和错题解析；P0 不实现 RunnerClient 或 CodeRun HTTP 用例；
 7. `LearningFeedbackPolicy`：用纯 TypeScript 领域规则消费节点后测评分，给出建议但不产生 `adaptation_events`、不决定解锁权限。
 
 ### 步骤 10：完成 Swagger、日志和可观察性

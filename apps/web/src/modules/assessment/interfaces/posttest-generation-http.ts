@@ -18,7 +18,9 @@ export function posttestGenerationErrorResponse(error: unknown): NextResponse {
 
   switch (error.code) {
     case "PLAN_NODE_NOT_FOUND":
-      return apiErrorResponse(404, error.code, "节点不存在、尚未完成或没有可用的节点内容。");
+      return apiErrorResponse(404, error.code, "节点不存在或你无权访问。");
+    case "CARD_CONTENT_NOT_READY":
+      return apiErrorResponse(409, error.code, "请先生成该章节的知识内容，再生成后测。");
     case "DEFAULT_MODEL_CONNECTION_REQUIRED":
       return apiErrorResponse(409, error.code, "请先配置并设置一个账户默认模型连接。");
   }

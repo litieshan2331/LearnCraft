@@ -4,6 +4,7 @@
  * 导出：
  * - createCardContentGenerationRun：创建 card_content_generate 任务。
  * - getCardContentGenerationRun：轮询节点内容任务状态。
+ * - getCardContent：读取已成功的节点知识内容。
  * - ContentApiError：向展示层提供稳定的接口错误信息。
  */
 
@@ -26,6 +27,27 @@ export interface CardContentGenerationRun {
   };
 }
 
+export interface WorkedExample {
+  explanation: string;
+  code: string;
+  call_sequence: string[];
+  expected_output: string;
+}
+
+export interface CardContent {
+  id: string;
+  plan_node_id: string;
+  version: number;
+  status: "ready";
+  schema_version: "card_content.v1";
+  foundation: string;
+  worked_example: WorkedExample;
+  pitfalls_debug: string;
+  source_refs: Array<Record<string, unknown>>;
+  created_at: string;
+  updated_at: string;
+  generated_at: string | null;
+}
 interface ApiErrorResponse {
   error?: {
     code?: string;
@@ -62,6 +84,9 @@ export function getCardContentGenerationRun(
   return requestJson<CardContentGenerationRun>("/api/v1/agent-runs/" + agentRunId);
 }
 
+export function getCardContent(cardContentId: string): Promise<CardContent> {
+  return requestJson<CardContent>("/api/v1/card-contents/" + cardContentId);
+}
 async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
     ...init,

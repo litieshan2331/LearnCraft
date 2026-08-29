@@ -3,7 +3,7 @@
  *
  * 测试：
  * - PosttestGenerationService.request：验证目标为 plan_node 且输入绑定 source_card_content_id。
- * - PosttestGenerationService.request：验证未完成节点或缺少内容时拒绝创建任务。
+ * - PosttestGenerationService.request：验证节点未找到或内容未 ready 时拒绝创建任务。
  */
 
 import { describe, expect, it } from "vitest";
@@ -44,7 +44,7 @@ const agentRun: AgentRunSnapshot = {
 class FakeContextRepository implements PosttestGenerationContextRepository {
   contextAvailable = true;
 
-  async findOwnedCompletedNodeContext() {
+  async findOwnedNodeContext() {
     return this.contextAvailable
       ? { goalId, planNodeId, cardContentId, topic: "TypeScript" }
       : null;
@@ -92,7 +92,7 @@ describe("PosttestGenerationService", () => {
     });
   });
 
-  it("节点未完成或没有成功内容时不创建后测任务", async () => {
+  it("没有成功内容时不创建后测任务", async () => {
     const contextRepository = new FakeContextRepository();
     contextRepository.contextAvailable = false;
     const service = new PosttestGenerationService(contextRepository, new FakeAgentRunRequester());
@@ -105,6 +105,23 @@ describe("PosttestGenerationService", () => {
       idempotencyKey: "b9a3bbb1-0b6d-476d-9038-c50b192df519",
     })).rejects.toMatchObject({
       code: "PLAN_NODE_NOT_FOUND",
+    } satisfies Partial<PosttestGenerationApplicationError>);
+  });
+
+  it("节点没有 ready 内容时返回独立错误码", async () => {
+    const service = new PosttestGenerationService({
+      findOwnedNodeContext: async () => ({ goalId, planNodeId, cardContentId: null, topic: "TypeScript" }),
+      hasDefaultModelConnection: async () => true,
+    }, new FakeAgentRunRequester());
+
+    await expect(service.request({
+      ownerId,
+      planNodeId,
+      questionCount: 6,
+      difficulty: "normal",
+      idempotencyKey: "c9a3bbb1-0b6d-476d-9038-c50b192df519",
+    })).rejects.toMatchObject({
+      code: "CARD_CONTENT_NOT_READY",
     } satisfies Partial<PosttestGenerationApplicationError>);
   });
 });

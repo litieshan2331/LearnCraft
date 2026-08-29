@@ -42,6 +42,7 @@ export function presentPlanNode(node: PlanNodeSnapshot) {
     completion_criteria: node.completionCriteria,
     status: node.status,
     content_status: node.contentStatus,
+    card_content_id: node.cardContentId,
     prerequisite_node_ids: node.prerequisiteNodeIds,
   };
 }
@@ -61,6 +62,7 @@ function presentPlanNodeInPlan(node: LearningPlanSnapshot["nodes"][number]) {
     completion_criteria: node.completionCriteria,
     status: node.status,
     content_status: node.contentStatus,
+    card_content_id: node.cardContentId,
     prerequisite_node_ids: node.prerequisiteNodeIds,
   };
 }

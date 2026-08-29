@@ -2,7 +2,7 @@
  * 节点后测生成应用服务。
  *
  * 导出：
- * - PosttestGenerationService：校验节点完成状态、唯一成功内容和默认模型，并创建 posttest_generate AgentRun。
+ * - PosttestGenerationService：校验节点归属、唯一成功内容和默认模型，并创建 posttest_generate AgentRun。
  */
 
 import type { AgentRunProductionResult } from "@/modules/agent-run/domain/agent-run";
@@ -27,12 +27,16 @@ export class PosttestGenerationService {
   ) {}
 
   async request(input: PosttestGenerationRequest): Promise<AgentRunProductionResult> {
-    const context = await this.contextRepository.findOwnedCompletedNodeContext(
+    const context = await this.contextRepository.findOwnedNodeContext(
       input.ownerId,
       input.planNodeId,
     );
     if (!context) {
       throw new PosttestGenerationApplicationError("PLAN_NODE_NOT_FOUND");
+    }
+
+    if (!context.cardContentId) {
+      throw new PosttestGenerationApplicationError("CARD_CONTENT_NOT_READY");
     }
 
     if (!await this.contextRepository.hasDefaultModelConnection(input.ownerId)) {

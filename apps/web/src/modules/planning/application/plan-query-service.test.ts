@@ -37,6 +37,7 @@ const node: PlanNodeSnapshot = {
   completionCriteria: ["能解释变量和表达式", "能完成基础练习"],
   status: "available",
   contentStatus: "not_started",
+  cardContentId: null,
   prerequisiteNodeIds: [],
 };
 

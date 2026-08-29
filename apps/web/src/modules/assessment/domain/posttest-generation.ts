@@ -3,7 +3,7 @@
  *
  * 导出：
  * - PosttestGenerationRequest：节点后测生成请求。
- * - PosttestGenerationContext：已完成节点与唯一成功内容的上下文快照。
+ * - PosttestGenerationContext：节点与唯一成功内容的上下文快照。
  * - PosttestGenerationContextRepository：读取节点后测所需的归属和内容状态。
  * - PosttestGenerationApplicationError：映射稳定的业务错误码。
  */
@@ -25,12 +25,12 @@ export interface PosttestGenerationRequest {
 export interface PosttestGenerationContext {
   goalId: string;
   planNodeId: string;
-  cardContentId: string;
+  cardContentId: string | null;
   topic: string;
 }
 
 export interface PosttestGenerationContextRepository {
-  findOwnedCompletedNodeContext(
+  findOwnedNodeContext(
     ownerId: string,
     planNodeId: string,
   ): Promise<PosttestGenerationContext | null>;
@@ -56,6 +56,7 @@ export interface PosttestGenerationAgentRunRequester {
 
 export type PosttestGenerationApplicationErrorCode =
   | "PLAN_NODE_NOT_FOUND"
+  | "CARD_CONTENT_NOT_READY"
   | "DEFAULT_MODEL_CONNECTION_REQUIRED";
 
 export class PosttestGenerationApplicationError extends Error {

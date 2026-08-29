@@ -21,6 +21,7 @@ export interface LearningPlanNode {
   completion_criteria: string[];
   status: string;
   content_status: string;
+  card_content_id: string | null;
   prerequisite_node_ids: string[];
 }
 
@@ -91,6 +92,10 @@ export function getLearningPlan(planId: string): Promise<LearningPlan> {
 
 export function getPlanNode(nodeId: string): Promise<PlanNode> {
   return requestJson<PlanNode>("/api/v1/plan-nodes/" + nodeId);
+}
+
+export function markPlanNodeCompleted(nodeId: string): Promise<PlanNode> {
+  return requestJson<PlanNode>("/api/v1/plan-nodes/" + nodeId + "/completion", { method: "POST" });
 }
 
 export function createPlanGenerationRun(

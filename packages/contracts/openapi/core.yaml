@@ -416,6 +416,52 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /api/v1/card-contents/{card_content_id}:
+    get:
+      tags: [Content]
+      summary: 获取当前用户拥有的节点知识内容
+      description: 仅返回状态为 ready 的公开节点知识内容和来源引用；不返回 teaching_memory、生成元数据或其他内部字段。
+      operationId: get_card_content
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CardContentId'
+      responses:
+        '200':
+          description: 已成功生成的节点知识内容
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/plan-nodes/{node_id}/completion:
+    post:
+      tags: [Planning]
+      summary: 标记当前用户的学习章节完成
+      description: 只记录用户的个人完成状态；不检查前置章节，不限制内容生成或节点后测。
+      operationId: mark_plan_node_completed
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PlanNodeId'
+      responses:
+        '200':
+          description: 已更新的学习章节
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanNode'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/plan-nodes/{node_id}/content-runs:
     post:
       tags: [Content]
@@ -908,6 +954,14 @@ components:
       in: path
       required: true
       description: 学习计划 ID。
+      schema:
+        type: string
+        format: uuid
+    CardContentId:
+      name: card_content_id
+      in: path
+      required: true
+      description: 节点知识内容 ID。
       schema:
         type: string
         format: uuid
@@ -1709,7 +1763,7 @@ components:
     LearningPlanNode:
       type: object
       additionalProperties: false
-      required: [id, plan_id, node_key, ordinal, title, node_brief, learning_objective, difficulty, estimated_minutes, completion_criteria, status, content_status, prerequisite_node_ids]
+      required: [id, plan_id, node_key, ordinal, title, node_brief, learning_objective, difficulty, estimated_minutes, completion_criteria, status, content_status, card_content_id, prerequisite_node_ids]
       properties:
         id:
           type: string
@@ -1747,6 +1801,10 @@ components:
           type: string
         content_status:
           type: string
+        card_content_id:
+          type: string
+          format: uuid
+          nullable: true
         prerequisite_node_ids:
           type: array
           items:
@@ -1925,6 +1983,59 @@ components:
           description: 面向用户的安全错误摘要，不得含 Provider 原始响应、密钥或内部连接信息。
         retryable:
           type: boolean
+    CardContent:
+      type: object
+      additionalProperties: false
+      required: [id, plan_node_id, version, status, schema_version, foundation, worked_example, pitfalls_debug, source_refs, created_at, updated_at, generated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        plan_node_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [ready]
+        schema_version:
+          type: string
+          enum: [card_content.v1]
+        foundation:
+          type: string
+        worked_example:
+          type: object
+          required: [explanation, code, call_sequence, expected_output]
+          properties:
+            explanation:
+              type: string
+            code:
+              type: string
+            call_sequence:
+              type: array
+              items:
+                type: string
+            expected_output:
+              type: string
+        pitfalls_debug:
+          type: string
+        source_refs:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        generated_at:
+          type: string
+          format: date-time
+          nullable: true
     CardContentGenerationResult:
       type: object
       additionalProperties: false

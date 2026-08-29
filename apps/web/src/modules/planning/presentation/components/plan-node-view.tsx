@@ -13,6 +13,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { CardContentGenerationAction } from "@/modules/content/presentation/components/card-content-generation-action";
+import { CardContentView } from "@/modules/content/presentation/components/card-content-view";
+import { NodeCompletionAction } from "./node-completion-action";
+import { getCardContent, type CardContent } from "@/modules/content/presentation/api/content-client";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
 
@@ -24,6 +27,7 @@ import {
 
 export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
   const [node, setNode] = useState<PlanNode | null>(null);
+  const [content, setContent] = useState<CardContent | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,6 +35,7 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
     void getPlanNode(nodeId)
       .then((nextNode) => {
         if (active) {
+          setContent(null);
           setNode(nextNode);
         }
       })
@@ -44,6 +49,28 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
       active = false;
     };
   }, [nodeId]);
+  useEffect(() => {
+    if (!node?.card_content_id) {
+      return;
+    }
+
+    let active = true;
+    void getCardContent(node.card_content_id)
+      .then((nextContent) => {
+        if (active) {
+          setContent(nextContent);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setContent(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [node?.card_content_id]);
   const refreshNode = useCallback(() => {
     void getPlanNode(nodeId)
       .then((nextNode) => setNode(nextNode))
@@ -120,6 +147,9 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
         onCompleted={refreshNode}
         planNodeId={node.id}
       />
+      <NodeCompletionAction node={node} onCompleted={(nextNode) => setNode(nextNode)} />
+      {content ? <CardContentView content={content} /> : null}
+
     </main>
   );
 }

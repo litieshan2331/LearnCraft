@@ -23,6 +23,7 @@ export interface LearningPlanNodeSnapshot {
   completionCriteria: string[];
   status: string;
   contentStatus: string;
+  cardContentId: string | null;
   prerequisiteNodeIds: string[];
 }
 

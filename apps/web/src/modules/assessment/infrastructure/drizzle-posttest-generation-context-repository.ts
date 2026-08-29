@@ -2,7 +2,7 @@
  * 节点后测上下文的 Drizzle 查询适配器。
  *
  * 导出：
- * - DrizzlePosttestGenerationContextRepository：读取已完成节点、唯一成功内容和目标归属。
+ * - DrizzlePosttestGenerationContextRepository：读取节点、唯一成功内容和目标归属。
  */
 
 import { and, eq } from "drizzle-orm";
@@ -22,7 +22,7 @@ import type {
 } from "../domain/posttest-generation";
 
 export class DrizzlePosttestGenerationContextRepository implements PosttestGenerationContextRepository {
-  async findOwnedCompletedNodeContext(
+  async findOwnedNodeContext(
     ownerId: string,
     planNodeId: string,
   ): Promise<PosttestGenerationContext | null> {
@@ -46,7 +46,7 @@ export class DrizzlePosttestGenerationContextRepository implements PosttestGener
         eq(learningGoals.id, learningPlans.goalId),
         eq(learningGoals.ownerId, ownerId),
       ))
-      .innerJoin(cardContents, and(
+      .leftJoin(cardContents, and(
         eq(cardContents.planNodeId, planNodes.id),
         eq(cardContents.ownerId, ownerId),
         eq(cardContents.status, "ready"),
@@ -54,7 +54,6 @@ export class DrizzlePosttestGenerationContextRepository implements PosttestGener
       .where(and(
         eq(planNodes.id, planNodeId),
         eq(planNodes.ownerId, ownerId),
-        eq(planNodes.status, "completed"),
       ))
       .limit(1);
 

@@ -80,15 +80,18 @@ export function LearningPlanView({ planId }: Readonly<{ planId: string }>) {
           <div><p className="text-xs tracking-[0.16em] text-primary">TABLE OF CONTENTS</p><h2 className="mt-2 font-heading text-2xl font-normal">章节目录</h2></div>
           <p className="text-sm text-muted-foreground">可任选章节开始学习</p>
         </div>
-        <div className="grid gap-4">{plan.nodes.map((node) => <ChapterCard key={node.id} node={node} />)}</div>
+        <div className="grid gap-4">{plan.nodes.map((node) => <ChapterCard key={node.id} node={node} allNodes={plan.nodes} />)}</div>
       </section>
     </main>
   );
 }
 
-function ChapterCard({ node }: Readonly<{ node: LearningPlanNode }>) {
-  const prerequisiteLabel = node.prerequisite_node_ids.length > 0
-    ? String(node.prerequisite_node_ids.length) + " 个前置章节"
+function ChapterCard({ node, allNodes }: Readonly<{ node: LearningPlanNode; allNodes: LearningPlanNode[] }>) {
+  const prerequisites = node.prerequisite_node_ids
+    .map((id) => allNodes.find((candidate) => candidate.id === id))
+    .filter((candidate): candidate is LearningPlanNode => Boolean(candidate));
+  const prerequisiteLabel = prerequisites.length > 0
+    ? prerequisites.map((prerequisite) => "第 " + String(prerequisite.ordinal) + " 章 · " + prerequisite.title + "（" + formatStatus(prerequisite.status) + "）").join("、")
     : "无前置章节";
   return (
     <Link
@@ -110,10 +113,10 @@ function ChapterCard({ node }: Readonly<{ node: LearningPlanNode }>) {
               <div><p className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Clock3 aria-hidden className="size-3" />预计时长</p><p className="mt-1">{node.estimated_minutes} 分钟 · 难度 {node.difficulty}/5</p></div>
             </div>
             <div className="mt-4 grid gap-4 border-t border-border pt-4 text-sm sm:grid-cols-2">
-              <div><p className="text-xs text-muted-foreground">前置章节</p><p className="mt-1">{prerequisiteLabel}</p></div>
+              <div><p className="text-xs text-muted-foreground">前置章节</p><p className="mt-1">{prerequisiteLabel}</p><p className="mt-2 text-xs text-muted-foreground">完成状态仅作学习记录，不限制本章学习。</p></div>
               <div><p className="text-xs text-muted-foreground">完成标准</p><ul className="mt-1 list-disc space-y-1 pl-5">{node.completion_criteria.map((criterion) => <li key={criterion}>{criterion}</li>)}</ul></div>
             </div>
-            <p className="mt-4 text-xs text-muted-foreground">内容状态：{formatStatus(node.content_status)}</p>
+            <p className="mt-4 text-xs text-muted-foreground">内容状态：{formatStatus(node.content_status)} · {node.status === "completed" ? "已标记完成" : "未标记完成"}</p>
           </div>
         </div>
       </article>
