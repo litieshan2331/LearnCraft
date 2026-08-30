@@ -42,6 +42,10 @@ class FakeAssessmentQueryRepository implements AssessmentQueryRepository {
   async findOwnedAssessment(): Promise<AssessmentSnapshot | null> {
     return this.result;
   }
+
+  async findOwnedPosttestsByNode(): Promise<never[]> {
+    return [];
+  }
 }
 
 describe("AssessmentQueryService", () => {

@@ -550,6 +550,29 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /api/v1/plan-nodes/{node_id}/post-assessments:
+    get:
+      tags: [Assessment]
+      summary: 获取章节已有的后测题集列表
+      description: 返回当前用户指定章节下已生成的 post_test 题集及最近一次作答摘要；不会返回题目答案或解析。
+      operationId: list_node_post_assessments
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PlanNodeId'
+      responses:
+        '200':
+          description: 节点后测列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PosttestAssessmentList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/assessments/{assessment_id}:
     get:
       tags: [Assessment]
@@ -1610,6 +1633,51 @@ components:
               selected_option_key:
                 type: string
                 pattern: '^[A-F]$'
+    PosttestAssessmentList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PosttestAssessmentSummary'
+    PosttestAssessmentSummary:
+      type: object
+      additionalProperties: false
+      required: [assessment_id, plan_node_id, source_card_content_id, kind, status, question_count, difficulty, created_at, updated_at, latest_attempt]
+      properties:
+        assessment_id:
+          type: string
+          format: uuid
+        plan_node_id:
+          type: string
+          format: uuid
+        source_card_content_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [post_test]
+        status:
+          type: string
+          enum: [generating, ready, in_progress, submitted, grading, graded, failed, archived]
+        question_count:
+          type: integer
+          minimum: 0
+        difficulty:
+          type: string
+          enum: [normal, hard]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        latest_attempt:
+          oneOf:
+            - $ref: '#/components/schemas/AssessmentAttemptSummary'
+            - type: 'null'
     AssessmentAttemptList:
       type: object
       additionalProperties: false

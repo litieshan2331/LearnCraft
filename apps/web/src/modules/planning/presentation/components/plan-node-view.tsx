@@ -16,6 +16,7 @@ import { CardContentGenerationAction } from "@/modules/content/presentation/comp
 import { CardContentView } from "@/modules/content/presentation/components/card-content-view";
 import { NodeCompletionAction } from "./node-completion-action";
 import { PosttestGenerationAction } from "@/modules/assessment/presentation/components/posttest-generation-action";
+import { getPosttestAssessments, type PosttestAssessmentSummary } from "@/modules/assessment/presentation/api/assessment-client";
 import { getCardContent, type CardContent } from "@/modules/content/presentation/api/content-client";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
@@ -29,6 +30,7 @@ import {
 export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
   const [node, setNode] = useState<PlanNode | null>(null);
   const [content, setContent] = useState<CardContent | null>(null);
+  const [posttests, setPosttests] = useState<PosttestAssessmentSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,6 +39,7 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
       .then((nextNode) => {
         if (active) {
           setContent(null);
+          setPosttests([]);
           setNode(nextNode);
         }
       })
@@ -72,6 +75,28 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
       active = false;
     };
   }, [node?.card_content_id]);
+  useEffect(() => {
+    if (!node?.id) {
+      return;
+    }
+
+    let active = true;
+    void getPosttestAssessments(node.id)
+      .then((items) => {
+        if (active) {
+          setPosttests(items);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setPosttests([]);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [node?.id]);
   const refreshNode = useCallback(() => {
     void getPlanNode(nodeId)
       .then((nextNode) => setNode(nextNode))
@@ -149,7 +174,7 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
         planNodeId={node.id}
       />
       <NodeCompletionAction node={node} onCompleted={(nextNode) => setNode(nextNode)} />
-      <PosttestGenerationAction contentReady={Boolean(node.card_content_id)} planNodeId={node.id} />
+      <PosttestGenerationAction contentReady={Boolean(node.card_content_id)} existingAssessment={posttests[0] ?? null} planNodeId={node.id} />
       {content ? <CardContentView content={content} /> : null}
 
     </main>

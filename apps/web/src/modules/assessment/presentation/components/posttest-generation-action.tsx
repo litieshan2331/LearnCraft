@@ -7,11 +7,12 @@
 
 "use client";
 
-import { AlertCircle, LoaderCircle, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowRight, LoaderCircle, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { AssessmentApiError, createPosttestRun, getAgentRun, type AgentRun, type AssessmentDifficulty } from "../api/assessment-client";
+import { AssessmentApiError, createPosttestRun, getAgentRun, type AgentRun, type AssessmentDifficulty, type PosttestAssessmentSummary } from "../api/assessment-client";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
 
@@ -20,7 +21,8 @@ const POLL_INTERVAL_MS = 2_000;
 export function PosttestGenerationAction({
   planNodeId,
   contentReady,
-}: Readonly<{ planNodeId: string; contentReady: boolean }>) {
+  existingAssessment,
+}: Readonly<{ planNodeId: string; contentReady: boolean; existingAssessment: PosttestAssessmentSummary | null }>) {
   const router = useRouter();
   const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
   const [questionCount, setQuestionCount] = useState(6);
@@ -101,6 +103,29 @@ export function PosttestGenerationAction({
     return <p className="mt-6 text-sm text-muted-foreground">生成节点知识内容后，才可以生成本章后测。</p>;
   }
 
+  if (existingAssessment && (existingAssessment.status === "ready" || existingAssessment.status === "graded")) {
+    const hasAttempt = existingAssessment.latest_attempt !== null;
+    return (
+      <section className="mt-7 border border-border bg-card p-5 sm:p-7">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs tracking-[0.14em] text-primary">POSTTEST</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              {hasAttempt
+                ? `本章后测已完成，得分 ${existingAssessment.latest_attempt?.score_percent ?? 0}% 。`
+                : `本章后测已准备好，共 ${existingAssessment.question_count} 道选择题。`}
+            </p>
+          </div>
+          <Button asChild className="rounded-none">
+            <Link href={`/assessments/${existingAssessment.assessment_id}`}>
+              {hasAttempt ? "查看后测结果" : "查看后测题集"}
+              <ArrowRight aria-hidden className="size-4" />
+            </Link>
+          </Button>
+        </div>
+      </section>
+    );
+  }
   if (agentRun && isInFlight(agentRun.status)) {
     return (
       <section className="mt-7 border border-border bg-background p-5">

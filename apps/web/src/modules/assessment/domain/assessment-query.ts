@@ -3,7 +3,8 @@
  *
  * 导出：
  * - AssessmentSnapshot、AssessmentItemSnapshot：不含答案的公开题集快照。
- * - AssessmentQueryRepository：按所有者读取单个题集的持久化端口。
+ * - PosttestAssessmentSummary：节点后测列表及最近作答摘要。
+ * - AssessmentQueryRepository：按所有者读取题集及节点后测列表的持久化端口。
  * - AssessmentQueryApplicationError：映射稳定的题集读取错误码。
  */
 
@@ -51,8 +52,31 @@ export interface AssessmentSnapshot {
   updatedAt: Date;
 }
 
+export interface PosttestAssessmentAttemptSummary {
+  id: string;
+  assessmentId: string;
+  attemptNo: number;
+  status: "graded";
+  scorePercent: number;
+  wrongCount: number;
+  submittedAt: Date;
+  gradedAt: Date;
+}
+
+export interface PosttestAssessmentSummary {
+  assessmentId: string;
+  planNodeId: string;
+  sourceCardContentId: string;
+  status: AssessmentStatus;
+  questionCount: number;
+  difficulty: "normal" | "hard";
+  createdAt: Date;
+  updatedAt: Date;
+  latestAttempt: PosttestAssessmentAttemptSummary | null;
+}
 export interface AssessmentQueryRepository {
   findOwnedAssessment(ownerId: string, assessmentId: string): Promise<AssessmentSnapshot | null>;
+  findOwnedPosttestsByNode(ownerId: string, planNodeId: string): Promise<PosttestAssessmentSummary[]>;
 }
 
 export type AssessmentQueryApplicationErrorCode = "ASSESSMENT_NOT_FOUND";

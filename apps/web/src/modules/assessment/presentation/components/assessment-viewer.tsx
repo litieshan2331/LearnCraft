@@ -212,7 +212,7 @@ function AssessmentHeader({
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
           {attempt
             ? "结果基于提交时保存的答案确定性评分，不会额外调用模型。"
-            : `这份前测包含 ${assessment.question_count} 道选择题，请按当前理解作答。`}
+            : `这份${assessment.kind === "post_test" ? "后测" : "前测"}包含 ${assessment.question_count} 道选择题，请按当前理解作答。`}
         </p>
       </div>
       <div className="grid grid-cols-2 divide-x divide-border border border-border bg-background text-center">

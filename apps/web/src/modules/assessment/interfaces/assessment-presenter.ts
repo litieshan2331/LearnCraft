@@ -5,7 +5,7 @@
  * - presentAssessment：返回题干与选项，永不输出答案、解析或评分内部字段。
  */
 
-import type { AssessmentSnapshot } from "../domain/assessment-query";
+import type { AssessmentSnapshot, PosttestAssessmentSummary } from "../domain/assessment-query";
 
 export function presentAssessment(assessment: AssessmentSnapshot) {
   return {
@@ -28,5 +28,31 @@ export function presentAssessment(assessment: AssessmentSnapshot) {
     })),
     created_at: assessment.createdAt.toISOString(),
     updated_at: assessment.updatedAt.toISOString(),
+  };
+}
+
+export function presentPosttestAssessments(items: PosttestAssessmentSummary[]) {
+  return {
+    items: items.map((item) => ({
+      assessment_id: item.assessmentId,
+      plan_node_id: item.planNodeId,
+      source_card_content_id: item.sourceCardContentId,
+      kind: "post_test" as const,
+      status: item.status,
+      question_count: item.questionCount,
+      difficulty: item.difficulty,
+      created_at: item.createdAt.toISOString(),
+      updated_at: item.updatedAt.toISOString(),
+      latest_attempt: item.latestAttempt ? {
+        id: item.latestAttempt.id,
+        assessment_id: item.latestAttempt.assessmentId,
+        attempt_no: item.latestAttempt.attemptNo,
+        status: item.latestAttempt.status,
+        score_percent: item.latestAttempt.scorePercent,
+        wrong_count: item.latestAttempt.wrongCount,
+        submitted_at: item.latestAttempt.submittedAt.toISOString(),
+        graded_at: item.latestAttempt.gradedAt.toISOString(),
+      } : null,
+    })),
   };
 }

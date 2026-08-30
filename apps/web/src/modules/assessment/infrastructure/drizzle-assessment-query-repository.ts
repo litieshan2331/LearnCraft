@@ -5,10 +5,10 @@
  * - DrizzleAssessmentQueryRepository：查询当前用户拥有的题集与不含答案的题目字段。
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { getDatabase } from "@/lib/db/client";
-import { assessmentItems, assessments } from "@/lib/db/schema";
+import { assessmentAnswers, assessmentAttempts, assessmentItems, assessments } from "@/lib/db/schema";
 
 import {
   isAssessmentKind,
@@ -17,6 +17,7 @@ import {
   type AssessmentOptionSnapshot,
   type AssessmentQueryRepository,
   type AssessmentSnapshot,
+  type PosttestAssessmentSummary,
 } from "../domain/assessment-query";
 
 type AssessmentRecord = typeof assessments.$inferSelect;
@@ -42,6 +43,80 @@ export class DrizzleAssessmentQueryRepository implements AssessmentQueryReposito
       .orderBy(asc(assessmentItems.ordinal));
 
     return toAssessmentSnapshot(assessment, items);
+  }
+  async findOwnedPosttestsByNode(ownerId: string, planNodeId: string): Promise<PosttestAssessmentSummary[]> {
+    const database = getDatabase();
+    const records = await database
+      .select()
+      .from(assessments)
+      .where(and(
+        eq(assessments.ownerId, ownerId),
+        eq(assessments.planNodeId, planNodeId),
+        eq(assessments.kind, "post_test"),
+      ))
+      .orderBy(desc(assessments.createdAt));
+
+    if (records.length === 0) {
+      return [];
+    }
+
+    const attempts = await database
+      .select()
+      .from(assessmentAttempts)
+      .where(and(
+        eq(assessmentAttempts.ownerId, ownerId),
+        inArray(assessmentAttempts.assessmentId, records.map((record) => record.id)),
+        eq(assessmentAttempts.status, "graded"),
+      ))
+      .orderBy(desc(assessmentAttempts.attemptNo), desc(assessmentAttempts.createdAt));
+    const latestAttempts = new Map<string, typeof attempts[number]>();
+    for (const attempt of attempts) {
+      if (!latestAttempts.has(attempt.assessmentId)) {
+        latestAttempts.set(attempt.assessmentId, attempt);
+      }
+    }
+
+    const wrongCounts = new Map<string, number>();
+    if (attempts.length > 0) {
+      const answers = await database
+        .select({ attemptId: assessmentAnswers.attemptId, isCorrect: assessmentAnswers.isCorrect })
+        .from(assessmentAnswers)
+        .where(inArray(assessmentAnswers.attemptId, attempts.map((attempt) => attempt.id)));
+      for (const answer of answers) {
+        if (answer.isCorrect === false) {
+          wrongCounts.set(answer.attemptId, (wrongCounts.get(answer.attemptId) ?? 0) + 1);
+        }
+      }
+    }
+
+    return records.map((record) => {
+      if (!record.planNodeId || !record.sourceCardContentId) {
+        throw new Error("数据库中的后测缺少节点或节点内容绑定。");
+      }
+      const attempt = latestAttempts.get(record.id);
+      return {
+        assessmentId: record.id,
+        planNodeId: record.planNodeId,
+        sourceCardContentId: record.sourceCardContentId,
+        status: isAssessmentStatus(record.status) ? record.status : "failed",
+        questionCount: record.requestedQuestionCount ?? 0,
+        difficulty: record.difficulty === "hard" ? "hard" : "normal",
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        latestAttempt: attempt
+          ? {
+              id: attempt.id,
+              assessmentId: attempt.assessmentId,
+              attemptNo: attempt.attemptNo,
+              status: "graded",
+              scorePercent: Number(attempt.scorePercent ?? 0),
+              wrongCount: wrongCounts.get(attempt.id) ?? 0,
+              submittedAt: attempt.submittedAt ?? attempt.createdAt,
+              gradedAt: attempt.gradedAt ?? attempt.updatedAt,
+            }
+          : null,
+      } satisfies PosttestAssessmentSummary;
+    });
   }
 }
 
@@ -100,4 +175,5 @@ function toAssessmentOptions(value: unknown): AssessmentOptionSnapshot[] {
 
     return { key: option.key, text: option.text };
   });
+
 }

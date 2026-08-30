@@ -9,6 +9,7 @@ import {
   AssessmentQueryApplicationError,
   type AssessmentQueryRepository,
   type AssessmentSnapshot,
+  type PosttestAssessmentSummary,
 } from "../domain/assessment-query";
 
 export class AssessmentQueryService {
@@ -21,5 +22,8 @@ export class AssessmentQueryService {
     }
 
     return assessment;
+  }
+  async listOwnedPosttestsByNode(ownerId: string, planNodeId: string): Promise<PosttestAssessmentSummary[]> {
+    return this.repository.findOwnedPosttestsByNode(ownerId, planNodeId);
   }
 }

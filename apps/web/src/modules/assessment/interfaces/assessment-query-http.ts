@@ -13,6 +13,10 @@ import { apiErrorResponse } from "@/modules/identity/interfaces/auth-http";
 
 import { AssessmentQueryApplicationError } from "../domain/assessment-query";
 
+export const planNodePathSchema = z.object({
+  plan_node_id: z.uuid("Plan Node ID 必须是 UUID。"),
+});
+
 export const assessmentPathSchema = z.object({
   assessment_id: z.uuid("Assessment ID 必须是 UUID。"),
 });
