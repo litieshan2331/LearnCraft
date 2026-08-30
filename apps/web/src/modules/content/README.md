@@ -4,4 +4,4 @@
 
 资料与卡片规则放 `domain`，请求内容生成与读取放 `application`，Drizzle/对象存储/检索适配放 `infrastructure`，外部输入输出放 `interfaces`。
 
-已实现 `POST /api/v1/plan-nodes/{node_id}/content-runs`：它只为当前有效路线中的节点创建 `card_content_generate` AgentRun，并冻结目标、画像和节点摘要；Worker 已注册 NodeTutorAgent 与 card_content_generate 工作流，并通过内部 card-content-result 接收校验后的内容；已实现 `GET /api/v1/card-contents/{card_content_id}`，仅返回 ready 内容的公开知识区块和来源引用。
+已实现 `POST /api/v1/plan-nodes/{node_id}/content-runs`：它只为当前有效路线中的节点创建 `card_content_generate` AgentRun，并冻结目标、画像和节点摘要；Worker 已注册 NodeTutorAgent 与 card_content_generate 工作流，并通过内部 card-content-result 接收校验后的内容；已实现 `GET /api/v1/card-contents/{card_content_id}`，仅返回 ready 内容的公开知识区块和来源引用；`pitfalls_debug` 使用只含 `title`、`cause`、`fix` 的结构化数组。

@@ -62,7 +62,7 @@ def make_document() -> dict[str, object]:
             "call_sequence": ["定义 first 和 second", "计算平均值", "打印结果"],
             "expected_output": "12.0",
         },
-        "pitfalls_debug": "不要把数字写成字符串后直接参与数值计算。",
+        "pitfalls_debug": [{"title": "字符串参与计算", "cause": "输入值实际是字符串。", "fix": "在计算前进行类型转换。"}],
         "source_refs": [],
         "teaching_memory": {
             "key_concepts": ["变量", "表达式"],
@@ -94,11 +94,16 @@ def test_card_content_document_accepts_required_sections() -> None:
     assert document.worked_example["call_sequence"] == ["定义 first 和 second", "计算平均值", "打印结果"]
 
 
-def test_card_content_document_normalizes_loose_model_fields() -> None:
-    """模型返回宽松字段时应收敛为内部回写合同。"""
-    document = CardContentDocument.from_json(orjson.dumps({"summary": "基础概念说明", "worked_example": "示例代码", "pitfalls": "检查输入", "teaching_memory": {"concepts": ["变量"]}}).decode())
-    assert document.schema_version == "card_content.v1"
-    assert document.worked_example["code"] == "# 请根据本章节目标补充示例代码"
+def test_card_content_document_rejects_unstructured_pitfalls() -> None:
+    """缺少结构化误区时不得静默补默认文案。"""
+    with pytest.raises(ValueError):
+        CardContentDocument.from_json(orjson.dumps({"summary": "基础概念说明", "worked_example": "示例代码", "pitfalls": "检查输入", "teaching_memory": {"concepts": ["变量"]}}).decode())
+
+
+def test_card_content_document_accepts_structured_pitfalls() -> None:
+    """结构化误区只包含 title、cause、fix 时应通过合同。"""
+    document = CardContentDocument.from_json(orjson.dumps(make_document()).decode())
+    assert document.pitfalls_debug[0].title == "字符串参与计算"
 
 def test_card_content_request_allows_model_to_decide_tavily_usage() -> None:
     """首轮节点内容请求应开放 Tavily 且保持 auto 工具策略。"""
@@ -118,8 +123,9 @@ def test_card_content_request_allows_model_to_decide_tavily_usage() -> None:
     assert request.tools[0].name == "tavily_search"
     assert request.messages[0].content is not None
     assert "worked_example" in request.messages[0].content
-
-
+    assert "至少分成 3 个有实质信息的段落" in request.messages[0].content
+    assert "pitfalls_debug 必须是对象数组" in request.messages[0].content
+    assert "title 写误区，cause 写原因，fix 写修复方法" in request.messages[0].content
 @pytest.mark.asyncio
 async def test_node_tutor_registers_card_content_workflow() -> None:
     """NodeTutorAgent 必须能路由 card_content_generate，避免未注册错误。"""

@@ -7,6 +7,12 @@
  * - CardContentQueryServiceError：内容查询稳定错误。
  */
 
+export interface PitfallDebugSnapshot {
+  title: string;
+  cause: string;
+  fix: string;
+}
+
 export interface CardContentSnapshot {
   id: string;
   planNodeId: string;
@@ -15,7 +21,7 @@ export interface CardContentSnapshot {
   schemaVersion: string;
   foundation: string;
   workedExample: Record<string, unknown>;
-  pitfallsDebug: string;
+  pitfallsDebug: PitfallDebugSnapshot[];
   sourceRefs: Array<Record<string, unknown>>;
   createdAt: Date;
   updatedAt: Date;

@@ -36,12 +36,17 @@ const teachingMemorySchema = z.object({
   assessment_targets: z.array(z.string().min(1).max(500)).min(1).max(30),
 }).strict();
 
+const pitfallDebugSchema = z.object({
+  title: z.string().min(1).max(300),
+  cause: z.string().min(1).max(2_000),
+  fix: z.string().min(1).max(2_000),
+}).strict();
 const resultSchema = z.object({
   plan_node_id: z.uuid(),
   schema_version: z.literal("card_content.v1"),
   foundation: z.string().min(1).max(12_000),
   worked_example: workedExampleSchema,
-  pitfalls_debug: z.string().min(1).max(12_000),
+  pitfalls_debug: z.array(pitfallDebugSchema).min(1),
   source_refs: z.array(z.record(z.string(), z.unknown())).max(20).default([]),
   teaching_memory: teachingMemorySchema,
   generation_metadata: z.record(z.string(), z.unknown()).default({}),

@@ -20,6 +20,21 @@ interface RouteContext {
   params: Promise<{ agentRunId: string }>;
 }
 
+const pitfallDebugSchema = z.object({
+  title: z.string().min(1).max(300),
+  cause: z.string().min(1).max(2_000),
+  fix: z.string().min(1).max(2_000),
+}).strict();
+
+const cardContentContextSchema = z.object({
+  plan_node_id: z.uuid(),
+  card_content_id: z.uuid(),
+  foundation: z.string().min(1).max(12_000),
+  worked_example: z.record(z.string(), z.unknown()),
+  pitfalls_debug: z.array(pitfallDebugSchema).min(1),
+  teaching_memory: z.record(z.string(), z.unknown()),
+}).strict();
+
 export async function GET(request: Request, context: RouteContext): Promise<NextResponse> {
   if (!hasValidInternalSecret(request)) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -77,7 +92,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Next
     return NextResponse.json({ error: "CARD_CONTENT_CONTEXT_INVALID" }, { status: 422 });
   }
 
-  return NextResponse.json({
+  const response = cardContentContextSchema.safeParse({
     plan_node_id: content.planNodeId,
     card_content_id: content.id,
     foundation: publicContent.foundation,
@@ -85,6 +100,11 @@ export async function GET(request: Request, context: RouteContext): Promise<Next
     pitfalls_debug: publicContent.pitfalls_debug,
     teaching_memory: teachingMemory,
   });
+  if (!response.success) {
+    return NextResponse.json({ error: "CARD_CONTENT_CONTEXT_INVALID" }, { status: 422 });
+  }
+
+  return NextResponse.json(response.data);
 }
 
 function toRecord(value: unknown): Record<string, unknown> {

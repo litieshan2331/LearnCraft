@@ -34,6 +34,12 @@ export interface WorkedExample {
   expected_output: string;
 }
 
+export interface PitfallDebug {
+  title: string;
+  cause: string;
+  fix: string;
+}
+
 export interface CardContent {
   id: string;
   plan_node_id: string;
@@ -42,7 +48,7 @@ export interface CardContent {
   schema_version: "card_content.v1";
   foundation: string;
   worked_example: WorkedExample;
-  pitfalls_debug: string;
+  pitfalls_debug: PitfallDebug[];
   source_refs: Array<Record<string, unknown>>;
   created_at: string;
   updated_at: string;

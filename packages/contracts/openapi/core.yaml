@@ -2112,7 +2112,19 @@ components:
             expected_output:
               type: string
         pitfalls_debug:
-          type: string
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [title, cause, fix]
+            properties:
+              title:
+                type: string
+              cause:
+                type: string
+              fix:
+                type: string
         source_refs:
           type: array
           items:
@@ -2145,7 +2157,19 @@ components:
           type: object
           additionalProperties: true
         pitfalls_debug:
-          type: string
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [title, cause, fix]
+            properties:
+              title:
+                type: string
+              cause:
+                type: string
+              fix:
+                type: string
         teaching_memory:
           type: object
           additionalProperties: true
@@ -2177,7 +2201,19 @@ components:
             expected_output:
               type: string
         pitfalls_debug:
-          type: string
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [title, cause, fix]
+            properties:
+              title:
+                type: string
+              cause:
+                type: string
+              fix:
+                type: string
         source_refs:
           type: array
           items:

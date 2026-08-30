@@ -2,6 +2,7 @@
 
 主要类型：
 - CardContentGenerationInput：节点内容生成输入快照。
+- PitfallDebug：结构化常见误区、原因与修复。
 - CardContentDocument：节点内容持久化合同。
 - CardContentWorkflow：调用模型并将已校验内容交给 Web Core。
 """
@@ -45,6 +46,16 @@ class CardContentGenerationInput(BaseModel):
     plan_node: dict[str, Any]
 
 
+class PitfallDebug(BaseModel):
+    """表示一个与当前章节直接相关的常见误区。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    title: str = Field(min_length=1, max_length=300)
+    cause: str = Field(min_length=1, max_length=2_000)
+    fix: str = Field(min_length=1, max_length=2_000)
+
+
 class CardContentDocument(BaseModel):
     """表示供用户阅读、后测和引用追踪使用的节点内容合同。"""
 
@@ -53,7 +64,7 @@ class CardContentDocument(BaseModel):
     schema_version: Literal["card_content.v1"] = "card_content.v1"
     foundation: str = Field(min_length=1, max_length=12_000)
     worked_example: dict[str, Any]
-    pitfalls_debug: str = Field(min_length=1, max_length=12_000)
+    pitfalls_debug: list[PitfallDebug] = Field(min_length=1)
     source_refs: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
     teaching_memory: dict[str, Any]
 
@@ -152,9 +163,16 @@ class CardContentWorkflow:
                 "模型没有返回可校验的节点内容。",
                 retryable=False,
             )
-        return CardContentDocument.from_json(
-            gateway._extract_json_text(response.message.content),
-        )
+        try:
+            return CardContentDocument.from_json(
+                gateway._extract_json_text(response.message.content),
+            )
+        except (ValidationError, ValueError) as error:
+            raise ModelGatewayError(
+                "CARD_CONTENT_OUTPUT_INVALID",
+                "模型返回的节点内容不符合 card_content.v1。",
+                retryable=False,
+            ) from error
     @staticmethod
     async def _parse_or_repair(
         *,
@@ -172,7 +190,7 @@ class CardContentWorkflow:
                         ModelMessage(role="assistant", content=content),
                         ModelMessage(
                             role="system",
-                            content="上一轮节点内容不符合 card_content.v1。请只返回严格合法 JSON，补齐 foundation、worked_example、pitfalls_debug、source_refs、teaching_memory，不要输出额外文字。",
+                            content="上一轮节点内容不符合 card_content.v1。请只返回严格合法 JSON，补齐 foundation、worked_example、pitfalls_debug、source_refs、teaching_memory；pitfalls_debug 必须是至少 1 项的对象数组，每项只能包含 title、cause、fix 三个非空字段；不要输出额外文字。",
                         ),
                     ),
                     "tools": (),
@@ -203,7 +221,7 @@ class CardContentWorkflow:
                 "messages": (
                     ModelMessage(
                         role="system",
-                        content="联网资料不可用，请仅使用你已有的稳定知识生成节点内容。只输出严格 JSON，必须包含 foundation、worked_example、pitfalls_debug、source_refs、teaching_memory；worked_example 必须有 explanation、code、call_sequence、expected_output；source_refs 可以为空；不要输出额外文字。",
+                        content="联网资料不可用，请仅使用你已有的稳定知识生成节点内容。只输出严格 JSON，必须包含 foundation、worked_example、pitfalls_debug、source_refs、teaching_memory；pitfalls_debug 必须是至少 1 项的对象数组，每项只能包含 title、cause、fix 三个非空字段，数量不设固定上限；worked_example 必须有 explanation、code、call_sequence、expected_output；source_refs 可以为空；不要输出额外文字。",
                     ),
                     ModelMessage(
                         role="user",
@@ -256,7 +274,7 @@ class CardContentWorkflow:
                 "messages": (
                     ModelMessage(
                         role="system",
-                        content="你正在执行节点知识内容的最终联网兜底。请只输出严格 JSON，必须包含 foundation、worked_example、pitfalls_debug、source_refs、teaching_memory；worked_example 必须有 explanation、code、call_sequence、expected_output；只能基于下方 Tavily 资料，不要输出额外文字。",
+                        content="你正在执行节点知识内容的最终联网兜底。请只输出严格 JSON，必须包含 foundation、worked_example、pitfalls_debug、source_refs、teaching_memory；pitfalls_debug 必须是至少 1 项的对象数组，每项只能包含 title、cause、fix 三个非空字段，数量不设固定上限；worked_example 必须有 explanation、code、call_sequence、expected_output；只能基于下方 Tavily 资料，不要输出额外文字。",
                     ),
                     ModelMessage(
                         role="user",
@@ -286,7 +304,9 @@ class CardContentWorkflow:
         system = (
             "你是 LearnCraft 的 Node Tutor。请生成可阅读的节点知识文档，最终只输出严格 JSON。"
             "所有面向学习者的文字使用简体中文，技术名词和代码可保留英文。"
-            "内容必须包含 foundation、worked_example、pitfalls_debug、source_refs、teaching_memory。"
+            "内容必须包含 foundation、worked_example、pitfalls_debug、source_refs、teaching_memory，且 foundation 与 pitfalls_debug 必须是针对当前章节的具体内容，不能使用模板句、占位符或泛化建议。"
+            "foundation 必须像教材章节一样解释本章核心概念、关键术语、概念之间的关系，以及学习者需要形成的判断方式；至少分成 3 个有实质信息的段落。"
+            "pitfalls_debug 必须是对象数组，每项只能包含 title、cause、fix 三个字段；title 写误区，cause 写原因，fix 写修复方法。数量由章节复杂度决定，不设固定上限，但至少提供 1 项。"
             "worked_example 必须包含 explanation、code、call_sequence、expected_output；不包含本地运行命令、依赖安装、stdout 或伪造执行结果。"
             "teaching_memory 必须包含 key_concepts、common_mistakes、assessment_targets。"
             "稳定知识可直接生成；涉及近期 API、版本或不确定事实时可自主调用 tavily_search。"
@@ -356,6 +376,8 @@ def _normalize_card_content(raw: object) -> dict[str, Any]:
 
     memory_raw = raw.get("teaching_memory") or raw.get("teachingMemory")
     memory = memory_raw if isinstance(memory_raw, Mapping) else {}
+    pitfalls_raw = raw.get("pitfalls_debug") or raw.get("pitfalls") or raw.get("common_mistakes")
+    pitfalls_debug = _normalize_pitfalls_debug(pitfalls_raw)
     return {
         "schema_version": "card_content.v1",
         "foundation": _content_text(
@@ -364,11 +386,7 @@ def _normalize_card_content(raw: object) -> dict[str, Any]:
             12_000,
         ),
         "worked_example": worked_example,
-        "pitfalls_debug": _content_text(
-            raw.get("pitfalls_debug") or raw.get("pitfalls") or raw.get("common_mistakes"),
-            "注意区分输入类型、边界条件和执行顺序；遇到结果异常时逐步检查这些前置条件。",
-            12_000,
-        ),
+        "pitfalls_debug": pitfalls_debug,
         "source_refs": _content_mapping_list(raw.get("source_refs") or raw.get("references")),
         "teaching_memory": {
             "key_concepts": _content_text_list(
@@ -423,3 +441,24 @@ def _content_mapping_list(value: object) -> list[dict[str, Any]]:
         for item in value
         if isinstance(item, Mapping)
     ][:20]
+
+def _normalize_pitfalls_debug(value: object) -> list[dict[str, str]]:
+    """将常见误区严格收敛为 title、cause、fix 三字段对象数组。"""
+    if not isinstance(value, list) or not value:
+        raise ValueError("pitfalls_debug 必须是至少包含一项的对象数组。")
+
+    normalized: list[dict[str, str]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, Mapping):
+            raise ValueError(f"pitfalls_debug.{index} 必须是对象。")
+        allowed_keys = {"title", "cause", "fix"}
+        if set(item) != allowed_keys:
+            raise ValueError(f"pitfalls_debug.{index} 只能包含 title、cause、fix。")
+        fields: dict[str, str] = {}
+        for field_name in ("title", "cause", "fix"):
+            field_value = item.get(field_name)
+            if not isinstance(field_value, str) or not field_value.strip():
+                raise ValueError(f"pitfalls_debug.{index}.{field_name} 不能为空。")
+            fields[field_name] = field_value.strip()[:2_000]
+        normalized.append(fields)
+    return normalized

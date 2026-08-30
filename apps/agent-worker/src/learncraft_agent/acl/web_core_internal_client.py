@@ -66,7 +66,7 @@ class CardContentContextEnvelope(BaseModel):
     card_content_id: UUID
     foundation: str = Field(min_length=1, max_length=12_000)
     worked_example: dict[str, object]
-    pitfalls_debug: str = Field(min_length=1, max_length=12_000)
+    pitfalls_debug: list[dict[str, str]] = Field(min_length=1)
     teaching_memory: dict[str, object]
 class PersistedCardContentEnvelope(BaseModel):
     """表示 Web 已幂等持久化节点内容后的最小结果。"""

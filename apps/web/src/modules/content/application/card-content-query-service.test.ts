@@ -31,7 +31,7 @@ const content: CardContentSnapshot = {
     call_sequence: ["计算", "打印"],
     expected_output: "12.0",
   },
-  pitfallsDebug: "避免把字符串直接参与数值计算。",
+  pitfallsDebug: [{ title: "字符串参与计算", cause: "输入值实际是字符串。", fix: "在计算前进行类型转换。" }],
   sourceRefs: [],
   createdAt: new Date("2026-08-27T00:00:00.000Z"),
   updatedAt: new Date("2026-08-27T00:00:00.000Z"),

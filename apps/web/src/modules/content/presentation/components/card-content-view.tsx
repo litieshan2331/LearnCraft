@@ -43,7 +43,15 @@ export function CardContentView({ content }: Readonly<{ content: CardContent }>)
 
       <article className="mt-5 border border-border bg-card p-5 sm:p-7">
         <h2 className="inline-flex items-center gap-2 font-heading text-2xl font-normal"><Lightbulb aria-hidden className="size-5 text-primary" />常见误区与排错</h2>
-        <ContentText className="mt-4 text-sm leading-8 text-muted-foreground" value={content.pitfalls_debug} />
+        <div className="mt-4 grid gap-4">
+          {content.pitfalls_debug.map((pitfall, index) => (
+            <article className="border border-border bg-background p-4" key={`${pitfall.title}-${index}`}>
+              <h3 className="font-medium">{pitfall.title}</h3>
+              <p className="mt-3 text-sm leading-7 text-muted-foreground"><strong className="text-foreground">原因：</strong>{pitfall.cause}</p>
+              <p className="mt-2 text-sm leading-7 text-muted-foreground"><strong className="text-foreground">修复：</strong>{pitfall.fix}</p>
+            </article>
+          ))}
+        </div>
       </article>
 
       {content.source_refs.length > 0 ? (
