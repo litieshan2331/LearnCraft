@@ -2,6 +2,7 @@
 
 类：
 - OpenAiCompatibleModelGateway：通过 SafeModelEgressClient 发起文本、结构化输出和工具调用请求。
+- _validation_paths：提取结构化校验字段路径，不记录模型原文。
 
 函数：
 - 将 Provider 无关消息和工具定义转换为 Chat Completions 载荷。
@@ -78,38 +79,42 @@ class OpenAiCompatibleModelGateway:
         self,
         request: ModelCompletionRequest,
         output_type: type[StructuredOutput],
+        *,
+        repair_instruction: str | None = None,
     ) -> StructuredOutput:
         """按提示词和 Pydantic 校验获取 JSON，格式无效时仅执行一次修复请求。"""
         structured_request = request.model_copy(update={'response_format': 'json_object'})
         response = await self.complete(structured_request)
+        validation_paths: list[str] = []
         for repair_attempt in range(2):
             if response.message.tool_calls or response.message.content is None:
                 raise ModelGatewayError(
                     "MODEL_STRUCTURED_OUTPUT_INVALID",
                     "模型没有返回可校验的结构化文本结果。",
                     retryable=False,
+                    validation_paths=("response.content_missing",),
                 )
             try:
                 return output_type.model_validate_json(self._extract_json_text(response.message.content))
-            except (ValidationError, ValueError):
+            except (ValidationError, ValueError) as error:
+                validation_paths = _validation_paths(error)
                 if repair_attempt == 1:
+                    path_summary = ", ".join(validation_paths[:8]) or "response.json"
                     raise ModelGatewayError(
                         "MODEL_STRUCTURED_OUTPUT_INVALID",
-                        "模型返回内容不符合预期结构。",
+                        f"模型返回内容不符合预期结构。校验路径: {path_summary}",
                         retryable=False,
+                        validation_paths=tuple(validation_paths),
                     )
-                repair_instruction = ModelMessage(
+                repair_message = ModelMessage(
                     role="system",
-                    content=(
-                        "上一轮输出不符合要求。请基于已有上下文重新输出严格合法的 JSON，"
-                        "不要使用 Markdown 代码块、解释文字或额外字段。"
-                    ),
+                    content=repair_instruction or ("上一轮输出不符合要求。请基于已有上下文重新输出严格合法的 JSON，" "不要使用 Markdown 代码块、解释文字或额外字段。"),
                 )
                 response = await self.complete(
                     structured_request.model_copy(
                         update={
                             "messages": request.messages
-                            + (response.message, repair_instruction),
+                            + (response.message, repair_message),
                             "tools": (),
                             "tool_choice": "none",
                         },
@@ -493,3 +498,16 @@ class OpenAiCompatibleModelGateway:
                 retryable=False,
             )
         return ModelGatewayError(error.code, str(error), retryable=error.retryable)
+
+
+def _validation_paths(error: ValidationError | ValueError) -> list[str]:
+    """只提取结构化校验字段路径，不记录模型输出正文或敏感值。"""
+    if isinstance(error, ValidationError):
+        paths: list[str] = []
+        for item in error.errors():
+            location = item.get("loc", ())
+            path = ".".join(str(part) for part in location)
+            if path and path not in paths:
+                paths.append(path)
+        return paths
+    return ["response.json"]

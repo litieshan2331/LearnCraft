@@ -227,7 +227,7 @@ function toAgentRunSnapshot(agentRun: AgentRunRecord): AgentRunSnapshot {
 }
 
 function toAssessmentResultSnapshot(agentRun: AgentRunRecord) {
-  if (agentRun.runType !== 'assessment_generate' || agentRun.status !== 'succeeded') {
+  if (!['assessment_generate', 'posttest_generate'].includes(agentRun.runType) || agentRun.status !== 'succeeded') {
     return undefined;
   }
 

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CardContentGenerationAction } from "@/modules/content/presentation/components/card-content-generation-action";
 import { CardContentView } from "@/modules/content/presentation/components/card-content-view";
 import { NodeCompletionAction } from "./node-completion-action";
+import { PosttestGenerationAction } from "@/modules/assessment/presentation/components/posttest-generation-action";
 import { getCardContent, type CardContent } from "@/modules/content/presentation/api/content-client";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
@@ -148,6 +149,7 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
         planNodeId={node.id}
       />
       <NodeCompletionAction node={node} onCompleted={(nextNode) => setNode(nextNode)} />
+      <PosttestGenerationAction contentReady={Boolean(node.card_content_id)} planNodeId={node.id} />
       {content ? <CardContentView content={content} /> : null}
 
     </main>

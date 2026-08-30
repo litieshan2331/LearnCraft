@@ -23,10 +23,19 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 class ModelGatewayError(RuntimeError):
     """表示可安全持久化或返回给 AgentRun 的模型调用错误。"""
 
-    def __init__(self, code: str, message: str, *, retryable: bool) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        retryable: bool,
+        validation_paths: tuple[str, ...] = (),
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+        # 仅允许保存字段路径，不保存模型输出正文或校验值。
+        self.validation_paths = tuple(validation_paths[:8])
 
 
 class ModelToolDefinition(BaseModel):

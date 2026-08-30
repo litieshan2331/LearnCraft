@@ -56,6 +56,18 @@ class PersistedLearningPlanEnvelope(BaseModel):
     learning_plan_id: UUID
     node_count: int = Field(ge=6, le=12)
 
+
+class CardContentContextEnvelope(BaseModel):
+    """表示 Web 提供给 Node Tutor 后测的固定内容上下文。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    plan_node_id: UUID
+    card_content_id: UUID
+    foundation: str = Field(min_length=1, max_length=12_000)
+    worked_example: dict[str, object]
+    pitfalls_debug: str = Field(min_length=1, max_length=12_000)
+    teaching_memory: dict[str, object]
 class PersistedCardContentEnvelope(BaseModel):
     """表示 Web 已幂等持久化节点内容后的最小结果。"""
 
@@ -223,6 +235,42 @@ class WebCoreInternalClient:
             return PersistedCardContentEnvelope.model_validate(response.json())
         except (ValidationError, ValueError) as error:
             raise CoreInternalClientError("CORE_INTERNAL_RESPONSE_INVALID", "Web 内部服务返回了不符合契约的数据。", retryable=False) from error
+    async def get_card_content_context(
+        self,
+        agent_run_id: UUID,
+    ) -> CardContentContextEnvelope:
+        """读取已成功节点内容和 teaching_memory，供后测固定范围出题。"""
+        if self._internal_service_secret is None:
+            raise CoreInternalClientError(
+                "INTERNAL_SERVICE_SECRET_MISSING",
+                "Worker 与 Web 的内部服务密钥尚未配置。",
+                retryable=False,
+            )
+        url = f"{self._base_url}/agent-runs/{agent_run_id}/card-content-context"
+        try:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+                response = await client.get(
+                    url,
+                    headers={
+                        "Accept": "application/json",
+                        "X-LearnCraft-Internal-Secret": self._internal_service_secret.get_secret_value(),
+                        "User-Agent": "LearnCraft-Agent/0.1",
+                    },
+                )
+        except httpx.HTTPError as error:
+            raise CoreInternalClientError("CORE_INTERNAL_UNAVAILABLE", "Web 内部服务暂时不可用。", retryable=True) from error
+        if response.status_code == 404:
+            raise CoreInternalClientError("CARD_CONTENT_CONTEXT_NOT_FOUND", "节点内容不存在或尚未 ready。", retryable=False)
+        if response.status_code in {401, 403}:
+            raise CoreInternalClientError("CORE_INTERNAL_AUTH_FAILED", "Worker 无法通过 Web 内部服务鉴权。", retryable=False)
+        if response.status_code >= 500:
+            raise CoreInternalClientError("CORE_INTERNAL_UNAVAILABLE", "Web 内部服务暂时不可用。", retryable=True)
+        if not 200 <= response.status_code < 300:
+            raise CoreInternalClientError("CARD_CONTENT_CONTEXT_INVALID", "Web 内部服务拒绝了节点内容上下文读取。", retryable=False)
+        try:
+            return CardContentContextEnvelope.model_validate(response.json())
+        except (ValidationError, ValueError) as error:
+            raise CoreInternalClientError("CORE_INTERNAL_RESPONSE_INVALID", "Web 内部服务返回了不符合内容上下文契约的数据。", retryable=False) from error
     async def get_default_model_connection(
         self,
         agent_run_id: UUID,

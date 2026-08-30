@@ -206,9 +206,9 @@ function AssessmentHeader({
       <div className="max-w-2xl">
         <div className="flex items-center gap-2 text-primary">
           <BookOpenCheck aria-hidden className="size-4" />
-          <p className="text-xs tracking-[0.16em]">{attempt ? "DIAGNOSTIC RESULT" : "DIAGNOSTIC READY"}</p>
+          <p className="text-xs tracking-[0.16em]">{attempt ? (assessment.kind === "post_test" ? "POSTTEST RESULT" : "DIAGNOSTIC RESULT") : (assessment.kind === "post_test" ? "POSTTEST READY" : "DIAGNOSTIC READY")}</p>
         </div>
-        <h1 className="mt-3 font-heading text-3xl font-normal tracking-tight">{attempt ? "你的前测结果" : "你的前测题集已准备好"}</h1>
+        <h1 className="mt-3 font-heading text-3xl font-normal tracking-tight">{attempt ? (assessment.kind === "post_test" ? "你的节点后测结果" : "你的前测结果") : (assessment.kind === "post_test" ? "你的节点后测题集已准备好" : "你的前测题集已准备好")}</h1>
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
           {attempt
             ? "结果基于提交时保存的答案确定性评分，不会额外调用模型。"

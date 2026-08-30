@@ -509,8 +509,8 @@ paths:
   /api/v1/plan-nodes/{node_id}/post-assessment-runs:
     post:
       tags: [Assessment]
-      summary: 为已完成学习节点创建后测生成 AgentRun
-      description: 仅允许当前用户为已完成且拥有成功节点内容的 plan_node 创建 posttest_generate 任务。后测需要 5-10 题，并由 Worker 绑定该节点的 source_card_content_id；任务创建后通过 AgentRun 状态接口轮询。
+      summary: 为学习节点创建后测生成 AgentRun
+      description: 仅允许当前用户为拥有 ready 节点内容的 plan_node 创建 posttest_generate 任务；节点完成标记只作个人进度记录，不构成后测条件。后测需要 5-10 题，并由 Worker 绑定该节点的 source_card_content_id；任务创建后通过 AgentRun 状态接口轮询。
       operationId: create_posttest_generation_run
       security:
         - sessionCookie: []
@@ -846,6 +846,30 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/AgentRunNotCancellable'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /internal/v1/agent-runs/{agent_run_id}/card-content-context:
+    get:
+      tags: [内部接口]
+      summary: Worker 读取节点后测固定内容上下文
+      description: 仅允许 Agent Worker 读取指定 posttest_generate 任务绑定的 ready CardContent 和 teaching_memory。
+      operationId: get_card_content_context
+      x-internal: true
+      security:
+        - internalServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/AgentRunId'
+      responses:
+        '200':
+          description: 后测固定内容上下文
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardContentContext'
+        '401':
+          $ref: '#/components/responses/InternalAuthenticationFailed'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
   /internal/v1/agent-runs/{agent_run_id}/card-content-result:
@@ -1460,7 +1484,7 @@ components:
         assessment_id:
           type: string
           format: uuid
-          description: 仅在 assessment_generate 成功后出现，可用于读取题集。
+          description: assessment_generate 或 posttest_generate 成功后出现，可用于读取题集。
         question_count:
           type: integer
           minimum: 1
@@ -2036,6 +2060,27 @@ components:
           type: string
           format: date-time
           nullable: true
+    CardContentContext:
+      type: object
+      additionalProperties: false
+      required: [plan_node_id, card_content_id, foundation, worked_example, pitfalls_debug, teaching_memory]
+      properties:
+        plan_node_id:
+          type: string
+          format: uuid
+        card_content_id:
+          type: string
+          format: uuid
+        foundation:
+          type: string
+        worked_example:
+          type: object
+          additionalProperties: true
+        pitfalls_debug:
+          type: string
+        teaching_memory:
+          type: object
+          additionalProperties: true
     CardContentGenerationResult:
       type: object
       additionalProperties: false

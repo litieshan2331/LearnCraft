@@ -8,10 +8,13 @@
 
 from uuid import uuid4
 
-from pydantic import SecretStr
+import pytest
+from pydantic import BaseModel, SecretStr
 
 from learncraft_agent.application.ports.model_gateway import (
     ModelCompletionRequest,
+    ModelCompletionResponse,
+    ModelGatewayError,
     ModelMessage,
     ModelProviderConnection,
     ModelToolCall,
@@ -162,3 +165,39 @@ def test_stream_response_aggregates_reasoning_content_tool_calls_and_usage() -> 
     assert response.message.tool_calls[0].arguments_json == 'first-second'
     assert response.usage.input_tokens == 7
     assert response.usage.output_tokens == 11
+
+class _TinyStructuredOutput(BaseModel):
+    """用于验证结构化错误路径的最小输出合同。"""
+
+    value: int
+
+
+class _FakeStructuredGateway(OpenAiCompatibleModelGateway):
+    """依次返回两次非法结构化结果，不发起真实网络请求。"""
+
+    def __init__(self, responses: list[ModelCompletionResponse]) -> None:
+        super().__init__(egress_client=None, request_max_retries=0)  # type: ignore[arg-type]
+        self._responses = responses
+
+    async def complete(self, request: ModelCompletionRequest) -> ModelCompletionResponse:
+        """返回预置响应，模拟首轮和修复轮均校验失败。"""
+        return self._responses.pop(0)
+
+
+def test_complete_structured_records_only_validation_paths() -> None:
+    """结构化失败必须暴露字段路径，但不得把模型正文写入错误摘要。"""
+    responses = [
+        ModelCompletionResponse(message=ModelMessage(role='assistant', content='{"value":"bad"}')),
+        ModelCompletionResponse(message=ModelMessage(role='assistant', content='{"value":"still-bad"}')),
+    ]
+    gateway = _FakeStructuredGateway(responses)
+
+    with pytest.raises(ModelGatewayError) as captured:
+        import asyncio
+        asyncio.run(gateway.complete_structured(_deepseek_request(), _TinyStructuredOutput))
+
+    error = captured.value
+    assert error.code == 'MODEL_STRUCTURED_OUTPUT_INVALID'
+    assert error.validation_paths == ('value',)
+    assert '校验路径: value' in str(error)
+    assert 'still-bad' not in str(error)

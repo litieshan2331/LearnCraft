@@ -13,3 +13,5 @@
 具体接口字段以 `packages/contracts/openapi/core.yaml` 为准。
 
 生成节点知识内容并回写成功后，`GET /api/v1/card-contents/{card_content_id}` 仅向内容所有者返回 ready 内容、示例和来源引用，不返回 teaching_memory 或生成元数据。
+
+节点内容 ready 后，`POST /api/v1/plan-nodes/{node_id}/post-assessment-runs` 创建后测 AgentRun；节点完成标记仅记录个人进度，不是后测前置条件。

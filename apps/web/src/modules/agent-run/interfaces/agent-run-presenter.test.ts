@@ -2,7 +2,7 @@
  * AgentRun 公开响应映射器单元测试。
  *
  * 测试：
- * - presentAgentRun：仅在 assessment_generate 成功时传递安全的 assessment_id 引用。
+ * - presentAgentRun：在前测或后测成功时传递安全的 assessment_id 引用。
  */
 
 import { describe, expect, it } from "vitest";
@@ -34,6 +34,22 @@ describe("presentAgentRun", () => {
   it("返回可用于读取题集的安全结果引用", () => {
     expect(presentAgentRun(agentRun)).toMatchObject({
       status: "succeeded",
+      assessment_result: {
+        assessment_id: "f18621a7-4309-4a04-9769-4d602966a574",
+        question_count: 10,
+      },
+    });
+  });
+
+  it("后测成功时同样返回可读取题集的安全结果引用", () => {
+    const posttestRun: AgentRunSnapshot = {
+      ...agentRun,
+      runType: "posttest_generate",
+      targetType: "plan_node",
+    };
+
+    expect(presentAgentRun(posttestRun)).toMatchObject({
+      run_type: "posttest_generate",
       assessment_result: {
         assessment_id: "f18621a7-4309-4a04-9769-4d602966a574",
         question_count: 10,

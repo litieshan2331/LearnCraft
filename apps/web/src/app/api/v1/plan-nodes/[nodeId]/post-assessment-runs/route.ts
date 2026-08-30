@@ -2,7 +2,7 @@
  * 学习节点的 posttest_generate AgentRun 创建 Route Handler。
  *
  * 函数：
- * - POST：为已完成且拥有成功内容的节点创建后测生成任务。
+ * - POST：为拥有 ready 内容的节点创建后测生成任务；完成标记只作个人记录。
  */
 
 import { NextResponse } from "next/server";

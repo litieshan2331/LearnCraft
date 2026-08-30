@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createAssessmentRun,
+  createPosttestRun,
   getAssessmentAttempt,
   getAssessmentAttempts,
   getAgentRun,
@@ -44,7 +45,23 @@ describe("assessment-client", () => {
     });
   });
 
-  it("读取任务与题集时调用对应的受保护接口", async () => {
+
+  it("创建节点后测任务时携带节点路径、题量、难度和幂等键", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "run-2", status: "queued" }, 202));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createPosttestRun(
+      "node-1",
+      { question_count: 6, difficulty: "normal" },
+      "16b28ac1-266a-43ed-b6fc-8c54ce6ae96c",
+    );
+
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/plan-nodes/node-1/post-assessment-runs");
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("Idempotency-Key")).toBe("16b28ac1-266a-43ed-b6fc-8c54ce6ae96c");
+    expect(JSON.parse(init.body as string)).toEqual({ question_count: 6, difficulty: "normal" });
+  });  it("读取任务与题集时调用对应的受保护接口", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ id: "run-1", status: "running" }))
       .mockResolvedValueOnce(jsonResponse({ id: "assessment-1", items: [] }));

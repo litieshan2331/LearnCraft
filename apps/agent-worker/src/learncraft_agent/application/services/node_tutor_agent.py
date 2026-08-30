@@ -8,15 +8,17 @@ from __future__ import annotations
 
 from learncraft_agent.application.services.base_agent import BaseAgent
 from learncraft_agent.workflows.card_content_generate import CardContentWorkflow
+from learncraft_agent.workflows.posttest_generate import PosttestWorkflow
 
 
 class NodeTutorAgent(BaseAgent):
     """负责同一 plan_node 逻辑会话中的节点内容和后测任务分发。"""
 
     def __init__(self) -> None:
-        """注册 card_content_generate；posttest_generate 将在后续内容后测实现中接入。"""
+        """注册 card_content_generate 和 posttest_generate 两个节点教学工作流。"""
         super().__init__(
             workflows={
                 "card_content_generate": CardContentWorkflow(),
+                "posttest_generate": PosttestWorkflow(),
             },
         )
