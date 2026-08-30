@@ -114,6 +114,11 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
     }
   }
 
+  const returnHref = assessment?.kind === "post_test" && assessment.plan_node_id
+    ? `/plan-nodes/${assessment.plan_node_id}`
+    : "/goals";
+  const returnLabel = assessment?.kind === "post_test" ? "返回章节内容" : "返回学习目标列表";
+
   if (isLoading) {
     return <LoadingState />;
   }
@@ -135,9 +140,9 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
-      <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" href="/goals">
+      <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" href={returnHref}>
         <ArrowLeft aria-hidden className="size-4" />
-        返回学习目标列表
+        {returnLabel}
       </Link>
 
       <section className="mt-7 border border-border border-l-2 border-l-primary bg-card p-5 sm:p-8">
@@ -365,7 +370,7 @@ function LoadingState() {
     <main className="grid min-h-80 place-items-center px-6 text-center">
       <div>
         <LoaderCircle aria-hidden className="mx-auto size-5 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground">正在读取前测题集…</p>
+        <p className="mt-4 text-sm text-muted-foreground">正在读取题集…</p>
       </div>
     </main>
   );
