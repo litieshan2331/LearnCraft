@@ -106,7 +106,7 @@ export function PosttestGenerationAction({
   if (existingAssessment && (existingAssessment.status === "ready" || existingAssessment.status === "graded")) {
     const hasAttempt = existingAssessment.latest_attempt !== null;
     return (
-      <section className="mt-7 border border-border bg-card p-5 sm:p-7">
+      <section className="mt-7 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-7">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs tracking-[0.14em] text-primary">POSTTEST</p>
@@ -116,7 +116,7 @@ export function PosttestGenerationAction({
                 : `本章后测已准备好，共 ${existingAssessment.question_count} 道选择题。`}
             </p>
           </div>
-          <Button asChild className="rounded-none">
+          <Button asChild className="rounded-xl">
             <Link href={`/assessments/${existingAssessment.assessment_id}`}>
               {hasAttempt ? "查看后测结果" : "查看后测题集"}
               <ArrowRight aria-hidden className="size-4" />
@@ -128,7 +128,7 @@ export function PosttestGenerationAction({
   }
   if (agentRun && isInFlight(agentRun.status)) {
     return (
-      <section className="mt-7 border border-border bg-background p-5">
+      <section className="mt-7 rounded-2xl border border-border/80 bg-background/65 p-5">
         <div className="flex items-center gap-3">
           <LoaderCircle aria-hidden className="size-5 animate-spin text-primary" />
           <div>
@@ -141,12 +141,12 @@ export function PosttestGenerationAction({
   }
 
   return (
-    <section className="mt-7 border border-border bg-card p-5 sm:p-7">
+    <section className="mt-7 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-7">
       {errorMessage ? (
-        <Alert className="mb-5 rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+        <Alert className="mb-5 rounded-xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
           <AlertCircle aria-hidden className="size-4" />
-          <AlertTitle className="text-[#8b3f35]">后测未能完成</AlertTitle>
-          <AlertDescription className="mt-1 text-[#8b3f35]">{errorMessage}</AlertDescription>
+          <AlertTitle className="text-destructive">后测未能完成</AlertTitle>
+          <AlertDescription className="mt-1 text-destructive">{errorMessage}</AlertDescription>
         </Alert>
       ) : null}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -156,17 +156,17 @@ export function PosttestGenerationAction({
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm">题量
-            <select className="ml-2 border border-border bg-background px-2 py-2" onChange={(event) => setQuestionCount(Number(event.target.value))} value={questionCount}>
+            <select className="ml-2 rounded-xl border border-border/80 bg-background/70 px-2.5 py-2 focus:outline-none focus:ring-3 focus:ring-ring/40" onChange={(event) => setQuestionCount(Number(event.target.value))} value={questionCount}>
               {[5, 6, 7, 8, 9, 10].map((count) => <option key={count} value={count}>{count}</option>)}
             </select>
           </label>
           <label className="text-sm">难度
-            <select className="ml-2 border border-border bg-background px-2 py-2" onChange={(event) => setDifficulty(event.target.value as AssessmentDifficulty)} value={difficulty}>
+            <select className="ml-2 rounded-xl border border-border/80 bg-background/70 px-2.5 py-2 focus:outline-none focus:ring-3 focus:ring-ring/40" onChange={(event) => setDifficulty(event.target.value as AssessmentDifficulty)} value={difficulty}>
               <option value="normal">正常</option>
               <option value="hard">困难</option>
             </select>
           </label>
-          <Button className="rounded-none" disabled={isSubmitting} onClick={() => void handleGenerate()} type="button">
+          <Button className="rounded-xl" disabled={isSubmitting} onClick={() => void handleGenerate()} type="button">
             {isSubmitting ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Sparkles aria-hidden className="size-4" />}
             生成后测
           </Button>

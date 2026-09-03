@@ -105,13 +105,13 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
 
   if (error) {
     return (
-      <main className="mx-auto w-full max-w-4xl px-6 py-12 sm:px-10 sm:py-16">
-        <Alert className="rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+      <main className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 sm:py-12 lg:px-10">
+        <Alert className="rounded-xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
           <AlertCircle aria-hidden className="size-4" />
-          <AlertTitle className="text-[#8b3f35]">无法读取学习章节</AlertTitle>
-          <AlertDescription className="mt-1 text-[#8b3f35]">{error}</AlertDescription>
+          <AlertTitle className="text-destructive">无法读取学习章节</AlertTitle>
+          <AlertDescription className="mt-1 text-destructive">{error}</AlertDescription>
         </Alert>
-        <Button asChild className="mt-6 rounded-none" variant="outline">
+        <Button asChild className="mt-6 rounded-xl" variant="outline">
           <Link href="/goals"><ArrowLeft aria-hidden className="size-4" />返回学习目标</Link>
         </Button>
       </main>
@@ -127,34 +127,34 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
     : "无前置章节";
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-10 sm:px-10 sm:py-14">
-      <Button asChild className="rounded-none" variant="ghost">
+    <main className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 sm:py-12 lg:px-10">
+      <Button asChild className="rounded-xl" variant="ghost">
         <Link href={"/learning-plans/" + node.plan_id}><ArrowLeft aria-hidden className="size-4" />返回学习路线</Link>
       </Button>
 
-      <header className="mt-7 border border-border border-l-2 border-l-primary bg-card p-6 sm:p-9">
+      <header className="mt-7 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-6 sm:p-9">
         <div className="flex flex-wrap items-center gap-3 text-xs tracking-[0.16em] text-primary">
           <span className="inline-flex items-center gap-2"><BookOpen aria-hidden className="size-4" />{node.plan_title}</span>
-          <span className="text-muted-foreground">第 {node.ordinal} 章</span>
-          <span className="text-muted-foreground">{formatStatus(node.status)}</span>
+          <span className="rounded-full bg-secondary px-2.5 py-1 text-muted-foreground">第 {node.ordinal} 章</span>
+          <span className="rounded-full bg-primary/10 px-2.5 py-1 text-primary">{formatStatus(node.status)}</span>
         </div>
-        <h1 className="mt-4 font-heading text-4xl font-normal tracking-tight">{node.title}</h1>
+        <h1 className="mt-4 font-heading text-4xl font-medium tracking-tight">{node.title}</h1>
         <p className="mt-5 max-w-3xl text-sm leading-8 text-muted-foreground">{node.node_brief}</p>
       </header>
 
       <section className="mt-8 grid gap-5 sm:grid-cols-2">
-        <article className="border border-border bg-card p-5">
+        <article className="rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5">
           <p className="inline-flex items-center gap-2 text-xs tracking-[0.14em] text-primary"><Target aria-hidden className="size-4" />LEARNING OBJECTIVE</p>
           <p className="mt-4 leading-8">{node.learning_objective}</p>
         </article>
-        <article className="border border-border bg-card p-5">
+        <article className="rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5">
           <p className="inline-flex items-center gap-2 text-xs tracking-[0.14em] text-primary"><Clock3 aria-hidden className="size-4" />STUDY ESTIMATE</p>
           <p className="mt-4 text-lg">{node.estimated_minutes} 分钟</p>
           <p className="mt-2 text-sm text-muted-foreground">难度 {node.difficulty}/5 · {prerequisiteLabel}</p>
         </article>
       </section>
 
-      <section className="mt-5 border border-border bg-card p-5 sm:p-7">
+      <section className="mt-5 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-7">
         <p className="text-xs tracking-[0.14em] text-primary">COMPLETION CRITERIA</p>
         <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-7">
           {node.completion_criteria.map((criterion) => <li key={criterion}>{criterion}</li>)}
@@ -162,7 +162,7 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
       </section>
 
       {node.rationale ? (
-        <section className="mt-5 border border-border bg-card p-5 sm:p-7">
+        <section className="mt-5 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-7">
           <p className="text-xs tracking-[0.14em] text-primary">WHY THIS CHAPTER</p>
           <p className="mt-4 text-sm leading-7 text-muted-foreground">{node.rationale}</p>
         </section>

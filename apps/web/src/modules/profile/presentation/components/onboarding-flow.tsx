@@ -5,13 +5,14 @@
  * - OnboardingFlow：加载既有画像和模型连接，并协调画像保存、目标创建与成功状态展示。
  * - ProfileForm：收集当前水平、时间、内容偏好、设备和背景。
  * - LearningGoalForm：创建用户自定义主题的学习目标并可选择目标级模型连接。
+ * - OnboardingProgress：呈现既有学习画像与学习目标步骤的视觉进度。
  * - getGoalIdempotencyKey：在一次目标创建及其安全重试期间复用幂等键。
  */
 
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, ArrowLeft, CheckCircle2, LoaderCircle, PencilLine } from "lucide-react";
+import { AlertCircle, ArrowLeft, BookOpen, CheckCircle2, Compass, LoaderCircle, PencilLine, Target } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useForm, type UseFormReturn } from "react-hook-form";
@@ -183,48 +184,104 @@ export function OnboardingFlow() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-12 sm:px-10 sm:py-16">
-      <div className="border border-border border-l-2 border-l-primary bg-card px-6 py-8 sm:px-9 sm:py-10">
-        <p className="text-xs tracking-[0.2em] text-primary">LEARNING SETUP / {getStepLabel(step)}</p>
-        <h1 className="mt-5 font-heading text-4xl font-normal tracking-tight">从你的真实情况开始</h1>
-        <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-          LearnCraft 会用这份画像和目标安排前测与后续学习路线。你可以随时回来更新画像；新建目标会记录当时的画像版本。
-        </p>
+    <main className="relative mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 sm:py-12 lg:px-10">
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="lc-float absolute top-8 right-0 size-64 rounded-full bg-primary/[0.08] blur-3xl" />
+        <div className="lc-float-slow absolute bottom-12 left-8 size-48 rounded-full bg-chart-4/[0.1] blur-3xl" />
+      </div>
+      <div className="relative grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
+        <aside className="hidden rounded-[1.25rem] border border-border/80 bg-card/70 p-5 shadow-[0_20px_55px_-42px_rgba(23,53,58,0.5)] lg:block">
+          <span className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary"><BookOpen aria-hidden className="size-5" /></span>
+          <p className="mt-5 text-xs font-medium tracking-[0.16em] text-primary">LEARN AT YOUR PACE</p>
+          <h2 className="mt-3 font-heading text-2xl font-medium leading-snug">把学习拆成现在就能开始的一步。</h2>
+          <p className="mt-4 text-sm leading-7 text-muted-foreground">先认识你的起点，再定义你想完成的事。路线会从真实情况出发。</p>
+          <div className="mt-7 space-y-3 border-t border-border/80 pt-5 text-sm">
+            <p className="flex items-center gap-2 text-muted-foreground"><Compass aria-hidden className="size-4 text-primary" />学习画像决定起点</p>
+            <p className="flex items-center gap-2 text-muted-foreground"><Target aria-hidden className="size-4 text-primary" />学习目标明确方向</p>
+          </div>
+        </aside>
 
-        {loadError ? (
-          <Alert className="mt-7 rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
-            <AlertCircle aria-hidden className="size-4" />
-            <AlertDescription className="text-[#8b3f35]">{loadError}</AlertDescription>
-          </Alert>
-        ) : null}
+        <section className="rounded-[1.5rem] border border-border/80 bg-card/90 p-5 shadow-[0_24px_70px_-42px_rgba(23,53,58,0.48)] backdrop-blur sm:p-8 lg:p-10">
+          <header>
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium tracking-[0.14em] text-primary">
+                  <Compass aria-hidden className="size-3.5" />
+                  LEARNING SETUP / {getStepLabel(step)}
+                </p>
+                <h1 className="mt-5 font-heading text-4xl font-medium tracking-tight sm:text-5xl">从你的真实情况开始</h1>
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
+                  LearnCraft 会用这份画像和目标安排前测与后续学习路线。你可以随时回来更新画像；新建目标会记录当时的画像版本。
+                </p>
+              </div>
+              <span className="hidden size-12 place-items-center rounded-2xl bg-secondary text-primary sm:grid"><Target aria-hidden className="size-5" /></span>
+            </div>
+            <OnboardingProgress step={step} />
+          </header>
 
-        <div className="mt-9 border-t border-border pt-8">
-          {step === "loading" ? <LoadingState /> : null}
-          {step === "profile" ? (
-            <ProfileForm form={profileForm} onSubmit={handleProfileSubmit} isUpdating={Boolean(profile)} />
+          {loadError ? (
+            <Alert className="mt-7 rounded-2xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
+              <AlertCircle aria-hidden className="size-4" />
+              <AlertDescription className="text-destructive">{loadError}</AlertDescription>
+            </Alert>
           ) : null}
-          {step === "goal" ? (
-            <LearningGoalForm
-              form={goalForm}
-              modelConnections={modelConnections}
-              onEditProfile={() => setStep("profile")}
-              onSubmit={handleGoalSubmit}
-            />
-          ) : null}
-          {step === "completed" && createdGoal ? (
-            <GoalCreatedState
-              goal={createdGoal}
-              onCreateAnother={() => {
-                goalForm.reset();
-                goalIdempotencyKeyRef.current = null;
-                setCreatedGoal(null);
-                setStep("goal");
-              }}
-            />
-          ) : null}
-        </div>
+
+          <div className="mt-8 border-t border-border/80 pt-8 lc-reveal" key={step}>
+            {step === "loading" ? <LoadingState /> : null}
+            {step === "profile" ? (
+              <ProfileForm form={profileForm} onSubmit={handleProfileSubmit} isUpdating={Boolean(profile)} />
+            ) : null}
+            {step === "goal" ? (
+              <LearningGoalForm
+                form={goalForm}
+                modelConnections={modelConnections}
+                onEditProfile={() => setStep("profile")}
+                onSubmit={handleGoalSubmit}
+              />
+            ) : null}
+            {step === "completed" && createdGoal ? (
+              <GoalCreatedState
+                goal={createdGoal}
+                onCreateAnother={() => {
+                  goalForm.reset();
+                  goalIdempotencyKeyRef.current = null;
+                  setCreatedGoal(null);
+                  setStep("goal");
+                }}
+              />
+            ) : null}
+          </div>
+        </section>
       </div>
     </main>
+  );
+}
+
+function OnboardingProgress({ step }: Readonly<{ step: OnboardingStep }>) {
+  const activeStep = step === "goal" || step === "completed" ? 2 : 1;
+  const stages = [
+    { index: 1, label: "学习画像", description: "认识起点" },
+    { index: 2, label: "学习目标", description: "定义方向" },
+  ];
+
+  return (
+    <ol aria-label="学习设置进度" className="mt-8 grid gap-3 sm:grid-cols-2">
+      {stages.map((stage) => {
+        const isActive = stage.index === activeStep;
+        const isComplete = stage.index < activeStep || step === "completed";
+        return (
+          <li aria-current={isActive ? "step" : undefined} className={`flex items-center gap-3 rounded-2xl border px-3.5 py-3 transition-colors ${isActive ? "border-primary/35 bg-primary/[0.07]" : "border-border/80 bg-background/55"}`} key={stage.index}>
+            <span className={`grid size-8 shrink-0 place-items-center rounded-xl text-xs font-medium ${isComplete ? "bg-primary text-primary-foreground" : isActive ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"}`}>
+              {isComplete ? <CheckCircle2 aria-hidden className="size-4" /> : String(stage.index).padStart(2, "0")}
+            </span>
+            <span>
+              <span className="block text-sm font-medium">{stage.label}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{stage.description}</span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -239,17 +296,18 @@ function ProfileForm({
 }) {
   return (
     <form noValidate onSubmit={form.handleSubmit(onSubmit)}>
-      <FieldGroup className="gap-7">
+      <FieldGroup className="gap-8">
         <div>
-          <p className="text-xs tracking-[0.18em] text-primary">STEP 1 / 学习画像</p>
-          <h2 className="mt-3 font-heading text-2xl font-normal">告诉我你的学习方式</h2>
+          <p className="text-xs font-medium tracking-[0.16em] text-primary">STEP 1 / 学习画像</p>
+          <h2 className="mt-3 font-heading text-2xl font-medium">告诉我你的学习方式</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">没有标准答案，选择更接近你当下状态的选项即可。</p>
         </div>
 
         <Field data-invalid={Boolean(form.formState.errors.current_level)}>
           <FieldLabel>整体编程经验</FieldLabel>
           <div className="grid gap-3 sm:grid-cols-3">
             {levelOptions.map((option) => (
-              <label className="cursor-pointer border border-border p-4 transition-colors has-[:checked]:border-primary has-[:checked]:bg-primary/5" key={option.value}>
+              <label className="cursor-pointer rounded-2xl border border-border bg-background/60 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:bg-card has-[:checked]:border-primary has-[:checked]:bg-primary/[0.07] has-[:checked]:shadow-[0_14px_32px_-24px_rgba(36,122,128,0.65)] focus-within:ring-3 focus-within:ring-ring/25" key={option.value}>
                 <input className="sr-only" type="radio" value={option.value} {...form.register("current_level")} />
                 <span className="block font-medium">{option.label}</span>
                 <span className="mt-2 block text-sm leading-6 text-muted-foreground">{option.description}</span>
@@ -262,13 +320,13 @@ function ProfileForm({
         <div className="grid gap-5 sm:grid-cols-2">
           <Field data-invalid={Boolean(form.formState.errors.weekly_minutes)}>
             <FieldLabel htmlFor="weekly-minutes">每周可投入时间（分钟）</FieldLabel>
-            <Input id="weekly-minutes" min={30} max={10080} step={30} type="number" {...form.register("weekly_minutes", { valueAsNumber: true })} />
+            <Input className="h-11 rounded-xl bg-background/70 px-3.5" id="weekly-minutes" min={30} max={10080} step={30} type="number" {...form.register("weekly_minutes", { valueAsNumber: true })} />
             <FieldDescription>例如每天约 1 小时可填写 420。</FieldDescription>
             <FieldError errors={[form.formState.errors.weekly_minutes]} />
           </Field>
           <Field data-invalid={Boolean(form.formState.errors.operating_system)}>
             <FieldLabel htmlFor="operating-system">主要设备</FieldLabel>
-            <Select id="operating-system" {...form.register("operating_system")}>
+            <Select className="h-11 rounded-xl bg-background/70 px-3.5" id="operating-system" {...form.register("operating_system")}>
               <option value="windows">Windows</option>
               <option value="macos">macOS</option>
               <option value="linux">Linux</option>
@@ -283,7 +341,7 @@ function ProfileForm({
           <FieldLabel>内容偏好</FieldLabel>
           <div className="grid gap-3 sm:grid-cols-3">
             {preferenceOptions.map((option) => (
-              <label className="cursor-pointer border border-border p-4 transition-colors has-[:checked]:border-primary has-[:checked]:bg-primary/5" key={option.value}>
+              <label className="cursor-pointer rounded-2xl border border-border bg-background/60 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:bg-card has-[:checked]:border-primary has-[:checked]:bg-primary/[0.07] has-[:checked]:shadow-[0_14px_32px_-24px_rgba(36,122,128,0.65)] focus-within:ring-3 focus-within:ring-ring/25" key={option.value}>
                 <input className="sr-only" type="radio" value={option.value} {...form.register("content_preference")} />
                 <span className="block font-medium">{option.label}</span>
                 <span className="mt-2 block text-sm leading-6 text-muted-foreground">{option.description}</span>
@@ -295,14 +353,14 @@ function ProfileForm({
 
         <Field data-invalid={Boolean(form.formState.errors.background_summary)}>
           <FieldLabel htmlFor="background-summary">学习背景（可选）</FieldLabel>
-          <Textarea id="background-summary" maxLength={2000} placeholder="例如：会一点 JavaScript，了解变量和函数，但没有系统学习过 Python。" rows={4} {...form.register("background_summary")} />
+          <Textarea className="rounded-xl bg-background/70 px-3.5 py-2.5" id="background-summary" maxLength={2000} placeholder="例如：会一点 JavaScript，了解变量和函数，但没有系统学习过 Python。" rows={4} {...form.register("background_summary")} />
           <FieldDescription>写下已有经验或顾虑，路线会更贴近你的起点。</FieldDescription>
           <FieldError errors={[form.formState.errors.background_summary]} />
         </Field>
 
-        <div className="flex items-center justify-between border-t border-border pt-6">
+        <div className="flex flex-col gap-4 rounded-2xl bg-secondary/55 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground">{isUpdating ? "保存后，后续新建目标会使用新的画像版本。" : "保存后即可创建第一个 Python 学习目标。"}</p>
-          <Button className="h-11 rounded-none px-5" disabled={form.formState.isSubmitting} type="submit">
+          <Button className="h-11 rounded-xl px-5" disabled={form.formState.isSubmitting} type="submit">
             {form.formState.isSubmitting ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : null}
             {form.formState.isSubmitting ? "正在保存" : "保存并继续"}
           </Button>
@@ -325,13 +383,14 @@ function LearningGoalForm({
 }) {
   return (
     <form noValidate onSubmit={form.handleSubmit(onSubmit)}>
-      <FieldGroup className="gap-7">
+      <FieldGroup className="gap-8">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
           <div>
-            <p className="text-xs tracking-[0.18em] text-primary">STEP 2 / 学习目标</p>
-            <h2 className="mt-3 font-heading text-2xl font-normal">定义你想完成的事</h2>
+            <p className="text-xs font-medium tracking-[0.16em] text-primary">STEP 2 / 学习目标</p>
+            <h2 className="mt-3 font-heading text-2xl font-medium">定义你想完成的事</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">把目标写得具体一些，后续路线会更接近你想达到的成果。</p>
           </div>
-          <Button className="rounded-none" onClick={onEditProfile} type="button" variant="ghost">
+          <Button className="rounded-xl px-3 hover:bg-secondary" onClick={onEditProfile} type="button" variant="ghost">
             <PencilLine aria-hidden className="size-4" />
             修改画像
           </Button>
@@ -339,45 +398,45 @@ function LearningGoalForm({
 
         <Field data-invalid={Boolean(form.formState.errors.topic)}>
           <FieldLabel htmlFor="goal-topic">学习主题</FieldLabel>
-          <Input id="goal-topic" maxLength={200} placeholder="例如：Vue 3 + TypeScript、Go 并发编程、Kubernetes" {...form.register("topic")} />
+          <Input className="h-11 rounded-xl bg-background/70 px-3.5" id="goal-topic" maxLength={200} placeholder="例如：Vue 3 + TypeScript、Go 并发编程、Kubernetes" {...form.register("topic")} />
           <FieldDescription>支持任意面向程序员的技术主题；请尽量写清技术栈或版本。</FieldDescription>
           <FieldError errors={[form.formState.errors.topic]} />
         </Field>
 
         <Field data-invalid={Boolean(form.formState.errors.title)}>
           <FieldLabel htmlFor="goal-title">目标名称</FieldLabel>
-          <Input id="goal-title" maxLength={200} placeholder="例如：熟练掌握TypeScript语言和Next.js框架" {...form.register("title")} />
+          <Input className="h-11 rounded-xl bg-background/70 px-3.5" id="goal-title" maxLength={200} placeholder="例如：熟练掌握TypeScript语言和Next.js框架" {...form.register("title")} />
           <FieldError errors={[form.formState.errors.title]} />
         </Field>
 
         <Field data-invalid={Boolean(form.formState.errors.description)}>
           <FieldLabel htmlFor="goal-description">你想学习什么</FieldLabel>
-          <Textarea id="goal-description" maxLength={4000} placeholder="说明你现在想解决的问题、感兴趣的方向或希望覆盖的知识范围。" rows={5} {...form.register("description")} />
+          <Textarea className="rounded-xl bg-background/70 px-3.5 py-2.5" id="goal-description" maxLength={4000} placeholder="说明你现在想解决的问题、感兴趣的方向或希望覆盖的知识范围。" rows={5} {...form.register("description")} />
           <FieldError errors={[form.formState.errors.description]} />
         </Field>
 
         <Field data-invalid={Boolean(form.formState.errors.desired_outcome)}>
           <FieldLabel htmlFor="desired-outcome">期望成果</FieldLabel>
-          <Textarea id="desired-outcome" maxLength={2000} placeholder="例如：能独立处理 CSV 数据、写出函数，并完成一个可运行的小项目。" rows={4} {...form.register("desired_outcome")} />
+          <Textarea className="rounded-xl bg-background/70 px-3.5 py-2.5" id="desired-outcome" maxLength={2000} placeholder="例如：能独立处理 CSV 数据、写出函数，并完成一个可运行的小项目。" rows={4} {...form.register("desired_outcome")} />
           <FieldError errors={[form.formState.errors.desired_outcome]} />
         </Field>
 
         <div className="grid gap-5 sm:grid-cols-2">
           <Field data-invalid={Boolean(form.formState.errors.target_date)}>
             <FieldLabel htmlFor="target-date">期望完成日期（可选）</FieldLabel>
-            <Input id="target-date" type="date" {...form.register("target_date")} />
+            <Input className="h-11 rounded-xl bg-background/70 px-3.5" id="target-date" type="date" {...form.register("target_date")} />
             <FieldError errors={[form.formState.errors.target_date]} />
           </Field>
           <Field data-invalid={Boolean(form.formState.errors.weekly_minutes_override)}>
             <FieldLabel htmlFor="weekly-override">本目标每周时间（可选）</FieldLabel>
-            <Input id="weekly-override" min={30} max={10080} placeholder="默认使用画像中的时间" step={30} type="number" {...form.register("weekly_minutes_override")} />
+            <Input className="h-11 rounded-xl bg-background/70 px-3.5" id="weekly-override" min={30} max={10080} placeholder="默认使用画像中的时间" step={30} type="number" {...form.register("weekly_minutes_override")} />
             <FieldError errors={[form.formState.errors.weekly_minutes_override]} />
           </Field>
         </div>
 
         <Field data-invalid={Boolean(form.formState.errors.model_connection_id)}>
           <FieldLabel htmlFor="goal-model-connection">生成模型（可选）</FieldLabel>
-          <Select id="goal-model-connection" {...form.register("model_connection_id")}>
+          <Select className="h-11 rounded-xl bg-background/70 px-3.5" id="goal-model-connection" {...form.register("model_connection_id")}>
             <option value="">使用账户默认模型连接</option>
             {modelConnections.map((connection) => (
               <option key={connection.id} value={connection.id}>
@@ -395,12 +454,12 @@ function LearningGoalForm({
           <FieldError errors={[form.formState.errors.model_connection_id]} />
         </Field>
 
-        <div className="flex flex-col-reverse justify-between gap-4 border-t border-border pt-6 sm:flex-row sm:items-center">
-          <Button className="w-fit rounded-none px-0 text-muted-foreground" onClick={onEditProfile} type="button" variant="ghost">
+        <div className="flex flex-col-reverse justify-between gap-4 rounded-2xl bg-secondary/55 px-5 py-4 sm:flex-row sm:items-center">
+          <Button className="w-fit rounded-xl px-3 text-muted-foreground hover:bg-card" onClick={onEditProfile} type="button" variant="ghost">
             <ArrowLeft aria-hidden className="size-4" />
             返回修改画像
           </Button>
-          <Button className="h-11 rounded-none px-5" disabled={form.formState.isSubmitting} type="submit">
+          <Button className="h-11 rounded-xl px-5" disabled={form.formState.isSubmitting} type="submit">
             {form.formState.isSubmitting ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : null}
             {form.formState.isSubmitting ? "正在创建" : "创建学习目标"}
           </Button>
@@ -412,22 +471,22 @@ function LearningGoalForm({
 
 function GoalCreatedState({ goal, onCreateAnother }: { goal: LearningGoal; onCreateAnother: () => void }) {
   return (
-    <div className="py-5">
-      <CheckCircle2 aria-hidden className="size-7 text-primary" />
-      <p className="mt-5 text-xs tracking-[0.18em] text-primary">GOAL CREATED</p>
-      <h2 className="mt-3 font-heading text-3xl font-normal">{goal.title}</h2>
+    <div className="rounded-[1.25rem] bg-secondary/55 p-5 sm:p-7">
+      <span className="grid size-12 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-[0_14px_32px_-20px_rgba(36,122,128,0.85)]"><CheckCircle2 aria-hidden className="size-6" /></span>
+      <p className="mt-6 text-xs font-medium tracking-[0.16em] text-primary">GOAL CREATED</p>
+      <h2 className="mt-3 font-heading text-3xl font-medium">{goal.title}</h2>
       <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
         学习目标已保存，并绑定画像版本 {goal.profile_version}。下一步生成前测，用真实答题结果确定路线的切入点。
       </p>
-      <div className="mt-8 border-y border-border py-4 text-sm">
+      <div className="mt-7 flex items-center gap-3 rounded-2xl border border-primary/15 bg-card/70 px-4 py-3 text-sm">
         <span className="text-muted-foreground">当前状态</span>
-        <span className="ml-4 font-medium">等待前测</span>
+        <span className="font-medium text-primary">等待前测</span>
       </div>
-      <div className='mt-7 flex flex-wrap gap-3'>
-        <Button asChild className='rounded-none'>
+      <div className="mt-7 flex flex-wrap gap-3">
+        <Button asChild className="h-11 rounded-xl px-5">
           <Link href={'/goals/' + goal.id + '/assessment'}>开始前测</Link>
         </Button>
-        <Button className='rounded-none' onClick={onCreateAnother} type='button' variant='outline'>
+        <Button className="h-11 rounded-xl px-5" onClick={onCreateAnother} type="button" variant="outline">
           创建另一个目标
         </Button>
       </div>
@@ -437,9 +496,19 @@ function GoalCreatedState({ goal, onCreateAnother }: { goal: LearningGoal; onCre
 
 function LoadingState() {
   return (
-    <div className="flex min-h-60 flex-col items-center justify-center text-center">
-      <LoaderCircle aria-hidden className="size-5 animate-spin text-primary" />
-      <p className="mt-4 text-sm text-muted-foreground">正在读取你的学习设置…</p>
+    <div className="rounded-[1.25rem] bg-secondary/50 p-6 sm:p-8">
+      <div className="flex items-center gap-3">
+        <span className="grid size-10 place-items-center rounded-2xl bg-card text-primary shadow-sm"><LoaderCircle aria-hidden className="size-4 animate-spin" /></span>
+        <div>
+          <p className="font-medium">正在准备学习设置</p>
+          <p className="mt-1 text-sm text-muted-foreground">马上为你整理出下一步。</p>
+        </div>
+      </div>
+      <div aria-hidden className="mt-6 grid gap-3">
+        <span className="h-3 w-2/5 rounded-full bg-card" />
+        <span className="h-3 w-full rounded-full bg-card" />
+        <span className="h-3 w-4/5 rounded-full bg-card" />
+      </div>
     </div>
   );
 }

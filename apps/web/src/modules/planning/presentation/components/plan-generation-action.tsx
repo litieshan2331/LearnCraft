@@ -123,11 +123,11 @@ export function PlanGenerationAction({
 
   if (activePlanId) {
     return (
-      <div className="mt-8 flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-8 flex flex-col-reverse gap-3 rounded-2xl bg-secondary/55 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-xl text-sm leading-6 text-muted-foreground">
           当前学习路线已经生成，可随时返回章节目录继续学习。
         </p>
-        <Button asChild className="h-11 shrink-0 rounded-none px-5">
+        <Button asChild className="h-11 shrink-0 rounded-xl px-5">
           <Link href={"/learning-plans/" + activePlanId}>查看学习路线<ArrowRight aria-hidden className="size-4" /></Link>
         </Button>
       </div>
@@ -136,15 +136,15 @@ export function PlanGenerationAction({
   return (
     <div className="mt-8">
       {errorMessage ? (
-        <Alert className="mb-5 rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+        <Alert className="mb-5 rounded-xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
           <AlertCircle aria-hidden className="size-4" />
-          <AlertTitle className="text-[#8b3f35]">学习路线未能完成</AlertTitle>
-          <AlertDescription className="mt-1 text-[#8b3f35]">{errorMessage}</AlertDescription>
+          <AlertTitle className="text-destructive">学习路线未能完成</AlertTitle>
+          <AlertDescription className="mt-1 text-destructive">{errorMessage}</AlertDescription>
         </Alert>
       ) : null}
 
       {taskIsInFlight && agentRun ? (
-        <div className="border border-border bg-background p-5">
+        <div className="rounded-2xl border border-border/80 bg-background/65 p-5">
           <div className="flex items-start gap-3">
             <LoaderCircle aria-hidden className="mt-0.5 size-5 shrink-0 animate-spin text-primary" />
             <div>
@@ -163,7 +163,7 @@ export function PlanGenerationAction({
           <p className="max-w-xl text-sm leading-6 text-muted-foreground">
             将使用已评分前测、当前学习画像和账户默认模型生成 6–12 个章节。
           </p>
-          <Button className="h-11 shrink-0 rounded-none px-5" disabled={isSubmitting} onClick={() => void handleGenerate()} type="button">
+          <Button className="h-11 shrink-0 rounded-xl px-5" disabled={isSubmitting} onClick={() => void handleGenerate()} type="button">
             {isSubmitting ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Sparkles aria-hidden className="size-4" />}
             {agentRun ? "重新生成学习路线" : "生成学习路线"}
             {!isSubmitting ? <ArrowRight aria-hidden className="size-4" /> : null}

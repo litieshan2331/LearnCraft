@@ -102,8 +102,8 @@ export function ModelConnectionForm({
     <form noValidate onSubmit={form.handleSubmit(onSubmit)}>
       <FieldGroup className="gap-5">
         {submitError ? (
-          <Alert className="rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
-            <AlertDescription className="text-[#8b3f35]">{submitError}</AlertDescription>
+          <Alert className="rounded-xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
+            <AlertDescription className="text-destructive">{submitError}</AlertDescription>
           </Alert>
         ) : null}
         <div className="grid gap-5 sm:grid-cols-2">
@@ -111,7 +111,7 @@ export function ModelConnectionForm({
             <FieldLabel htmlFor={`${connection?.id ?? "new"}-connection-name`}>连接名称</FieldLabel>
             <Input
               aria-invalid={Boolean(form.formState.errors.display_name)}
-              className="h-11 rounded-none bg-background px-3.5"
+              className="h-11 rounded-xl bg-background/70 px-3.5"
               id={`${connection?.id ?? "new"}-connection-name`}
               placeholder="例如：我的 DeepSeek"
               {...form.register("display_name")}
@@ -122,7 +122,7 @@ export function ModelConnectionForm({
             <FieldLabel htmlFor={`${connection?.id ?? "new"}-model-id`}>默认模型名</FieldLabel>
             <Input
               aria-invalid={Boolean(form.formState.errors.default_model_id)}
-              className="h-11 rounded-none bg-background px-3.5 font-mono"
+              className="h-11 rounded-xl bg-background/70 px-3.5 font-mono"
               id={`${connection?.id ?? "new"}-model-id`}
               placeholder="例如：deepseek-v4-pro"
               {...form.register("default_model_id")}
@@ -134,7 +134,7 @@ export function ModelConnectionForm({
           <FieldLabel htmlFor={`${connection?.id ?? "new"}-base-url`}>OpenAI-compatible Base URL</FieldLabel>
           <Input
             aria-invalid={Boolean(form.formState.errors.base_url)}
-            className="h-11 rounded-none bg-background px-3.5 font-mono"
+            className="h-11 rounded-xl bg-background/70 px-3.5 font-mono"
             id={`${connection?.id ?? "new"}-base-url`}
             inputMode="url"
             placeholder="https://api.example.com"
@@ -152,7 +152,7 @@ export function ModelConnectionForm({
             <Input
               autoComplete="off"
               aria-invalid={Boolean(form.formState.errors.api_key)}
-              className="h-11 rounded-none bg-background px-3.5 pr-11 font-mono"
+              className="h-11 rounded-xl bg-background/70 px-3.5 pr-11 font-mono"
               id={`${connection?.id ?? "new"}-api-key`}
               placeholder={isEditing ? "保持已保存的 Key 不变" : "粘贴 Provider API Key"}
               type={isApiKeyVisible ? "text" : "password"}
@@ -160,7 +160,7 @@ export function ModelConnectionForm({
             />
             <button
               aria-label={isApiKeyVisible ? "隐藏 API Key" : "显示 API Key"}
-              className="absolute inset-y-0 right-0 grid w-11 place-items-center text-muted-foreground transition-colors hover:text-foreground"
+              className="absolute inset-y-0 right-0 grid w-11 place-items-center rounded-r-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
               onClick={() => setIsApiKeyVisible((current) => !current)}
               type="button"
             >
@@ -171,7 +171,7 @@ export function ModelConnectionForm({
           <FieldError errors={[form.formState.errors.api_key]} />
         </Field>
         {!isEditing ? (
-          <label className="flex cursor-pointer items-start gap-3 border border-border bg-muted/35 p-3.5 text-sm">
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-secondary/55 p-4 text-sm transition-colors hover:border-primary/30">
             <input
               className="mt-0.5 size-4 accent-primary"
               type="checkbox"
@@ -183,13 +183,13 @@ export function ModelConnectionForm({
             </span>
           </label>
         ) : null}
-        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
-          <Button className="h-10 rounded-none px-5" disabled={form.formState.isSubmitting} type="submit">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-secondary/55 px-5 py-4">
+          <Button className="h-10 rounded-xl px-5" disabled={form.formState.isSubmitting} type="submit">
             {form.formState.isSubmitting ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : null}
             {form.formState.isSubmitting ? "正在保存…" : isEditing ? "保存修改" : "保存连接"}
           </Button>
           {onCancel ? (
-            <Button className="h-10 rounded-none" disabled={form.formState.isSubmitting} onClick={onCancel} type="button" variant="ghost">
+            <Button className="h-10 rounded-xl" disabled={form.formState.isSubmitting} onClick={onCancel} type="button" variant="ghost">
               取消
             </Button>
           ) : null}

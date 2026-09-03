@@ -18,15 +18,15 @@ export function CardContentView({ content }: Readonly<{ content: CardContent }>)
         <p className="text-xs tracking-[0.16em]">NODE CONTENT · V{content.version}</p>
       </div>
 
-      <article className="mt-5 border border-border bg-card p-5 sm:p-7">
-        <h2 className="font-heading text-2xl font-normal">核心概念</h2>
+      <article className="mt-5 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-7">
+        <h2 className="font-heading text-2xl font-medium">核心概念</h2>
         <ContentText className="mt-4 text-sm leading-8 text-muted-foreground" value={content.foundation} />
       </article>
 
-      <article className="mt-5 border border-border bg-card p-5 sm:p-7">
-        <h2 className="font-heading text-2xl font-normal">示例：从输入到结果</h2>
+      <article className="mt-5 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-7">
+        <h2 className="font-heading text-2xl font-medium">示例：从输入到结果</h2>
         <ContentText className="mt-4 text-sm leading-8 text-muted-foreground" value={content.worked_example.explanation} />
-        <pre className="mt-5 overflow-x-auto border border-border bg-[#1e201b] p-4 font-mono text-sm leading-6 text-[#f4f1e8]"><code>{content.worked_example.code}</code></pre>
+        <pre className="mt-5 overflow-x-auto rounded-[1.25rem] border border-[#17353a] bg-[#17353a] p-4 font-mono text-sm leading-6 text-[#eef7f6]"><code>{content.worked_example.code}</code></pre>
         <div className="mt-5 grid gap-5 border-t border-border pt-5 sm:grid-cols-2">
           <div>
             <p className="inline-flex items-center gap-2 text-xs tracking-[0.14em] text-primary"><ListChecks aria-hidden className="size-4" />调用顺序</p>
@@ -41,11 +41,11 @@ export function CardContentView({ content }: Readonly<{ content: CardContent }>)
         </div>
       </article>
 
-      <article className="mt-5 border border-border bg-card p-5 sm:p-7">
-        <h2 className="inline-flex items-center gap-2 font-heading text-2xl font-normal"><Lightbulb aria-hidden className="size-5 text-primary" />常见误区与排错</h2>
+      <article className="mt-5 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-7">
+        <h2 className="inline-flex items-center gap-2 font-heading text-2xl font-medium"><Lightbulb aria-hidden className="size-5 text-primary" />常见误区与排错</h2>
         <div className="mt-4 grid gap-4">
           {content.pitfalls_debug.map((pitfall, index) => (
-            <article className="border border-border bg-background p-4" key={`${pitfall.title}-${index}`}>
+            <article className="rounded-2xl border border-border/80 bg-background/65 p-4" key={`${pitfall.title}-${index}`}>
               <h3 className="font-medium">{pitfall.title}</h3>
               <p className="mt-3 text-sm leading-7 text-muted-foreground"><strong className="text-foreground">原因：</strong>{pitfall.cause}</p>
               <p className="mt-2 text-sm leading-7 text-muted-foreground"><strong className="text-foreground">修复：</strong>{pitfall.fix}</p>
@@ -55,8 +55,8 @@ export function CardContentView({ content }: Readonly<{ content: CardContent }>)
       </article>
 
       {content.source_refs.length > 0 ? (
-        <article className="mt-5 border border-border bg-card p-5 sm:p-7">
-          <h2 className="font-heading text-2xl font-normal">参考来源</h2>
+        <article className="mt-5 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-7">
+          <h2 className="font-heading text-2xl font-medium">参考来源</h2>
           <ul className="mt-4 grid gap-3">
             {content.source_refs.map((source, index) => {
               const title = typeof source.title === "string" ? source.title : "参考来源 " + String(index + 1);

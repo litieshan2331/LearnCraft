@@ -48,13 +48,13 @@ export function LearningGoalDetail({ goalId }: Readonly<{ goalId: string }>) {
 
   if (error) {
     return (
-      <main className="mx-auto w-full max-w-4xl px-6 py-12 sm:px-10 sm:py-16">
-        <Alert className="rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+      <main className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 sm:py-12 lg:px-10">
+        <Alert className="rounded-xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
           <AlertCircle aria-hidden className="size-4" />
-          <AlertTitle className="text-[#8b3f35]">无法读取目标</AlertTitle>
-          <AlertDescription className="mt-1 text-[#8b3f35]">{error}</AlertDescription>
+          <AlertTitle className="text-destructive">无法读取目标</AlertTitle>
+          <AlertDescription className="mt-1 text-destructive">{error}</AlertDescription>
         </Alert>
-        <Button asChild className="mt-6 rounded-none" variant="outline">
+        <Button asChild className="mt-6 rounded-xl" variant="outline">
           <Link href="/goals"><ArrowLeft aria-hidden className="size-4" />返回目标列表</Link>
         </Button>
       </main>
@@ -70,14 +70,14 @@ export function LearningGoalDetail({ goalId }: Readonly<{ goalId: string }>) {
 
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-12 sm:px-10 sm:py-16">
-      <Button asChild className="rounded-none" variant="ghost">
+      <Button asChild className="rounded-xl" variant="ghost">
         <Link href="/goals"><ArrowLeft aria-hidden className="size-4" />返回目标列表</Link>
       </Button>
-      <article className="mt-7 border border-border border-l-2 border-l-primary bg-card p-6 sm:p-9">
+      <article className="mt-7 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-6 sm:p-9">
         <p className="text-xs tracking-[0.18em] text-primary">{goal.topic}</p>
-        <h1 className="mt-4 font-heading text-4xl font-normal tracking-tight">{goal.title}</h1>
+        <h1 className="mt-4 font-heading text-4xl font-medium tracking-tight">{goal.title}</h1>
         <p className="mt-5 text-sm leading-8 text-muted-foreground">{goal.description}</p>
-        <div className="mt-7 border-t border-border pt-6">
+        <div className="mt-7 rounded-2xl bg-secondary/55 p-5">
           <p className="text-xs tracking-[0.14em] text-primary">DESIRED OUTCOME</p>
           <p className="mt-3 leading-8">{goal.desired_outcome}</p>
         </div>
@@ -89,17 +89,17 @@ export function LearningGoalDetail({ goalId }: Readonly<{ goalId: string }>) {
           <>
             <PlanGenerationAction activePlanId={goal.active_learning_plan_id} goalId={goal.id} />
             {latestAssessment ? (
-              <Button asChild className="mt-3 rounded-none" variant="outline">
+              <Button asChild className="mt-3 rounded-xl" variant="outline">
                 <Link href={"/assessments/" + latestAssessment.id}>查看前测<ArrowRight aria-hidden className="size-4" /></Link>
               </Button>
             ) : null}
           </>
         ) : primaryAction.href ? (
-          <Button asChild className="mt-8 rounded-none">
+          <Button asChild className="mt-8 rounded-xl">
             <Link href={primaryAction.href}>{primaryAction.label}<ArrowRight aria-hidden className="size-4" /></Link>
           </Button>
         ) : (
-          <Button className="mt-8 rounded-none" disabled type="button">{primaryAction.label}</Button>
+          <Button className="mt-8 rounded-xl" disabled type="button">{primaryAction.label}</Button>
         )}
       </article>
     </main>

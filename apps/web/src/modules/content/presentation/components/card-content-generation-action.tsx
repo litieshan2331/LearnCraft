@@ -105,7 +105,7 @@ export function CardContentGenerationAction({
 
   if (contentStatus === "ready") {
     return (
-      <section className="mt-7 border border-primary/40 bg-primary/5 p-5">
+      <section className="mt-7 rounded-[1.25rem] border border-primary/25 bg-primary/[0.07] p-5 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.4)]">
         <p className="inline-flex items-center gap-2 font-medium text-primary"><BookOpenText aria-hidden className="size-4" />节点知识内容已准备好</p>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">知识内容阅读视图将在内容结果回写完成后展示。</p>
       </section>
@@ -114,7 +114,7 @@ export function CardContentGenerationAction({
 
   if (contentStatus === "generating" && !taskIsInFlight) {
     return (
-      <section className="mt-7 border border-border bg-background p-5">
+      <section className="mt-7 rounded-2xl border border-border/80 bg-background/65 p-5">
         <p className="inline-flex items-center gap-2 font-medium"><LoaderCircle aria-hidden className="size-4 animate-spin text-primary" />节点知识内容正在生成</p>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">任务已在后台执行，请稍后刷新本页查看状态。</p>
       </section>
@@ -122,17 +122,17 @@ export function CardContentGenerationAction({
   }
 
   return (
-    <section className="mt-7 border border-border bg-card p-5 sm:p-7">
+    <section className="mt-7 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-7">
       {errorMessage ? (
-        <Alert className="mb-5 rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+        <Alert className="mb-5 rounded-xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
           <AlertCircle aria-hidden className="size-4" />
-          <AlertTitle className="text-[#8b3f35]">节点知识内容未能完成</AlertTitle>
-          <AlertDescription className="mt-1 text-[#8b3f35]">{errorMessage}</AlertDescription>
+          <AlertTitle className="text-destructive">节点知识内容未能完成</AlertTitle>
+          <AlertDescription className="mt-1 text-destructive">{errorMessage}</AlertDescription>
         </Alert>
       ) : null}
 
       {taskIsInFlight && agentRun ? (
-        <div className="border border-border bg-background p-5">
+        <div className="rounded-2xl border border-border/80 bg-background/65 p-5">
           <div className="flex items-start gap-3">
             <LoaderCircle aria-hidden className="mt-0.5 size-5 shrink-0 animate-spin text-primary" />
             <div>
@@ -149,7 +149,7 @@ export function CardContentGenerationAction({
           <p className="max-w-xl text-sm leading-6 text-muted-foreground">
             将使用当前章节、学习目标、画像和账户默认模型生成唯一的节点知识内容。
           </p>
-          <Button className="h-11 shrink-0 rounded-none px-5" disabled={isSubmitting} onClick={() => void handleGenerate()} type="button">
+          <Button className="h-11 shrink-0 rounded-xl px-5" disabled={isSubmitting} onClick={() => void handleGenerate()} type="button">
             {isSubmitting ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Sparkles aria-hidden className="size-4" />}
             {contentStatus === "failed" || agentRun ? "重新生成节点内容" : "生成节点内容"}
           </Button>

@@ -125,13 +125,13 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
 
   if (!assessment) {
     return (
-      <main className="mx-auto max-w-4xl px-6 py-12">
-        <Alert className="rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+      <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12 lg:px-10">
+        <Alert className="rounded-xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
           <AlertCircle aria-hidden className="size-4" />
-          <AlertTitle className="text-[#8b3f35]">无法读取题集</AlertTitle>
-          <AlertDescription className="mt-1 text-[#8b3f35]">{errorMessage ?? "题集不存在或你无权访问。"}</AlertDescription>
+          <AlertTitle className="text-destructive">无法读取题集</AlertTitle>
+          <AlertDescription className="mt-1 text-destructive">{errorMessage ?? "题集不存在或你无权访问。"}</AlertDescription>
         </Alert>
-        <Button asChild className="mt-6 rounded-none" variant="outline">
+        <Button asChild className="mt-6 rounded-xl" variant="outline">
           <Link href="/goals"><ArrowLeft aria-hidden />返回学习目标</Link>
         </Button>
       </main>
@@ -145,14 +145,14 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
         {returnLabel}
       </Link>
 
-      <section className="mt-7 border border-border border-l-2 border-l-primary bg-card p-5 sm:p-8">
+      <section className="mt-7 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-8">
         <AssessmentHeader assessment={assessment} attempt={attempt} answeredCount={answeredCount} />
 
         {errorMessage ? (
-          <Alert className="mt-7 rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+          <Alert className="mt-7 rounded-xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
             <AlertCircle aria-hidden className="size-4" />
-            <AlertTitle className="text-[#8b3f35]">操作未完成</AlertTitle>
-            <AlertDescription className="mt-1 text-[#8b3f35]">{errorMessage}</AlertDescription>
+            <AlertTitle className="text-destructive">操作未完成</AlertTitle>
+            <AlertDescription className="mt-1 text-destructive">{errorMessage}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -168,7 +168,7 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
           />
         ) : (
           <>
-            <Alert className="mt-7 rounded-none border-border bg-background" variant="default">
+            <Alert className="mt-7 rounded-xl border-border bg-background" variant="default">
               <AlertCircle aria-hidden className="size-4 text-primary" />
               <AlertTitle>提交前不会显示答案或解析</AlertTitle>
               <AlertDescription className="mt-1">
@@ -187,9 +187,9 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
               ))}
             </div>
 
-            <div className="mt-8 flex flex-col-reverse gap-4 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-8 flex flex-col-reverse gap-4 rounded-2xl bg-secondary/55 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">已选择 {answeredCount} / {assessment.items.length} 题。必须完成全部题目才可提交。</p>
-              <Button className="h-10 rounded-none px-4" disabled={!allAnswered || isSubmitting} onClick={() => void handleSubmit()} type="button">
+              <Button className="h-10 rounded-xl px-4" disabled={!allAnswered || isSubmitting} onClick={() => void handleSubmit()} type="button">
                 {isSubmitting ? <LoaderCircle aria-hidden className="animate-spin" /> : <CheckCircle2 aria-hidden />}
                 {isSubmitting ? "正在评分" : "提交并查看结果"}
               </Button>
@@ -213,14 +213,14 @@ function AssessmentHeader({
           <BookOpenCheck aria-hidden className="size-4" />
           <p className="text-xs tracking-[0.16em]">{attempt ? (assessment.kind === "post_test" ? "POSTTEST RESULT" : "DIAGNOSTIC RESULT") : (assessment.kind === "post_test" ? "POSTTEST READY" : "DIAGNOSTIC READY")}</p>
         </div>
-        <h1 className="mt-3 font-heading text-3xl font-normal tracking-tight">{attempt ? (assessment.kind === "post_test" ? "你的节点后测结果" : "你的前测结果") : (assessment.kind === "post_test" ? "你的节点后测题集已准备好" : "你的前测题集已准备好")}</h1>
+        <h1 className="mt-3 font-heading text-3xl font-medium tracking-tight">{attempt ? (assessment.kind === "post_test" ? "你的节点后测结果" : "你的前测结果") : (assessment.kind === "post_test" ? "你的节点后测题集已准备好" : "你的前测题集已准备好")}</h1>
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
           {attempt
             ? "结果基于提交时保存的答案确定性评分，不会额外调用模型。"
             : `这份${assessment.kind === "post_test" ? "后测" : "前测"}包含 ${assessment.question_count} 道选择题，请按当前理解作答。`}
         </p>
       </div>
-      <div className="grid grid-cols-2 divide-x divide-border border border-border bg-background text-center">
+      <div className="grid grid-cols-2 divide-x divide-border rounded-2xl border border-border/80 bg-background/65 text-center">
         <div className="px-4 py-3">
           <p className="text-[11px] tracking-[0.13em] text-muted-foreground">{attempt ? "SCORE" : "DIFFICULTY"}</p>
           <p className="mt-1 text-sm font-medium">{attempt ? `${attempt.score.score_percent}%` : assessment.difficulty === "hard" ? "困难" : "正常"}</p>
@@ -266,9 +266,9 @@ function AssessmentResult({
       <div className="mt-7 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs tracking-[0.16em] text-primary">ANSWER REVIEW</p>
-          <h2 className="mt-2 font-heading text-2xl font-normal">逐题解析</h2>
+          <h2 className="mt-2 font-heading text-2xl font-medium">逐题解析</h2>
         </div>
-        <Button className="rounded-none" onClick={onToggleWrong} type="button" variant="outline">
+        <Button className="rounded-xl" onClick={onToggleWrong} type="button" variant="outline">
           {showOnlyWrong ? "查看全部题目" : `只看错题（${wrongCount}）`}
         </Button>
       </div>
@@ -278,15 +278,15 @@ function AssessmentResult({
           {items.map((item) => <ResultQuestionCard item={item} key={item.assessment_item_id} />)}
         </div>
       ) : (
-        <div className="mt-5 border border-dashed border-border bg-background px-5 py-10 text-center text-sm text-muted-foreground">本次没有错题。</div>
+        <div className="mt-5 rounded-[1.25rem] border border-dashed border-primary/25 bg-background/70 px-5 py-10 text-center text-sm text-muted-foreground">本次没有错题。</div>
       )}
 
       <section className="mt-8 border-t border-border pt-6">
         <p className="text-xs tracking-[0.16em] text-primary">ATTEMPT HISTORY</p>
-        <h2 className="mt-2 font-heading text-2xl font-normal">作答记录</h2>
+        <h2 className="mt-2 font-heading text-2xl font-medium">作答记录</h2>
         <div className="mt-4 grid gap-3">
           {attempts.map((summary) => (
-            <div className="flex flex-wrap items-center justify-between gap-3 border border-border bg-background px-4 py-3 text-sm" key={summary.id}>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/80 bg-background/65 px-4 py-3 text-sm" key={summary.id}>
               <span>第 {summary.attempt_no} 次作答</span>
               <span className="text-muted-foreground">{summary.score_percent}% · {summary.wrong_count} 道错题</span>
             </div>
@@ -316,11 +316,11 @@ function QuestionCard({
   onSelect: (optionKey: string) => void;
 }>) {
   return (
-    <fieldset className="min-w-0 max-w-full border border-border bg-background p-5">
+    <fieldset className="min-w-0 max-w-full rounded-2xl border border-border/80 bg-background/65 p-5">
       <legend className="sr-only">第 {item.ordinal} 题</legend>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 gap-4">
-          <span className="grid size-7 shrink-0 place-items-center border border-primary text-xs font-medium text-primary">{String(item.ordinal).padStart(2, "0")}</span>
+          <span className="grid size-8 shrink-0 place-items-center rounded-xl border border-primary/35 bg-primary/10 text-xs font-medium text-primary">{String(item.ordinal).padStart(2, "0")}</span>
           <AssessmentRichText className="min-w-0 flex-1 pt-0.5 leading-7" content={item.prompt} />
         </div>
         <span className="shrink-0 text-xs text-muted-foreground">{item.max_score} 分</span>
@@ -330,7 +330,7 @@ function QuestionCard({
         {item.options.map((option) => {
           const isSelected = selectedOptionKey === option.key;
           return (
-            <label className={`flex cursor-pointer items-start gap-3 border px-4 py-3 text-sm leading-6 transition-colors ${isSelected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/60"}`} key={option.key}>
+            <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm leading-6 transition-all hover:-translate-y-0.5 focus-within:ring-3 focus-within:ring-ring/40 ${isSelected ? "border-primary bg-primary/[0.07] shadow-[0_14px_32px_-24px_rgba(36,122,128,0.65)]" : "border-border bg-card hover:border-primary/60"}`} key={option.key}>
               <input checked={isSelected} className="mt-1 accent-primary" name={`assessment-item-${item.id}`} onChange={() => onSelect(option.key)} type="radio" value={option.key} />
               <div className="min-w-0 flex-1"><strong className="mr-2 font-medium text-primary">{option.key}.</strong><AssessmentRichText className="mt-0.5" content={option.text} /></div>
             </label>
@@ -345,13 +345,13 @@ function ResultQuestionCard({ item }: Readonly<{ item: AssessmentAttempt["items"
   const selectedOption = item.options.find((option) => option.key === item.selected_option_key);
   const correctOption = item.options.find((option) => option.key === item.correct_option_key);
   return (
-    <article className={`min-w-0 max-w-full border p-5 ${item.is_correct ? "border-primary/50 bg-primary/5" : "border-[#d9b4a9] bg-[#fff8f5]"}`}>
+    <article className={`min-w-0 max-w-full rounded-[1.25rem] border p-5 ${item.is_correct ? "border-primary/50 bg-primary/[0.07]" : "border-destructive/25 bg-destructive/5"}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 gap-4">
-          <span className={`grid size-7 shrink-0 place-items-center border text-xs font-medium ${item.is_correct ? "border-primary text-primary" : "border-[#a94e43] text-[#a94e43]"}`}>{String(item.ordinal).padStart(2, "0")}</span>
+          <span className={`grid size-7 shrink-0 place-items-center border text-xs font-medium ${item.is_correct ? "border-primary text-primary" : "border-destructive/50 text-destructive"}`}>{String(item.ordinal).padStart(2, "0")}</span>
           <AssessmentRichText className="min-w-0 flex-1 pt-0.5 leading-7" content={item.prompt} />
         </div>
-        <span className={`text-sm font-medium ${item.is_correct ? "text-primary" : "text-[#a94e43]"}`}>{item.is_correct ? "回答正确" : "需要复习"}</span>
+        <span className={`text-sm font-medium ${item.is_correct ? "text-primary" : "text-destructive"}`}>{item.is_correct ? "回答正确" : "需要复习"}</span>
       </div>
       <div className="mt-5 grid gap-3 border-t border-current/15 pt-4 text-sm sm:grid-cols-2 sm:pl-11">
         <p><span className="text-muted-foreground">你的答案：</span>{item.selected_option_key}. {selectedOption?.text ?? "未知选项"}</p>
@@ -367,7 +367,7 @@ function ResultQuestionCard({ item }: Readonly<{ item: AssessmentAttempt["items"
 
 function LoadingState() {
   return (
-    <main className="grid min-h-80 place-items-center px-6 text-center">
+    <main className="grid min-h-80 place-items-center rounded-[1.25rem] bg-card/70 px-6 text-center">
       <div>
         <LoaderCircle aria-hidden className="mx-auto size-5 animate-spin text-primary" />
         <p className="mt-4 text-sm text-muted-foreground">正在读取题集…</p>
@@ -480,8 +480,8 @@ function AssessmentCodeBlock({
   language,
 }: Readonly<{ content: string; language: string | null }>) {
   return (
-    <div className="max-w-full overflow-hidden border border-border bg-[#1e201b] text-[#f4f1e8]">
-      {language ? <p className="border-b border-white/15 px-3 py-1.5 font-mono text-xs lowercase text-[#c9c6ba]">{language}</p> : null}
+    <div className="max-w-full overflow-hidden rounded-[1.25rem] border border-[#17353a] bg-[#17353a] text-[#eef7f6]">
+      {language ? <p className="border-b border-white/15 px-3 py-1.5 font-mono text-xs lowercase text-[#b7cfcd]">{language}</p> : null}
       <pre className="max-w-full overflow-x-auto p-4 font-mono text-sm leading-6"><code>{content}</code></pre>
     </div>
   );

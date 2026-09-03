@@ -53,72 +53,72 @@ body {
 }
 
 :root {
-  --background: #f7f5ef;
-  --foreground: #23231f;
-  --card: #fffdf8;
-  --card-foreground: #23231f;
-  --popover: #fffdf8;
-  --popover-foreground: #23231f;
-  --primary: #4f6654;
-  --primary-foreground: #fffdf8;
-  --secondary: #e9e5da;
-  --secondary-foreground: #23231f;
-  --muted: #efede5;
-  --muted-foreground: #69675f;
-  --accent: #e4eadf;
-  --accent-foreground: #23231f;
-  --destructive: #a94e43;
-  --border: #d8d3c7;
-  --input: #c9c3b5;
-  --ring: #4f6654;
-  --chart-1: #4f6654;
-  --chart-2: #496c7c;
-  --chart-3: #766553;
-  --chart-4: #a66e42;
-  --chart-5: #a94e43;
-  --radius: 0.25rem;
-  --sidebar: #f1eee6;
-  --sidebar-foreground: #23231f;
-  --sidebar-primary: #4f6654;
-  --sidebar-primary-foreground: #fffdf8;
-  --sidebar-accent: #e4eadf;
-  --sidebar-accent-foreground: #23231f;
-  --sidebar-border: #d8d3c7;
-  --sidebar-ring: #4f6654;
+  --background: #f3f8f7;
+  --foreground: #17353a;
+  --card: #ffffff;
+  --card-foreground: #17353a;
+  --popover: #ffffff;
+  --popover-foreground: #17353a;
+  --primary: #247a80;
+  --primary-foreground: #ffffff;
+  --secondary: #e3f0ee;
+  --secondary-foreground: #17353a;
+  --muted: #edf4f3;
+  --muted-foreground: #587277;
+  --accent: #e9f4f1;
+  --accent-foreground: #17353a;
+  --destructive: #b94c4b;
+  --border: #d4e3e0;
+  --input: #c3d5d2;
+  --ring: #247a80;
+  --chart-1: #247a80;
+  --chart-2: #4f8c9b;
+  --chart-3: #6ea69d;
+  --chart-4: #e2a552;
+  --chart-5: #b94c4b;
+  --radius: 1rem;
+  --sidebar: #edf5f3;
+  --sidebar-foreground: #17353a;
+  --sidebar-primary: #247a80;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e1f0ed;
+  --sidebar-accent-foreground: #17353a;
+  --sidebar-border: #d4e3e0;
+  --sidebar-ring: #247a80;
 }
 
 .dark {
-  --background: #252720;
-  --foreground: #f4f1e8;
-  --card: #30332a;
-  --card-foreground: #f4f1e8;
-  --popover: #30332a;
-  --popover-foreground: #f4f1e8;
-  --primary: #b4c4ae;
-  --primary-foreground: #252720;
-  --secondary: #3d4036;
-  --secondary-foreground: #f4f1e8;
-  --muted: #3d4036;
-  --muted-foreground: #c9c6ba;
-  --accent: #475143;
-  --accent-foreground: #f4f1e8;
-  --destructive: #e19a8d;
-  --border: #4d5045;
-  --input: #4d5045;
-  --ring: #b4c4ae;
-  --chart-1: #b4c4ae;
-  --chart-2: #9bb4bd;
-  --chart-3: #c6b495;
-  --chart-4: #d5a66e;
-  --chart-5: #e19a8d;
-  --sidebar: #30332a;
-  --sidebar-foreground: #f4f1e8;
-  --sidebar-primary: #b4c4ae;
-  --sidebar-primary-foreground: #252720;
-  --sidebar-accent: #3d4036;
-  --sidebar-accent-foreground: #f4f1e8;
-  --sidebar-border: #4d5045;
-  --sidebar-ring: #b4c4ae;
+  --background: #17282b;
+  --foreground: #eef7f6;
+  --card: #20373a;
+  --card-foreground: #eef7f6;
+  --popover: #20373a;
+  --popover-foreground: #eef7f6;
+  --primary: #8ccfc8;
+  --primary-foreground: #17282b;
+  --secondary: #2b474a;
+  --secondary-foreground: #eef7f6;
+  --muted: #284245;
+  --muted-foreground: #b7cfcd;
+  --accent: #315356;
+  --accent-foreground: #eef7f6;
+  --destructive: #ee9994;
+  --border: #406064;
+  --input: #406064;
+  --ring: #8ccfc8;
+  --chart-1: #8ccfc8;
+  --chart-2: #83b8c6;
+  --chart-3: #9ccdc2;
+  --chart-4: #f0c278;
+  --chart-5: #ee9994;
+  --sidebar: #20373a;
+  --sidebar-foreground: #eef7f6;
+  --sidebar-primary: #8ccfc8;
+  --sidebar-primary-foreground: #17282b;
+  --sidebar-accent: #2d4c4f;
+  --sidebar-accent-foreground: #eef7f6;
+  --sidebar-border: #406064;
+  --sidebar-ring: #8ccfc8;
 }
 
 @layer base {
@@ -130,5 +130,78 @@ body {
   }
   html {
     @apply font-sans;
+  }
+}
+
+@keyframes learncraft-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes learncraft-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(0, -14px, 0);
+  }
+}
+
+@keyframes learncraft-glow {
+  0%,
+  100% {
+    opacity: 0.48;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 0.82;
+    transform: scale(1.04);
+  }
+}
+
+.lc-reveal {
+  animation: learncraft-rise 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.lc-reveal-delay-1 {
+  animation-delay: 90ms;
+}
+
+.lc-reveal-delay-2 {
+  animation-delay: 180ms;
+}
+
+.lc-reveal-delay-3 {
+  animation-delay: 270ms;
+}
+
+.lc-float {
+  animation: learncraft-float 7s ease-in-out infinite;
+}
+
+.lc-float-slow {
+  animation: learncraft-float 10s ease-in-out infinite reverse;
+}
+
+.lc-glow {
+  animation: learncraft-glow 8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-reveal,
+  .lc-float,
+  .lc-float-slow,
+  .lc-glow {
+    animation: none;
   }
 }

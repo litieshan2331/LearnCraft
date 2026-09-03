@@ -179,13 +179,13 @@ export function AssessmentGenerationFlow({ goalId }: Readonly<{ goalId: string }
 
   if (!goal) {
     return (
-      <main className="mx-auto max-w-4xl px-6 py-12">
-        <Alert className="rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+      <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12 lg:px-10">
+        <Alert className="rounded-xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
           <AlertCircle aria-hidden className="size-4" />
-          <AlertTitle className="text-[#8b3f35]">无法打开前测</AlertTitle>
-          <AlertDescription className="mt-1 text-[#8b3f35]">{errorMessage ?? "学习目标不存在或你无权访问。"}</AlertDescription>
+          <AlertTitle className="text-destructive">无法打开前测</AlertTitle>
+          <AlertDescription className="mt-1 text-destructive">{errorMessage ?? "学习目标不存在或你无权访问。"}</AlertDescription>
         </Alert>
-        <Button asChild className="mt-6 rounded-none" variant="outline">
+        <Button asChild className="mt-6 rounded-xl" variant="outline">
           <Link href="/onboarding"><ArrowLeft aria-hidden />返回学习起点</Link>
         </Button>
       </main>
@@ -202,29 +202,29 @@ export function AssessmentGenerationFlow({ goalId }: Readonly<{ goalId: string }
         返回学习起点
       </Link>
 
-      <section className="mt-7 border border-border border-l-2 border-l-primary bg-card p-5 sm:p-8">
-        <div className="flex flex-col gap-5 border-b border-border pb-7 sm:flex-row sm:items-start sm:justify-between">
+      <section className="mt-7 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-8">
+        <div className="flex flex-col gap-5 border-b border-border/80 pb-7 sm:flex-row sm:items-start sm:justify-between">
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 text-primary">
               <Sparkles aria-hidden className="size-4" />
               <p className="text-xs tracking-[0.16em]">DIAGNOSTIC / 前测</p>
             </div>
-            <h1 className="mt-3 font-heading text-3xl font-normal tracking-tight">先从你的真实起点开始</h1>
+            <h1 className="mt-3 font-heading text-3xl font-medium tracking-tight">先从你的真实起点开始</h1>
             <p className="mt-3 text-sm leading-7 text-muted-foreground">
               LearnCraft 会根据目标与学习背景生成选择题，用于确定后续路线的切入点。
             </p>
           </div>
-          <div className="shrink-0 border border-border bg-background px-4 py-3 text-right">
+          <div className="shrink-0 rounded-2xl border border-border/80 bg-background/65 px-4 py-3 text-right">
             <p className="text-[11px] tracking-[0.14em] text-muted-foreground">CURRENT GOAL</p>
             <p className="mt-1 max-w-52 truncate text-sm font-medium" title={goal.title}>{goal.title}</p>
           </div>
         </div>
 
         {errorMessage ? (
-          <Alert className="mt-6 rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+          <Alert className="mt-6 rounded-xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
             <AlertCircle aria-hidden className="size-4" />
-            <AlertTitle className="text-[#8b3f35]">前测未能完成</AlertTitle>
-            <AlertDescription className="mt-1 text-[#8b3f35]">{errorMessage}</AlertDescription>
+            <AlertTitle className="text-destructive">前测未能完成</AlertTitle>
+            <AlertDescription className="mt-1 text-destructive">{errorMessage}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -268,11 +268,11 @@ export function AssessmentGenerationFlow({ goalId }: Readonly<{ goalId: string }
               <p className="mt-6 text-sm text-muted-foreground">上一次生成已取消。可以调整配置后重新开始。</p>
             ) : null}
 
-            <div className="mt-8 flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-8 flex flex-col-reverse gap-3 rounded-2xl bg-secondary/55 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="max-w-xl text-sm leading-6 text-muted-foreground">
                 将使用你的账户默认模型。生成过程可取消，取消后不会产生题集。
               </p>
-              <Button className="h-11 shrink-0 rounded-none px-5" disabled={isSubmitting} onClick={() => void handleGenerate()} type="button">
+              <Button className="h-11 shrink-0 rounded-xl px-5" disabled={isSubmitting} onClick={() => void handleGenerate()} type="button">
                 {isSubmitting ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Sparkles aria-hidden className="size-4" />}
                 {agentRun?.status === "failed" ? "重新生成前测" : "生成前测"}
               </Button>
@@ -294,7 +294,7 @@ function TaskProgress({
   onCancel: () => void;
 }>) {
   return (
-    <div className="mt-7 border border-border bg-background p-5">
+    <div className="mt-7 rounded-2xl border border-border/80 bg-background/65 p-5">
       <div className="flex items-start justify-between gap-5">
         <div className="flex gap-3">
           <LoaderCircle aria-hidden className="mt-0.5 size-5 shrink-0 animate-spin text-primary" />
@@ -305,7 +305,7 @@ function TaskProgress({
             </p>
           </div>
         </div>
-        <span className="border border-border px-2 py-1 text-xs tracking-[0.12em] text-muted-foreground">
+        <span className="rounded-full border border-border/80 bg-card px-2.5 py-1 text-xs tracking-[0.12em] text-muted-foreground">
           {agentRun.status.toUpperCase()}
         </span>
       </div>
@@ -314,7 +314,7 @@ function TaskProgress({
       </div>
       <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-5 text-muted-foreground">页面会自动刷新任务状态，生成完成后将打开题集。</p>
-        <Button className="rounded-none" disabled={isCancelling} onClick={onCancel} type="button" variant="outline">
+        <Button className="rounded-xl" disabled={isCancelling} onClick={onCancel} type="button" variant="outline">
           {isCancelling ? <RefreshCw aria-hidden className="size-4 animate-spin" /> : <CircleStop aria-hidden className="size-4" />}
           {isCancelling ? "正在取消" : "取消生成"}
         </Button>
@@ -337,7 +337,7 @@ function DifficultyCard({
   return (
     <button
       aria-pressed={checked}
-      className={`border p-4 text-left transition-colors ${checked ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/60"}`}
+      className={`rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 ${checked ? "border-primary bg-primary/[0.07] shadow-[0_14px_32px_-24px_rgba(36,122,128,0.65)]" : "border-border bg-card hover:border-primary/60"}`}
       onClick={onSelect}
       type="button"
     >
@@ -349,7 +349,7 @@ function DifficultyCard({
 
 function LoadingState() {
   return (
-    <main className="grid min-h-80 place-items-center px-6 text-center">
+    <main className="grid min-h-80 place-items-center rounded-[1.25rem] bg-card/70 px-6 text-center">
       <div>
         <LoaderCircle aria-hidden className="mx-auto size-5 animate-spin text-primary" />
         <p className="mt-4 text-sm text-muted-foreground">正在准备你的前测配置…</p>

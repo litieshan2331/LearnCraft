@@ -43,9 +43,9 @@ export function RegisterForm() {
     <form noValidate onSubmit={form.handleSubmit(onSubmit)}>
       <FieldGroup className="gap-5">
         {submitError ? (
-          <Alert className="rounded-none border-[#d9b4a9] bg-[#fff8f5] text-[#8b3f35]" variant="destructive">
+          <Alert className="rounded-xl border-destructive/25 bg-destructive/5 text-destructive" variant="destructive">
             <AlertCircle aria-hidden className="size-4" />
-            <AlertDescription className="text-[#8b3f35]">{submitError}</AlertDescription>
+            <AlertDescription className="text-destructive">{submitError}</AlertDescription>
           </Alert>
         ) : null}
         <Field data-invalid={Boolean(form.formState.errors.display_name)}>
@@ -53,7 +53,7 @@ export function RegisterForm() {
           <Input
           autoComplete="nickname"
           aria-invalid={Boolean(form.formState.errors.display_name)}
-          className="h-12 rounded-none bg-card px-3.5"
+          className="h-12 rounded-xl bg-background/70 px-3.5"
           id="register-display-name"
           placeholder="例如：小林"
           type="text"
@@ -66,7 +66,7 @@ export function RegisterForm() {
           <Input
           autoComplete="email"
           aria-invalid={Boolean(form.formState.errors.email)}
-          className="h-12 rounded-none bg-card px-3.5"
+          className="h-12 rounded-xl bg-background/70 px-3.5"
           id="register-email"
           placeholder="you@example.com"
           type="email"
@@ -79,7 +79,7 @@ export function RegisterForm() {
           <Input
           autoComplete="new-password"
           aria-invalid={Boolean(form.formState.errors.password)}
-          className="h-12 rounded-none bg-card px-3.5"
+          className="h-12 rounded-xl bg-background/70 px-3.5"
           id="register-password"
           placeholder="至少 12 个字符"
           type="password"
@@ -87,7 +87,7 @@ export function RegisterForm() {
           />
           <FieldError errors={[form.formState.errors.password]} />
         </Field>
-        <Button className="h-12 w-full rounded-none text-base font-medium" disabled={form.formState.isSubmitting} type="submit">
+        <Button className="h-12 w-full rounded-xl text-base font-medium" disabled={form.formState.isSubmitting} type="submit">
           {form.formState.isSubmitting ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : null}
           {form.formState.isSubmitting ? "正在创建账号…" : "创建账号"}
         </Button>
