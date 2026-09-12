@@ -9,6 +9,7 @@ import {
   AssessmentQueryApplicationError,
   type AssessmentQueryRepository,
   type AssessmentSnapshot,
+  type PosttestAssessmentAttemptRecord,
   type PosttestAssessmentSummary,
 } from "../domain/assessment-query";
 
@@ -25,5 +26,18 @@ export class AssessmentQueryService {
   }
   async listOwnedPosttestsByNode(ownerId: string, planNodeId: string): Promise<PosttestAssessmentSummary[]> {
     return this.repository.findOwnedPosttestsByNode(ownerId, planNodeId);
+  }
+
+  async listOwnedPosttestAttemptsByNode(
+    ownerId: string,
+    planNodeId: string,
+  ): Promise<PosttestAssessmentAttemptRecord[]> {
+    const posttests = await this.repository.findOwnedPosttestsByNode(ownerId, planNodeId);
+    return posttests.flatMap((posttest) => posttest.latestAttempt ? [{
+      ...posttest.latestAttempt,
+      posttestNo: posttest.posttestNo,
+      planNodeId: posttest.planNodeId,
+      sourceCardContentId: posttest.sourceCardContentId,
+    }] : []);
   }
 }

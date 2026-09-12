@@ -54,7 +54,7 @@ export class DrizzleAssessmentQueryRepository implements AssessmentQueryReposito
         eq(assessments.planNodeId, planNodeId),
         eq(assessments.kind, "post_test"),
       ))
-      .orderBy(desc(assessments.createdAt));
+      .orderBy(desc(assessments.createdAt), desc(assessments.id));
 
     if (records.length === 0) {
       return [];
@@ -89,12 +89,13 @@ export class DrizzleAssessmentQueryRepository implements AssessmentQueryReposito
       }
     }
 
-    return records.map((record) => {
+    return records.map((record, index) => {
       if (!record.planNodeId || !record.sourceCardContentId) {
         throw new Error("数据库中的后测缺少节点或节点内容绑定。");
       }
       const attempt = latestAttempts.get(record.id);
       return {
+        posttestNo: records.length - index,
         assessmentId: record.id,
         planNodeId: record.planNodeId,
         sourceCardContentId: record.sourceCardContentId,

@@ -16,7 +16,7 @@ import { CardContentGenerationAction } from "@/modules/content/presentation/comp
 import { CardContentView } from "@/modules/content/presentation/components/card-content-view";
 import { NodeCompletionAction } from "./node-completion-action";
 import { PosttestGenerationAction } from "@/modules/assessment/presentation/components/posttest-generation-action";
-import { getPosttestAssessments, type PosttestAssessmentSummary } from "@/modules/assessment/presentation/api/assessment-client";
+import { getPosttestAssessmentAttempts, getPosttestAssessments, type PosttestAssessmentAttemptRecord, type PosttestAssessmentSummary } from "@/modules/assessment/presentation/api/assessment-client";
 import { getCardContent, type CardContent } from "@/modules/content/presentation/api/content-client";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
@@ -31,6 +31,7 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
   const [node, setNode] = useState<PlanNode | null>(null);
   const [content, setContent] = useState<CardContent | null>(null);
   const [posttests, setPosttests] = useState<PosttestAssessmentSummary[]>([]);
+  const [posttestAttempts, setPosttestAttempts] = useState<PosttestAssessmentAttemptRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,15 +82,20 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
     }
 
     let active = true;
-    void getPosttestAssessments(node.id)
-      .then((items) => {
+    void Promise.all([
+      getPosttestAssessments(node.id),
+      getPosttestAssessmentAttempts(node.id),
+    ])
+      .then(([items, attempts]) => {
         if (active) {
           setPosttests(items);
+          setPosttestAttempts(attempts);
         }
       })
       .catch(() => {
         if (active) {
           setPosttests([]);
+          setPosttestAttempts([]);
         }
       });
 
@@ -174,7 +180,7 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
         planNodeId={node.id}
       />
       <NodeCompletionAction node={node} onCompleted={(nextNode) => setNode(nextNode)} />
-      <PosttestGenerationAction contentReady={Boolean(node.card_content_id)} existingAssessment={posttests[0] ?? null} planNodeId={node.id} />
+      <PosttestGenerationAction contentReady={Boolean(node.card_content_id)} existingAssessment={posttests[0] ?? null} planNodeId={node.id} posttestAttempts={posttestAttempts} />
       {content ? <CardContentView content={content} /> : null}
 
     </main>

@@ -29,12 +29,15 @@ export interface PosttestGenerationContext {
   topic: string;
 }
 
+export type PosttestGenerationAvailability = "available" | "active" | "awaiting_attempt";
+
 export interface PosttestGenerationContextRepository {
   findOwnedNodeContext(
     ownerId: string,
     planNodeId: string,
   ): Promise<PosttestGenerationContext | null>;
   hasDefaultModelConnection(ownerId: string): Promise<boolean>;
+  getGenerationAvailability(ownerId: string, planNodeId: string): Promise<PosttestGenerationAvailability>;
 }
 
 export interface PosttestGenerationAgentRunRequester {
@@ -57,6 +60,8 @@ export interface PosttestGenerationAgentRunRequester {
 export type PosttestGenerationApplicationErrorCode =
   | "PLAN_NODE_NOT_FOUND"
   | "CARD_CONTENT_NOT_READY"
+  | "POSTTEST_GENERATION_IN_PROGRESS"
+  | "POSTTEST_ATTEMPT_REQUIRED"
   | "DEFAULT_MODEL_CONNECTION_REQUIRED";
 
 export class PosttestGenerationApplicationError extends Error {

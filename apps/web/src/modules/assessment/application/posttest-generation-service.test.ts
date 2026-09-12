@@ -43,6 +43,7 @@ const agentRun: AgentRunSnapshot = {
 
 class FakeContextRepository implements PosttestGenerationContextRepository {
   contextAvailable = true;
+  availability: "available" | "active" | "awaiting_attempt" = "available";
 
   async findOwnedNodeContext() {
     return this.contextAvailable
@@ -52,6 +53,10 @@ class FakeContextRepository implements PosttestGenerationContextRepository {
 
   async hasDefaultModelConnection() {
     return true;
+  }
+
+  async getGenerationAvailability() {
+    return this.availability;
   }
 }
 
@@ -108,10 +113,39 @@ describe("PosttestGenerationService", () => {
     } satisfies Partial<PosttestGenerationApplicationError>);
   });
 
+  it("最新后测未完成时禁止生成下一套", async () => {
+    const contextRepository = new FakeContextRepository();
+    contextRepository.availability = "awaiting_attempt";
+    const service = new PosttestGenerationService(contextRepository, new FakeAgentRunRequester());
+
+    await expect(service.request({
+      ownerId,
+      planNodeId,
+      questionCount: 6,
+      difficulty: "normal",
+      idempotencyKey: "d9a3bbb1-0b6d-476d-9038-c50b192df519",
+    })).rejects.toMatchObject({ code: "POSTTEST_ATTEMPT_REQUIRED" });
+  });
+
+  it("后测生成任务进行中时禁止重复创建", async () => {
+    const contextRepository = new FakeContextRepository();
+    contextRepository.availability = "active";
+    const service = new PosttestGenerationService(contextRepository, new FakeAgentRunRequester());
+
+    await expect(service.request({
+      ownerId,
+      planNodeId,
+      questionCount: 6,
+      difficulty: "normal",
+      idempotencyKey: "e9a3bbb1-0b6d-476d-9038-c50b192df519",
+    })).rejects.toMatchObject({ code: "POSTTEST_GENERATION_IN_PROGRESS" });
+  });
+
   it("节点没有 ready 内容时返回独立错误码", async () => {
     const service = new PosttestGenerationService({
       findOwnedNodeContext: async () => ({ goalId, planNodeId, cardContentId: null, topic: "TypeScript" }),
       hasDefaultModelConnection: async () => true,
+      getGenerationAvailability: async () => "available" as const,
     }, new FakeAgentRunRequester());
 
     await expect(service.request({

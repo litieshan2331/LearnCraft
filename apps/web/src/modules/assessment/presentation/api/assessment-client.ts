@@ -3,7 +3,7 @@
  *
  * 导出：
  * - createAssessmentRun、getAgentRun、cancelAgentRun：创建、轮询和协作式取消前测生成任务。
- * - getAssessment、getPosttestAssessments：读取题集及章节已有后测摘要。
+ * - getAssessment、getPosttestAssessments、getPosttestAssessmentAttempts：读取题集、章节后测列表及全部已完成后测记录。
  * - submitAssessmentAttempt、getAssessmentAttempts、getAssessmentAttempt：提交作答并读取评分结果与历史摘要。
  * - AssessmentApiError：向展示层提供稳定的接口错误信息。
  */
@@ -32,6 +32,7 @@ export interface PosttestAssessmentSummary {
   difficulty: AssessmentDifficulty;
   created_at: string;
   updated_at: string;
+  posttest_no: number;
   latest_attempt: {
     id: string;
     assessment_id: string;
@@ -43,6 +44,20 @@ export interface PosttestAssessmentSummary {
     graded_at: string;
   } | null;
 }
+export interface PosttestAssessmentAttemptRecord {
+  posttest_no: number;
+  assessment_id: string;
+  attempt_id: string;
+  attempt_no: number;
+  status: "graded";
+  plan_node_id: string;
+  source_card_content_id: string;
+  score_percent: number;
+  wrong_count: number;
+  submitted_at: string;
+  graded_at: string;
+}
+
 export interface AgentRun {
   id: string;
   run_type: string;
@@ -206,6 +221,13 @@ export async function getPosttestAssessments(planNodeId: string): Promise<Postte
   );
   return payload.items;
 }
+export async function getPosttestAssessmentAttempts(planNodeId: string): Promise<PosttestAssessmentAttemptRecord[]> {
+  const payload = await requestJson<{ items: PosttestAssessmentAttemptRecord[] }>(
+    `/api/v1/plan-nodes/${planNodeId}/post-assessment-attempts`,
+  );
+  return payload.items;
+}
+
 export function getAssessment(assessmentId: string): Promise<Assessment> {
   return requestJson<Assessment>(`/api/v1/assessments/${assessmentId}`);
 }

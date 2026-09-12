@@ -5,10 +5,13 @@
  * - DrizzlePosttestGenerationContextRepository：读取节点、唯一成功内容和目标归属。
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDatabase } from "@/lib/db/client";
 import {
+  agentRuns,
+  assessmentAttempts,
+  assessments,
   cardContents,
   learningGoals,
   learningPlans,
@@ -58,6 +61,49 @@ export class DrizzlePosttestGenerationContextRepository implements PosttestGener
       .limit(1);
 
     return record ?? null;
+  }
+
+  async getGenerationAvailability(ownerId: string, planNodeId: string): Promise<"available" | "active" | "awaiting_attempt"> {
+    const database = getDatabase();
+    const [activeRun] = await database
+      .select({ id: agentRuns.id })
+      .from(agentRuns)
+      .where(and(
+        eq(agentRuns.ownerId, ownerId),
+        eq(agentRuns.runType, "posttest_generate"),
+        eq(agentRuns.targetType, "plan_node"),
+        eq(agentRuns.targetId, planNodeId),
+        inArray(agentRuns.status, ["queued", "running"]),
+      ))
+      .limit(1);
+    if (activeRun) {
+      return "active";
+    }
+
+    const [latestAssessment] = await database
+      .select({ id: assessments.id })
+      .from(assessments)
+      .where(and(
+        eq(assessments.ownerId, ownerId),
+        eq(assessments.planNodeId, planNodeId),
+        eq(assessments.kind, "post_test"),
+      ))
+      .orderBy(desc(assessments.createdAt), desc(assessments.id))
+      .limit(1);
+    if (!latestAssessment) {
+      return "available";
+    }
+
+    const [attempt] = await database
+      .select({ id: assessmentAttempts.id })
+      .from(assessmentAttempts)
+      .where(and(
+        eq(assessmentAttempts.ownerId, ownerId),
+        eq(assessmentAttempts.assessmentId, latestAssessment.id),
+        eq(assessmentAttempts.status, "graded"),
+      ))
+      .limit(1);
+    return attempt ? "available" : "awaiting_attempt";
   }
 
   async hasDefaultModelConnection(ownerId: string): Promise<boolean> {

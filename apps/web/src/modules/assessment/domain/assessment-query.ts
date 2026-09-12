@@ -64,6 +64,7 @@ export interface PosttestAssessmentAttemptSummary {
 }
 
 export interface PosttestAssessmentSummary {
+  posttestNo: number;
   assessmentId: string;
   planNodeId: string;
   sourceCardContentId: string;
@@ -74,6 +75,13 @@ export interface PosttestAssessmentSummary {
   updatedAt: Date;
   latestAttempt: PosttestAssessmentAttemptSummary | null;
 }
+
+export interface PosttestAssessmentAttemptRecord extends PosttestAssessmentAttemptSummary {
+  posttestNo: number;
+  planNodeId: string;
+  sourceCardContentId: string;
+}
+
 export interface AssessmentQueryRepository {
   findOwnedAssessment(ownerId: string, assessmentId: string): Promise<AssessmentSnapshot | null>;
   findOwnedPosttestsByNode(ownerId: string, planNodeId: string): Promise<PosttestAssessmentSummary[]>;

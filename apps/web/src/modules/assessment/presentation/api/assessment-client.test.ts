@@ -13,6 +13,7 @@ import {
   createPosttestRun,
   getAssessmentAttempt,
   getAssessmentAttempts,
+  getPosttestAssessmentAttempts,
   getAgentRun,
   getAssessment,
   submitAssessmentAttempt,
@@ -74,6 +75,15 @@ describe("assessment-client", () => {
       "/api/v1/agent-runs/run-1",
       "/api/v1/assessments/assessment-1",
     ]);
+  });
+
+  it("读取节点下全部后测作答记录", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ items: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getPosttestAssessmentAttempts("node-1");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/plan-nodes/node-1/post-assessment-attempts");
   });
 
   it("提交作答时携带幂等键，并读取作答历史和详情", async () => {

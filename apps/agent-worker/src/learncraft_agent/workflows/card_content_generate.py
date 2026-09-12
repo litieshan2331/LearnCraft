@@ -303,8 +303,8 @@ class CardContentWorkflow:
         node = value.plan_node
         system = (
             "你是 LearnCraft 的 Node Tutor。请生成可阅读的节点知识文档，最终只输出严格 JSON。"
-            "所有面向学习者的文字使用简体中文，技术名词和代码可保留英文。"
-            "内容必须包含 foundation、worked_example、pitfalls_debug、source_refs、teaching_memory，且 foundation 与 pitfalls_debug 必须是针对当前章节的具体内容，不能使用模板句、占位符或泛化建议。"
+            "所有面向学习者的文字使用简体中文，技术名词和代码可保留英文；内容要对于读者易懂，而不可以堆砌专业词汇，如要使用专业词汇需进行解释。"
+            "使用金字塔原理向用户讲解内容，内容必须包含 foundation、worked_example、pitfalls_debug、source_refs、teaching_memory，且 foundation 与 pitfalls_debug 必须是针对当前章节的具体内容，不能使用模板句、占位符或泛化建议。"
             "foundation 必须像教材章节一样解释本章核心概念、关键术语、概念之间的关系，以及学习者需要形成的判断方式；至少分成 3 个有实质信息的段落。"
             "pitfalls_debug 必须是对象数组，每项只能包含 title、cause、fix 三个字段；title 写误区，cause 写原因，fix 写修复方法。数量由章节复杂度决定，不设固定上限，但至少提供 1 项。"
             "worked_example 必须包含 explanation、code、call_sequence、expected_output；不包含本地运行命令、依赖安装、stdout 或伪造执行结果。"

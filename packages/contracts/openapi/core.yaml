@@ -543,7 +543,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 未配置账户默认模型，或幂等键与已有任务内容冲突
+          description: 当前后测正在生成、最新后测尚未交卷、未配置账户默认模型，或幂等键与已有任务内容冲突
           content:
             application/json:
               schema:
@@ -567,6 +567,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PosttestAssessmentList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/plan-nodes/{node_id}/post-assessment-attempts:
+    get:
+      tags: [Assessment]
+      summary: 获取章节下所有后测作答记录
+      description: 返回当前用户指定章节下已完成后测的评分摘要；每套后测只允许一次作答，posttest_no 表示该节点下第几套后测。
+      operationId: list_node_post_assessment_attempts
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PlanNodeId'
+      responses:
+        '200':
+          description: 节点后测作答记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PosttestAssessmentAttemptList'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1645,8 +1668,11 @@ components:
     PosttestAssessmentSummary:
       type: object
       additionalProperties: false
-      required: [assessment_id, plan_node_id, source_card_content_id, kind, status, question_count, difficulty, created_at, updated_at, latest_attempt]
+      required: [posttest_no, assessment_id, plan_node_id, source_card_content_id, kind, status, question_count, difficulty, created_at, updated_at, latest_attempt]
       properties:
+        posttest_no:
+          type: integer
+          minimum: 1
         assessment_id:
           type: string
           format: uuid
@@ -1678,6 +1704,55 @@ components:
           oneOf:
             - $ref: '#/components/schemas/AssessmentAttemptSummary'
             - type: 'null'
+    PosttestAssessmentAttemptList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PosttestAssessmentAttemptRecord'
+    PosttestAssessmentAttemptRecord:
+      type: object
+      additionalProperties: false
+      required: [posttest_no, assessment_id, attempt_id, attempt_no, status, plan_node_id, source_card_content_id, score_percent, wrong_count, submitted_at, graded_at]
+      properties:
+        posttest_no:
+          type: integer
+          minimum: 1
+        assessment_id:
+          type: string
+          format: uuid
+        attempt_id:
+          type: string
+          format: uuid
+        attempt_no:
+          type: integer
+          minimum: 1
+          maximum: 1
+        status:
+          type: string
+          enum: [graded]
+        plan_node_id:
+          type: string
+          format: uuid
+        source_card_content_id:
+          type: string
+          format: uuid
+        score_percent:
+          type: number
+          minimum: 0
+          maximum: 100
+        wrong_count:
+          type: integer
+          minimum: 0
+        submitted_at:
+          type: string
+          format: date-time
+        graded_at:
+          type: string
+          format: date-time
     AssessmentAttemptList:
       type: object
       additionalProperties: false

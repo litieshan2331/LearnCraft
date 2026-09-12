@@ -39,6 +39,17 @@ export class PosttestGenerationService {
       throw new PosttestGenerationApplicationError("CARD_CONTENT_NOT_READY");
     }
 
+    const availability = await this.contextRepository.getGenerationAvailability(
+      input.ownerId,
+      input.planNodeId,
+    );
+    if (availability === "active") {
+      throw new PosttestGenerationApplicationError("POSTTEST_GENERATION_IN_PROGRESS");
+    }
+    if (availability === "awaiting_attempt") {
+      throw new PosttestGenerationApplicationError("POSTTEST_ATTEMPT_REQUIRED");
+    }
+
     if (!await this.contextRepository.hasDefaultModelConnection(input.ownerId)) {
       throw new PosttestGenerationApplicationError("DEFAULT_MODEL_CONNECTION_REQUIRED");
     }

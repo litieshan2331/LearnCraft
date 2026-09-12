@@ -5,7 +5,7 @@
  * - presentAssessment：返回题干与选项，永不输出答案、解析或评分内部字段。
  */
 
-import type { AssessmentSnapshot, PosttestAssessmentSummary } from "../domain/assessment-query";
+import type { AssessmentSnapshot, PosttestAssessmentAttemptRecord, PosttestAssessmentSummary } from "../domain/assessment-query";
 
 export function presentAssessment(assessment: AssessmentSnapshot) {
   return {
@@ -35,6 +35,7 @@ export function presentPosttestAssessments(items: PosttestAssessmentSummary[]) {
   return {
     items: items.map((item) => ({
       assessment_id: item.assessmentId,
+      posttest_no: item.posttestNo,
       plan_node_id: item.planNodeId,
       source_card_content_id: item.sourceCardContentId,
       kind: "post_test" as const,
@@ -53,6 +54,24 @@ export function presentPosttestAssessments(items: PosttestAssessmentSummary[]) {
         submitted_at: item.latestAttempt.submittedAt.toISOString(),
         graded_at: item.latestAttempt.gradedAt.toISOString(),
       } : null,
+    })),
+  };
+}
+
+export function presentPosttestAssessmentAttempts(items: PosttestAssessmentAttemptRecord[]) {
+  return {
+    items: items.map((item) => ({
+      posttest_no: item.posttestNo,
+      assessment_id: item.assessmentId,
+      attempt_id: item.id,
+      attempt_no: item.attemptNo,
+      status: item.status,
+      plan_node_id: item.planNodeId,
+      source_card_content_id: item.sourceCardContentId,
+      score_percent: item.scorePercent,
+      wrong_count: item.wrongCount,
+      submitted_at: item.submittedAt.toISOString(),
+      graded_at: item.gradedAt.toISOString(),
     })),
   };
 }

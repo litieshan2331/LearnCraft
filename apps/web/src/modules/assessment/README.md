@@ -7,3 +7,6 @@
 已实现前测作答闭环：`POST /api/v1/assessments/{assessment_id}/attempts` 要求一次提交全部选择答案和 UUID 幂等键，在同一事务内保存 `assessment_attempts`、`assessment_answers`，按首次生成时保存的隐藏答案键完成确定性评分，并返回正确答案和解析。`GET /api/v1/assessments/{assessment_id}/attempts` 返回历史摘要，`GET /api/v1/assessment-attempts/{attempt_id}` 仅向作答所有者返回评分详情。P0 的单份前测只允许提交一次；后测重练会创建新的题集和新的作答记录。
 
 节点后测仅依赖对应节点存在 ready CardContent，并绑定 source_card_content_id；节点完成标记只用于个人进度记录，不作为内容或后测的限制条件。
+
+
+后测采用“每次生成一套新题、每套题只允许作答一次”的策略。最新一套后测未交卷前，服务端拒绝生成下一套；交卷后可再次生成。`GET /api/v1/plan-nodes/{node_id}/post-assessments` 返回所有后测题集，`GET /api/v1/plan-nodes/{node_id}/post-assessment-attempts` 返回所有已完成后测的评分摘要。
