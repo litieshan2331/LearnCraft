@@ -1,4 +1,6 @@
 # LearnCraft MVP P0 实施需求与开发指南
+
+> **文档读取说明（2026-09-14）：**本文件保留了 P0 的实施历史和验收基线。顶部 2026-08-24 更新以及 [05-Agent架构设计](./05-Agent架构设计.md)、[apps/agent-worker/README.md](../apps/agent-worker/README.md) 描述当前实现；除顶部更新和后续明确标注“当前”的内容外，后文都应作为历史设计记录，不得直接驱动实现。尤其是本地 Demo、四阶段路线、自动后测和 Checkpoint 设想均不是当前行为。
 > **当前范围决策更新（2026-08-24，优先于后文所有 P0 描述）：**
 >
 > - 路线由 6–12 个主题节点组成；在实现 `plan_generate` 前，必须通过新的 Drizzle 增量迁移移除 `plan_nodes.phase` 的四阶段语义，并补齐路线快照与 `node_brief`。
@@ -6,11 +8,11 @@
 > - 节点内容固定为 `foundation`、`worked_example`、`pitfalls_debug`；前端决定单页、分节或分页，模型不生成页面编号。
 > - `worked_example` 只展示代码、调用顺序、预期输出和解释；P0 不再要求本地运行、文件清单、依赖安装或运行命令。
 > - 用户阅读后主动标记已学完，并自行选择是否生成节点后测；后测不自动生成。
-> - 前测、路线和节点内容的首轮/修复阶段允许模型自主调用 Tavily；节点后测只基于已固定的 CardContent 与 teaching_memory，不向外部工具发送专属内容。只有最终校验通过的结果才对用户展示，内部失败、工具调用和错误原因写入 AgentRun 日志。
+> - Tavily 是否开放按工作流阶段配置：前测题集首轮开放、结构化修复阶段不开放、最终恢复阶段开放；节点后测首轮不开放，修复和最终恢复阶段开放。后测仍以已固定的 CardContent 与 teaching_memory 为主要依据，不向外部工具发送专属内容。只有最终校验通过的结果才对用户展示，内部失败、工具调用和错误原因写入 AgentRun 日志。
 >
 > 本更新取代后文关于四阶段节点、`LocalDemoSpec`、本地 Demo 与自动节点后测的旧约定；在线执行仍不属于 P0。
 
-> ## 当前范围决策（2026-08-16，优先级最高）
+> ## 历史范围决策（2026-08-16，已被上方 2026-08-24 更新取代）
 >
 > P0 不执行任何用户或模型代码，不增加 `code-runner` 服务，也不实现浏览器在线编辑器。P0 Demo 仅为可复制到本地运行的代码产物，必须含中文注释、入口、依赖与运行步骤、预期输出、调用顺序和常见报错排查。在线 Sandbox、执行日志、stdout/stderr、资源限额与隔离测试全部后置 P1。
 >
@@ -33,7 +35,7 @@
 
 ### 1.1 P0 的一句话目标
 
-一位用户能够注册登录，维护一份当前学习画像并创建多个程序员学习目标；每个目标完成一次前测并查看答案、解析和分数后，自主决定是否生成“概念 → 语法 → 实战 → 调试”学习路线；可任选节点取得唯一的带来源学习内容与本地代码 Demo，标记完成后反复生成独立后测题集、查看历史错题解析，并获得掌握、复习或提高难度建议。
+一位用户能够注册登录，维护一份当前学习画像并创建多个程序员学习目标；每个目标完成一次前测并查看答案、解析和分数后，自主决定是否生成 6–12 章书籍目录式学习路线；可任选节点取得唯一的带来源学习内容，内容 ready 后可反复生成独立后测题集、查看历史错题解析，并获得掌握、复习或提高难度建议。节点完成标记仅用于个人进度记录。
 
 ### 1.2 P0 产品与技术边界
 
@@ -44,19 +46,19 @@
 | 前测与节点后测 | 前测由用户选择 10–20 题（默认推荐 12 题），节点后测由用户选择 5–10 题（推荐 5–8 题）；均为单选题 | 提交后可立即确定性评分；前测提供“正常/困难”卡片且按题序逐步提高难度。 |
 | 知识来源 | 内置、人工审核的官方文档/视频链接和种子文档 | P0 不允许用户上传 PDF、任意 URL 抓取或 MinerU 解析。 |
 | 检索 | PostgreSQL FTS + pgvector 余弦精确检索；返回可追溯引用 | 小规模内容先获得确定性和易维护性；压测后才加 HNSW。 |
-| 本地代码 Demo | 实战/调试节点生成可复制到本地运行的代码、说明和调用顺序；P0 不执行任何用户或模型代码 | 保持 Demo 的学习价值，同时不把在线执行高风险能力带入 P0。 |
-| 模型 | 用户自带公网 OpenAI-compatible 生成连接 + 一个固定 embedding Profile；P0 Worker 只解析账户默认连接 | 不部署 vLLM/Ollama；用户承担生成 Provider 费用，平台免费提供学习流程、检索与本地 Demo。产品永久不支持 IP 字面量、localhost、局域网、私有地址或本地 vLLM；真实调用固定经受控出网层。 |
-| 异步任务 | 规划、内容/Demo 生成和自动出题通过 `AgentRun` 异步执行；单选题评分同步完成 | 模型调用有延迟和失败，需要可重试、可观察、可恢复；确定性评分不需要排队。 |
+| 示例内容 | `worked_example` 展示代码、调用顺序、预期输出和解释；P0 不执行任何用户或模型代码，也不要求依赖安装或运行命令 | 保持示例的学习价值，同时不把在线执行高风险能力带入 P0。 |
+| 模型 | 用户自带公网 OpenAI-compatible 生成连接 + 一个固定 embedding Profile；P0 Worker 只解析账户默认连接 | 不部署 vLLM/Ollama；用户承担生成 Provider 费用，平台免费提供学习流程、检索与 `worked_example`。产品永久不支持 IP 字面量、localhost、局域网、私有地址或本地 vLLM；真实调用固定经受控出网层。 |
+| 异步任务 | 前测、路线、内容和用户主动发起的后测通过 `AgentRun` 异步执行；单选题评分同步完成 | 模型调用有延迟和失败，需要可重试、可观察、可恢复；确定性评分不需要排队。 |
 
 ### 1.3 P0 已作出的实现决策
 
-1. **架构：**Next.js App Router 负责 UI、BFF、认证与核心学习领域；Python FastAPI + LangGraph 在同一 Worker 内实现学习规划 Agent 与节点教学 Agent 两个职责隔离的工作流，负责模型调用、检索和受控工具。Python 不复制学习路线、题目等业务聚合，也不维护无限原始聊天记录。
+1. **架构：**Next.js App Router 负责 UI、BFF、认证与核心学习领域；Python FastAPI + Celery 在同一 Worker 内实现学习规划 Agent 与节点教学 Agent 两个职责隔离的显式工作流，负责模型调用、检索和受控工具。LangGraph/Checkpoint 是预留演进方向，当前 P0 不运行图或持久化 Checkpoint。Python 不复制学习路线、题目等业务聚合，也不维护无限原始聊天记录。
 2. **认证：**P0 使用“邮箱 + 密码 + 数据库不透明 Session + HttpOnly Cookie”。密码用 Argon2id 哈希；浏览器不接收 JWT。这样本地开发不依赖 OAuth 或邮件供应商，也不会把长期令牌暴露给前端。OAuth、Magic Link、找回密码和移动端 Token 放 P1。
 3. **迁移所有权：**`db/migrations/` 中的 Drizzle 迁移是 P0 唯一建表入口。`apps/agent-worker/alembic/` 保留说明文件，但 **P0 不执行 Alembic**，否则会出现两个迁移工具竞争同一数据库的问题。
 4. **用户模型连接：**`ModelGateway` 是 `agent-worker` 内的应用服务，不是 Docker 容器。用户只可保存公网 OpenAI-compatible Base URL、API Key 和模型名，永久不支持 localhost、局域网、私有 IP 或本地 vLLM；Key 由 Web 以 AES-256-GCM 加密持久化，浏览器只可写入/覆盖，Outbox、日志和 AgentRun 仅记录连接 ID/模型名。`CREDENTIAL_ENCRYPTION_KEY` 只进入 Web 与 Worker 的 Secret/环境变量。
 5. **向量索引：**P0 先不建 ANN 索引。固定 embedding Profile、内容量和检索评测集后，只有在检索 p95 或数据量达到阈值时，才用 HNSW 作为首个 ANN 方案；不引入独立向量数据库。
 6. **在线代码执行：**P0 不创建 `CodeRun` API、不启动 Runner 容器、不提供浏览器编辑器或 stdout/stderr。当前数据库中已存在的 `code_runs` 物理表只作为 P1 预留，不是 P0 功能契约；P1 再确认沙箱隔离、语言、资源限制和成本模型后才启用。
-7. **双 Agent 与内部参数：**P0 的学习规划 Agent（每 Goal 一个逻辑会话）负责前测与计划；节点教学 Agent（每 PlanNode 一个逻辑会话）负责唯一内容/Demo 与后测。二者只通过版本化结构化快照交接。用户只选择账户默认模型；开发者通过 Worker 内部版本化 `AgentExecutionProfile` 配置各 Agent 的提示词、Schema、Token、超时、工具权限、重试和思考模式，不提供管理员或用户参数配置页面。
+7. **双 Agent 与内部参数：**P0 的学习规划 Agent（每 Goal 一个逻辑会话）负责前测与计划；节点教学 Agent（每 PlanNode 一个逻辑会话）负责唯一内容与后测。二者只通过版本化结构化快照交接。用户只选择账户默认模型；当前各 Workflow 在代码中固化提示词、Schema、超时、工具权限和重试策略，后续再抽取为版本化 `AgentExecutionProfile`，不提供管理员或用户参数配置页面。
 
 ### 1.4 P0 明确不做
 
@@ -108,7 +110,7 @@
 | P0-ASSESS-002 | 用户可以保存作答并提交前测。 | 刷新不丢答案；重复点击提交不创建两条 Attempt；提交后的答案不可直接修改。 |
 | P0-ASSESS-003 | 系统自动评分并给出薄弱点标签。 | 题目首次生成时已保存隐藏答案与解析；服务端按答案确定性评分。交卷前公开题集不返回答案/解析，交卷后仅向作答用户返回正确答案、逐题解析、分数与薄弱点；不再次调用模型。 |
 | P0-ASSESS-004 | 用户确认后生成学习路线。 | 评分完成后目标保持“可生成计划”状态；只有用户点击“生成学习计划”才进入 `planning` 并创建可追踪的 `plan_generate` AgentRun。 |
-| P0-ASSESS-005 | 前测生成异常可恢复。 | 模型或网络错误时，首轮和修复阶段允许模型自行调用 Tavily；主流程最终校验仍不合法时强制执行 Tavily 的广搜、缩搜和资源阅读后重建题集，并再次校验。只有通过最终校验的题集才能进入 `ready/succeeded`；失败原因、工具调用和重试记录在内部，用户不接收原始生成失败结果。用户主动取消仍保留取消语义；成功得到题集后不再提供重新生成；不产生重复费用或重复题目。 |
+| P0-ASSESS-005 | 前测生成异常可恢复。 | 前测首轮允许模型自主调用 Tavily；共享题集管线的结构化修复阶段不开放 Tavily，最终恢复阶段开放 Tavily并由模型自主决定是否调用。只有通过最终校验的题集才能进入 `ready/succeeded`；失败原因、工具调用和重试记录在内部，用户不接收原始生成失败结果。用户主动取消仍保留取消语义；成功得到题集后不再提供重新生成；不产生重复费用或重复题目。 |
 
 **暂时需要做：**10–20 题单选前测、`normal`/`hard` 难度卡片、按题序逐步提高难度、确定性评分、答题幂等与隐藏答案、成功题集唯一性与失败重试规则。
 
@@ -211,8 +213,8 @@
 | 需求 ID | 描述（简洁） | 验收标准 |
 | --- | --- | --- |
 | P0-AGENT-001 | 每项模型长任务有 AgentRun。 | 前测/节点后测出题、路线生成、内容/本地 Demo 生成都返回 `agent_run_id` 与状态；确定性评分不创建 AgentRun。 |
-| P0-AGENT-002 | 两个 Agent 使用账户默认模型与内部 Profile。 | 用户可在模型设置保存 Base URL/API Key/模型名并设置账户默认连接；P0 的学习规划 Agent 和节点教学 Agent 均使用该默认连接。开发者在内部 `AgentExecutionProfile` 中分别设置提示词、输出 Schema、Token、超时、工具权限、重试和思考模式；运行记录连接 ID、模型名、Profile 版本、超时、重试、token 与费用估算。Key 不进入响应、日志、Outbox 或 AgentRun。 |
-| P0-AGENT-003 | 模型输出通过结构化校验和业务校验。 | Pydantic/JSON Schema 失败可有限次重试；首轮和修复阶段模型可自行调用 Tavily，主流程最终校验仍失败时强制调用 Tavily MCP 的广搜、缩搜和资源阅读能力重建结果，并再次校验。无效路线/题目/AI 评分/Demo/引用不得写库或触发路线调整；用户不接收未经校验的原始生成结果。 |
+| P0-AGENT-002 | 两个 Agent 使用账户默认模型与内部工作流配置。 | 用户可在模型设置保存 Base URL/API Key/模型名并设置账户默认连接；P0 的学习规划 Agent 和节点教学 Agent 均使用该默认连接。当前由各 Workflow 固化提示词、输出 Schema、超时、工具权限与重试；版本化 `AgentExecutionProfile`、Token/费用汇总和细粒度日志仍是后续演进。Key 不进入响应、日志、Outbox 或 AgentRun。 |
+| P0-AGENT-003 | 模型输出通过结构化校验和业务校验。 | Pydantic/JSON Schema 失败可有限次重试；Tavily 是否开放按工作流阶段配置，开放时由模型自主决定是否调用，明确配置强制恢复的工作流才在最终校验仍失败时强制调用 Tavily MCP。无效路线/题目/AI 评分/Demo/引用不得写库或触发路线调整；用户不接收未经校验的原始生成结果。 |
 | P0-AGENT-004 | Worker 故障可定位和恢复。 | `trace_id` 可贯穿 Web、Outbox、Worker、Tavily MCP 和模型调用；内部日志记录错误类别、可重试标识、工具调用链和安全摘要；只有已校验结果才对用户展示。 |
 
 **暂时需要做：**OpenAI-compatible Adapter、用户模型连接设置、AES-256-GCM 凭据加密、账户默认选择、Fake Adapter、超时/预算/重试、结构化输出、AgentRun 事件、健康检查。
@@ -313,7 +315,7 @@ $$;
 
 #### 3.4.1 节点闭环实施前必须补齐的增量迁移
 
-当前物理 Schema 已有 `learner_profiles.profile_version` 与 `learning_goals.profile_version`，但尚未为前测、路线和卡片内容完整保存画像版本与输入快照。实现 `plan_generate`、节点内容生成和节点后测前，必须新增一次 Drizzle 迁移，至少补齐：
+当前物理 Schema 已有 `learner_profiles.profile_version` 与 `learning_goals.profile_version`，并已通过现有 Drizzle 迁移补齐前测、路线、节点内容和节点后测所需的画像版本与输入快照字段。后续 Schema 变更仍必须继续使用 Drizzle 增量迁移。
 
 - `assessments.profile_version` 与 `assessments.input_snapshot_json`，用于前测与节点后测的可追溯输入；节点后测还要增加 `source_card_content_id`，并约束其指向该 `plan_node_id` 的唯一成功内容；
 - `learning_plans.profile_version` 与 `learning_plans.input_snapshot_json`，用于固定生成路线时的目标、前测结果和当前画像；`plan_nodes` 要增加非空 `node_brief`，它是节点教学 Agent 的自然语言输入；
@@ -321,7 +323,7 @@ $$;
 - 将当前 `card_quiz` 的数据库语义明确迁移为节点后测，且约束 `plan_node_id`、`source_card_content_id` 必填；前测成功生成后建立数据库唯一性约束或等效事务性规则，禁止同一目标创建第二份成功题集。节点后测不设唯一题集约束，每次重练新增 Assessment 与 Attempt 历史；
 - 复用现有 `agent_runs.requested_model_profile`、`actual_model_profile`、`prompt_version`、`input_summary_json` 与 `output_summary_json`，记录由 `run_type` 派生的 Agent 角色、逻辑会话键和 `AgentExecutionProfile` 版本；不新增原始聊天消息表。
 
-这些字段与约束是已确认的 P0 产品需求；迁移文件尚未创建。新增前必须按 Drizzle 的增量迁移规则编写，并同步更新 Zod、领域对象、OpenAPI 与 Pydantic 契约。
+这些字段与约束是已确认的 P0 产品需求，当前实现和迁移文件已经同步；后续修改必须同步更新 Zod、领域对象、OpenAPI 与 Pydantic 契约。
 
 ### 3.5 当前物理 Schema DDL（第一部分：身份、画像、规划）
 
@@ -1686,7 +1688,7 @@ Argon2id 的参数从 OWASP 建议的最低基线起步：内存约 19 MiB、迭
 
 #### 流式与结构化输出约束
 
-所有真实生成请求必须发送 `stream=true`。`SafeModelEgressClient` 以 SSE 读取 Provider 响应，限制总响应字节数，验证完成标记后在 Worker 内存中聚合文本、思考内容、工具参数和末尾用量；不得把原始分片写入数据库、日志或浏览器。对于前测/节点后测等结构化任务，Adapter 在请求载荷中同时设置 `response_format: {"type": "json_object"}`，提示词明确顶层 JSON 字段；聚合完成后先提取 JSON，再用 Pydantic 校验。首轮或修复阶段校验失败时，允许模型自行决定是否调用 Tavily MCP，并执行有限次受控修复；修复次数耗尽且主流程最终校验仍失败时，工作流强制执行 Tavily 的广搜、缩搜和资源阅读，重建结果并再次校验。Web 的 `GET /api/v1/agent-runs/{agent_run_id}/events` SSE 仅发布状态和已验证结果，不代理或展示 Provider 的原始 token 流。
+所有真实生成请求必须发送 `stream=true`。`SafeModelEgressClient` 以 SSE 读取 Provider 响应，限制总响应字节数，验证完成标记后在 Worker 内存中聚合文本、思考内容、工具参数和末尾用量；不得把原始分片写入数据库、日志或浏览器。对于前测/节点后测等结构化任务，Adapter 在请求载荷中同时设置 `response_format: {"type": "json_object"}`，提示词明确顶层 JSON 字段；聚合完成后先提取 JSON，再用 Pydantic 校验。Tavily 策略按工作流阶段执行：前测首轮和最终恢复阶段开放、修复阶段关闭；后测首轮关闭、修复和最终恢复阶段开放；路线和节点内容首轮开放、修复阶段关闭、最终恢复阶段强制执行 Tavily 广搜、缩搜和资源阅读。所有恢复结果都必须再次校验。Web 的 `GET /api/v1/agent-runs/{agent_run_id}/events` SSE 仅发布状态和已验证结果，不代理或展示 Provider 的原始 token 流。
 
 P0 的**生成模型**由用户配置 OpenAI-compatible 连接（例如支持该协议的 DeepSeek、Qwen 等）；Embedding 仍固定为一个平台 Profile。先定义稳定 port，再接 OpenAI-compatible Adapter：
 
@@ -1698,16 +1700,16 @@ LangGraph workflow
   → 用户已配置的 Base URL
 ```
 
-`ModelGateway` 在 P0 只使用**账户默认连接**。每个 AgentRun 在启动时固化实际连接 ID、请求模型名和开发者选择的 `AgentExecutionProfile` 版本；即使之后修改默认连接或内部调参，历史任务也不会被静默改写。删除连接后关联外键设为 `NULL`，历史记录保留模型名称与运行摘要，但不会保留 API Key。用户只选择默认模型；学习规划/节点教学 Agent 的 System Prompt、输出 Schema、最大 Token、超时、工具 allow-list、最大工具调用数、重试和思考模式仅由开发者维护。目标级、任务级模型覆盖是后续版本能力，P0 的创建目标、出题和内容生成接口不应接受或使用覆盖字段。
+`ModelGateway` 在 P0 只使用**账户默认连接**。每个 AgentRun 在启动时读取实际连接并记录模型标识与运行摘要；用户只选择默认模型。学习规划/节点教学 Agent 的 System Prompt、输出 Schema、最大 Token、超时、工具 allow-list、最大工具调用数和重试目前由各 Workflow 在代码中维护。将这些参数抽取为版本化 `AgentExecutionProfile`，并在运行时固化其版本，是后续能力；目标级、任务级模型覆盖同样是后续版本能力。
 
-ModelGateway 至少维护以下任务规则；模型连接统一取账户默认连接，但预算、结构化 schema、超时、重试和工具权限由对应的内部 `AgentExecutionProfile` 控制：
+后续如抽取 `AgentExecutionProfile`，可按以下任务规则管理预算、结构化 schema、超时、重试和工具权限；当前模型连接统一取账户默认连接，具体规则仍在各 Workflow 中维护：
 
 | Agent / `task_role` | 内部 Profile 内容 | P0 规则 |
 | --- | --- | --- |
 | 学习规划 Agent / `assessment_generate` | 账户默认模型连接、评估提示词/Schema、最大输出 Token、超时、工具策略 | 前测 10–20 题；一次性输出题目、隐藏答案、解析和能力标签；校验题量、难度和至少两个选项。 |
-| 学习规划 Agent / `plan_generate` | 账户默认模型连接、规划提示词/Schema、预算、重试次数和 Tavily 策略 | 仅在用户确认后使用目标、当前画像和前测交接快照；必须输出书籍章节目录式路线和 `node_brief`，并通过章节顺序、主题覆盖和 DAG 校验。首轮与修复阶段可由模型自主调用 Tavily，主流程最终校验失败时强制调用 Tavily MCP 重建。 |
+| 学习规划 Agent / `plan_generate` | 账户默认模型连接、规划提示词/Schema、预算、重试次数和 Tavily 策略 | 仅在用户确认后使用目标、当前画像和前测交接快照；必须输出书籍章节目录式路线和 `node_brief`，并通过章节顺序、主题覆盖和 DAG 校验。首轮由模型自主决定是否调用 Tavily，修复阶段不开放工具，主流程最终校验失败时强制调用 Tavily MCP 重建。 |
 | 节点教学 Agent / `card_content_generate` | 账户默认模型连接、教学提示词/Schema、预算、引用、Tavily 策略与 LocalDemoSpec | 模型可先使用自身训练知识并自行决定是否调用 Tavily；主流程最终校验失败时强制调用 Tavily MCP 的广搜、缩搜和资源阅读能力重建。最终仍只保存通过内容、引用、Demo 与 `teaching_memory`；不执行 Runner 预运行，也不支持内容重生。 |
-| 节点教学 Agent / `posttest_generate` | 账户默认模型连接、后测提示词/Schema、最大输出 Token、超时、Tavily 策略 | 仅基于固定 CardContent、Demo 与 `teaching_memory` 生成 5–10 题后测；首轮与修复阶段可由模型自主调用 Tavily，主流程最终校验失败时强制阅读相关引用来源后重建；每次重练创建新题集，答案/解析同次隐藏保存。 |
+| 节点教学 Agent / `posttest_generate` | 账户默认模型连接、后测提示词/Schema、最大输出 Token、超时、Tavily 策略 | 仅基于固定 CardContent、Demo 与 `teaching_memory` 生成 5–10 题后测；首轮不开放 Tavily，结构化修复和最终恢复阶段开放 Tavily并由模型自主决定是否调用；每次重练创建新题集，答案/解析同次隐藏保存。 |
 | `embedding` | 固定模型、维度、版本 | 和迁移/健康检查/检索集完全一致。 |
 
 单选作答始终是不可信输入：服务端只将其与隐藏答案比较，不将其拼入模型提示词、工具调用或检索请求。评分器必须校验选项属于当前题目，且只接受符合 Pydantic `AssessmentGrade` schema 的确定性结果。
@@ -1785,7 +1787,7 @@ docker compose logs -f web agent-api agent-dispatcher agent-celery-worker
 2. `AgentRunRepository`：保存运行、事件、重试次数、预算和 trace；
 3. `RetrieverPort`：先读已审核种子内容，分别经 `VectorStore` 做 dense 召回、经词法检索端口做 FTS 召回，再由 `HybridRetriever` 用 RRF 融合，返回可引用定位；P0 注入 `PgvectorVectorStore`，未来可替换为 `MilvusVectorStore`。若 Provider 可返回 sparse 向量，再增加一次 `VectorStore` sparse 召回；
 4. `LearningArchitectGraph`：前测输入规范化 → 单选题、隐藏答案/解析 Schema → Internal Core API；用户确认后，目标/画像/前测交接快照 → 书籍章节式路线 + node_brief → Pydantic schema → 章节顺序/主题覆盖/DAG/时长校验；主流程最终校验仍失败时强制执行 Tavily 广搜、缩搜和资源阅读后重建，再经 Internal Core API 持久化；
-5. `NodeTutorGraph`：目标摘要 + node_brief + 当前画像 → 模型生成（可自行决定是否调用 Tavily）→ 唯一内容/teaching_memory 生成、引用校验；主流程最终校验仍失败时强制执行 Tavily“先广搜、后缩搜、资源阅读”后重建，再经 Internal Core API 持久化；节点完成后，固定内容/teaching_memory → 新节点后测题集。评分仍在 Web 侧确定性完成；
+5. `NodeTutorGraph`：目标摘要 + node_brief + 当前画像 → 模型生成（可自行决定是否调用 Tavily）→ 唯一内容/teaching_memory 生成、引用校验；主流程最终校验仍失败时强制执行 Tavily“先广搜、后缩搜、资源阅读”后重建，再经 Internal Core API 持久化；节点内容 ready 后，固定内容/teaching_memory → 用户主动创建的新节点后测题集。评分仍在 Web 侧确定性完成；
 6. `NodeCompletionService`：保存用户的节点完成标记，，不限制内容生成或节点后测；后测历史查询仅返回所有者的题集、作答和错题解析；P0 不实现 RunnerClient 或 CodeRun HTTP 用例；
 7. `LearningFeedbackPolicy`：用纯 TypeScript 领域规则消费节点后测评分，给出建议但不产生 `adaptation_events`、不决定解锁权限。
 
@@ -1809,9 +1811,9 @@ docker compose logs -f web agent-api agent-dispatcher agent-celery-worker
 | 4 | 请求前测 | Assessment/AgentRun/Outbox 状态由 `generating/queued` 变为 `ready/succeeded`；用户选定 10–20 题、仅有单选题、难度符合 `normal`/`hard` 与逐步提升规则；成功题集再次请求被拒绝。 |
 | 5 | 在前测生成异常、取消且没有题集时恢复 | 模型或网络异常先按有限重试、模型自主工具调用和最终 Tavily 兜底流程恢复；用户主动取消保留取消语义。无效题集不写入；没有成功题集时允许创建新的 AgentRun；已有成功题集时不允许重生；不会产生第二份成功前测。 |
 | 6 | 提交前测答案并查看解析 | Attempt 只产生一条；服务端确定性评分可追踪；交卷前浏览器响应没有答案/解析，交卷后仅题主看到 `answer_key` 对应答案、逐题解析、分数与薄弱点；不创建 `plan_generate`。 |
-| 7 | 用户确认生成路线并任选节点 | 点击“生成学习计划”后才创建 Learning Architect 的 `plan_generate`；路线有 6–12 个书籍章节式主题节点、合法顺序、主题覆盖、无环依赖和 `node_brief`；所有节点可直接打开；模型首轮或修复校验失败后，主流程最终校验仍失败时强制走 Tavily MCP 重建，只有通过最终校验的路线才展示。 |
-| 8 | 首次请求实战/调试节点内容 | `card_contents` 和 `card_content_references` 同时存在；LocalDemoSpec 包含文件、入口、依赖、命令、预期输出、调用顺序、中文注释与排错提示，并保存 teaching_memory；同节点再次请求返回既有成功内容而不创建第二次模型调用。 |
-| 9 | 标记节点完成、生成并提交多份后测 | 用户选择 5–10 道单选后测（推荐 5–8）；每次重练产生新 Assessment；80%、60%、40% 三组结果分别验证掌握、复习、薄弱点/重练提示；历史列表能打开每份题集、作答、错题和解析。 |
+| 7 | 用户确认生成路线并任选节点 | 点击“生成学习计划”后才创建 Learning Architect 的 `plan_generate`；路线有 6–12 个书籍章节式主题节点、合法顺序、主题覆盖、无环依赖和 `node_brief`；所有节点可直接打开；首轮失败后进入无工具修复，主流程最终校验仍失败时强制走 Tavily MCP 重建，只有通过最终校验的路线才展示。 |
+| 8 | 首次请求节点内容 | `card_contents` 和 `card_content_references` 同时存在；`worked_example` 包含代码、调用顺序、预期输出和解释，并保存 teaching_memory；同节点再次请求返回既有成功内容而不创建第二次模型调用。 |
+| 9 | 标记节点完成、生成并提交多份后测 | 节点完成标记与后测生成相互独立。用户在节点内容 ready 后可选择 5–10 道单选后测（推荐 5–8）；每次重练产生新 Assessment；80%、60%、40% 三组结果分别验证掌握、复习、薄弱点/重练提示；历史列表能打开每份题集、作答、错题和解析。 |
 | 10 | 用户 B 访问用户 A 的所有资源 | 一律 `404`；日志有 trace，不泄露 A 的标题、状态或内容。 |
 | 11 | 保存账户默认模型连接并做一次真实 Provider smoke | 数据库记录连接 ID、请求模型名、实际模型版本/费用；Key 不出现在响应、日志、Celery 消息或容器 inspect 输出。 |
 
@@ -1841,8 +1843,8 @@ docker compose logs -f web agent-api agent-dispatcher agent-celery-worker
 | 前测唯一性 | 前测为 10–20 题单选；每个目标只有一份成功题集，只有在生成失败或取消且未得到题集时可重新发起。 | 阻断路线生成。 |
 | 路线质量 | 每条激活路线包含 6–12 个书籍章节式主题节点，章节顺序、主题覆盖和前置依赖无环；用户可访问任意节点。 | 未通过最终校验的路线不得激活；先执行 Tavily 兜底重建，只有合法路线才对用户展示。 |
 | 内容可信度与唯一性 | 卡片中的来源引用可映射到受控资料；模型推断显式标记；每节点仅一份成功内容/Demo，后续请求不重调模型。 | 不展示无效/伪造引用内容或第二份成功内容。 |
-| Demo 完整性 | 实战/调试卡的 LocalDemoSpec 含语言/版本、文件、入口、依赖、运行命令、预期输出、调用顺序、中文注释和排错提示。 | 不展示为本地可运行 Demo，改走修复/模板或失败态。 |
-| 节点后测 | 节点完成后可基于固定内容生成 5–10 题单选后测；答案/解析首次生成时隐藏保存，交卷后仅题主可见；用户可生成新题集并查看完整历史错题。 | 保留每份题集、已作答记录和错题解析并提示重练。 |
+| 示例完整性 | `worked_example` 含代码、调用顺序、预期输出和解释；不承诺本地可运行、不含依赖安装或运行命令。 | 不展示未通过内容合同的示例。 |
+| 节点后测 | 节点内容 ready 后可基于固定内容生成 5–10 题单选后测；完成标记不是前置条件。答案/解析首次生成时隐藏保存，交卷后仅题主可见；用户可生成新题集并查看完整历史错题。 | 保留每份题集、已作答记录和错题解析并提示重练。 |
 | 用户隔离 | 越权访问所有私有资源均为 `404`；owner filter 有 repository test。 | 最高优先级安全缺陷，禁止上线。 |
 | 密码与会话 | 密码仅 Argon2id 哈希；Session token 仅以哈希入库；Cookie 安全属性符合环境。 | 禁止上线。 |
 | 模型密钥与出网 | `CREDENTIAL_ENCRYPTION_KEY` 仅在 Web/Worker Secret；用户 API Key 不出现在 Git、浏览器响应、日志或 Celery 消息；模型调用通过 SafeModelEgressClient。 | 立即轮换受影响用户 Key 与主密钥并阻断发布。 |
@@ -1865,9 +1867,9 @@ docker compose logs -f web agent-api agent-dispatcher agent-celery-worker
 - [ ] 前测由用户选择 10–20 题且只有单选题；“正常/困难”难度正确生效，题序逐步提高难度；提交前无法通过 API 拿到正确答案或解析，交卷后仅本人可看到正确答案和逐题解析。
 - [ ] 前测生成失败或取消且没有题集时可重新发起；成功题集存在后再次生成被拒绝。
 - [ ] 前测完成并展示评分解析后，只有点击“生成学习计划”才生成一条书籍章节式、6–12 个主题节点且带 `node_brief` 的路线；章节顺序、主题覆盖和前置依赖无环；任意节点可直接进入；最终校验失败时执行 Tavily 兜底后才展示合法路线。
-- [ ] 任选节点后可看到唯一保存的目标、解释、示例、练习、提示和资料引用；实战/调试节点含完整本地 Demo、调用顺序、中文注释、命令、预期输出与排错提示；再次请求不会生成第二份内容。
-- [ ] 页面不展示运行按钮、stdout/stderr、验证 ID 或“服务器已运行成功”一类结论。
-- [ ] 用户标记节点完成后，可选择 5–10 题节点后测（推荐 5–8）；题集只基于固定内容/Demo/teaching_memory，服务端评分后仅本人可查看分数、正确答案、解析和薄弱点。
+- [ ] 任选节点后可看到唯一保存的核心概念、示例、常见误区与排错和资料引用；`worked_example` 含代码、调用顺序、预期输出与解释；再次请求不会生成第二份内容。
+- [ ] 页面不展示运行按钮、依赖安装、运行命令、stdout/stderr、验证 ID 或“服务器已运行成功”一类结论。
+- [ ] 节点内容 ready 后，可选择 5–10 题节点后测（推荐 5–8）；节点完成标记不是条件，题集只基于固定内容/teaching_memory，服务端评分后仅本人可查看分数、正确答案、解析和薄弱点。
 - [ ] 后测 80%、60%、40% 的确定性结果分别展示掌握、复习、薄弱点/重练提示；每次重练生成新题集，历史列表可查看任一题集、作答和错题解析。
 
 #### Agent、模型与检索

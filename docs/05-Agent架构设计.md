@@ -1,20 +1,20 @@
 # LearnCraft Agent 架构设计
 
-> 文档状态：目标架构说明  
-> 更新日期：2026-08-24  
-> 适用范围：P0 学习路线生成与节点内容生成
+> 文档状态：P0 架构与当前实现说明
+> 更新日期：2026-09-14
+> 适用范围：P0 前测、学习路线、节点内容与节点后测
 
-本文依据现有 DDD 边界、P0 实施约束和 Agent 运行模型，说明 LearnCraft 的 Agent 分工、执行流程、可靠投递和推荐目录结构。本文不新增数据库、模型或安全策略决策；实施时仍以 `02-DDD项目目录.md` 与 `04-MVP-P0实施需求与开发指南.md` 中的已锁定约束为准。
+本文依据现有 DDD 边界、P0 实施约束和 Agent 运行模型，说明 LearnCraft 的 Agent 分工、执行流程、可靠投递和推荐目录结构。本文不新增数据库、模型或安全策略决策；当前行为以实现代码、`packages/contracts` 与 `apps/agent-worker/README.md` 为准，`04-MVP-P0实施需求与开发指南.md` 仅保留历史实施基线。
 
 ## 1. 架构结论
 
 采用“**两个业务 Agent + 一套共享 Agent 基础设施**”的模块化单体架构：
 
 - **Route Planner Agent**：现有文档中的 `Learning Architect` 工作流别名，负责同一目标逻辑会话中的前测生成和学习路线生成。前测用于了解学习者水平，路线生成读取前测的结构化交接快照；该 Agent 不生成知识正文。
-- **Node Tutor Agent**：现有文档中的节点教学工作流，负责同一节点逻辑会话中的节点知识生成和节点后测生成。后测只在用户主动选择后生成，并读取已保存的节点内容、Demo 和 `teaching_memory`；该 Agent 不调整学习路线。
-- **共享基础设施**：负责 `AgentRun` 生命周期、Outbox 可靠投递、Celery 任务路由与重试、模型连接、安全出网、追踪、费用记录和 LangGraph Checkpoint；不包含学习路线或教学内容的业务规则。
+- **Node Tutor Agent**：现有文档中的节点教学工作流，负责同一节点逻辑会话中的节点知识生成和节点后测生成。后测只在用户主动选择后生成，并读取已保存的节点内容、`worked_example` 和 `teaching_memory`；该 Agent 不调整学习路线。
+- **共享基础设施**：负责 `AgentRun` 生命周期、Outbox 可靠投递、Celery 任务路由与重试、模型连接、安全出网和最小审计；不包含学习路线或教学内容的业务规则。LangGraph Checkpoint、费用汇总和细粒度 Trace 是保留的扩展方向，当前 P0 代码尚未接入完整实现。
 
-两个 Agent 不直接相互调用，也不共享无限制的对话历史。每个 Agent 在自己的逻辑会话范围内通过 LangGraph Checkpoint 和结构化快照保持上下文：学习规划 Agent 以 `goal_id` 作为会话范围，节点教学 Agent 以 `plan_node_id` 作为会话范围。两个 Agent 之间只通过版本化、可持久化的结构化数据交接：Route Planner 将 `PlanNode.node_brief` 写入路线节点；Node Tutor 读取该摘要与目标、画像、受控资料来生成内容。
+两个 Agent 不直接相互调用，也不共享无限制的对话历史。当前 P0 通过 `goal_id` 或 `plan_node_id` 范围内的结构化输入快照、已保存内容和业务结果交接上下文；LangGraph Checkpoint 仍是保留方向，不能视为已启用能力。两个 Agent 之间只通过版本化、可持久化的结构化数据交接：Route Planner 将 `PlanNode.node_brief` 写入路线节点；Node Tutor 读取该摘要与目标、画像、受控资料来生成内容。
 
 ```text
 Web / BFF
@@ -41,7 +41,7 @@ Web/BFF 在同一事务内完成请求校验、创建 `AgentRun` 和写入 Outbo
 | Web/Core | 用户、目标、画像、学习计划、节点、内容、评测等业务聚合；鉴权、幂等和业务不变量 | 直接编排 LLM 调用或保存原始模型响应 |
 | Route Planner Agent | 前测生成、路线生成、结构化校验、有限修复与 Tavily 兜底 | 知识正文生成、直接写入 Core 业务表 |
 | Node Tutor Agent | 节点内容生成、引用校验、节点后测生成、有限修复与 Tavily 兜底 | 路线调整、直接写入 Core 业务表 |
-| 共享 Agent 基础设施 | 运行管理、队列、重试、模型连接、追踪、预算、Checkpoint | 路线合格性或教学内容质量等业务定义 |
+| 共享 Agent 基础设施 | 运行管理、队列、重试、模型连接、安全出网和最小运行审计；细粒度 Trace、成本汇总、Checkpoint 为后续能力 | 路线合格性或教学内容质量等业务定义 |
 
 Worker 只能经 `CoreApiPort`、`RetrieverPort` 等端口或 ACL 与 Core 通信，不能导入 Web 的领域对象、共享 ORM Model，或绕过应用服务写入 `learning_plans`、`plan_nodes`、`card_contents` 等核心业务表。
 
@@ -51,17 +51,19 @@ Worker 只能经 `CoreApiPort`、`RetrieverPort` 等端口或 ACL 与 Core 通�
 
 ```text
 BaseAgent
-├─ AgentRun 生命周期
-├─ 上下文与 LangGraph Checkpoint
-├─ ModelGateway 调用
-├─ Tavily MCP 工具调用
-├─ Schema / 业务校验
-├─ 有限修复与最终兜底
-├─ 日志、Token、费用和耗时
-└─ 结果持久化 Port
+└─ 按 run_type 路由已注册 Workflow
+
+execute_agent_run + Repository
+├─ AgentRun 生命周期、Celery 重试和终态写入
+└─ 运行事件与最小错误摘要
+
+具体 Workflow
+├─ ModelGateway / Tavily MCP 调用
+├─ Schema 与业务校验、有限修复和恢复
+└─ 对应的内部回写 Port
 
 LearningArchitectAgent
-├─ assessment_generate → PretestWorkflow
+├─ assessment_generate → AssessmentGenerationWorkflow
 └─ plan_generate → PlanGenerationWorkflow
 
 NodeTutorAgent
@@ -69,20 +71,24 @@ NodeTutorAgent
 └─ posttest_generate → PosttestWorkflow
 ```
 
-推荐使用依赖注入和工作流注册表复用 BaseAgent：
+当前实现通过两个业务 Agent 各自注入工作流映射来复用 BaseAgent：
 
 ```python
 # 共享 BaseAgent 执行框架不直接包含业务规则。
 
-workflow_registry = {
-    ("learning_architect", "assessment_generate"): PretestWorkflow,
-    ("learning_architect", "plan_generate"): PlanGenerationWorkflow,
-    ("node_tutor", "card_content_generate"): CardContentWorkflow,
-    ("node_tutor", "posttest_generate"): PosttestWorkflow,
+learning_architect_workflows = {
+    "assessment_generate": AssessmentGenerationWorkflow(),
+    "plan_generate": PlanGenerationWorkflow(),
+}
+node_tutor_workflows = {
+    "card_content_generate": CardContentWorkflow(),
+    "posttest_generate": PosttestWorkflow(),
 }
 ```
 
-`BaseAgent` 统一执行以下流程：
+当前 Worker 已注册四个 P0 `run_type`：`assessment_generate`、`plan_generate`、`card_content_generate` 和 `posttest_generate`。未注册的其他类型仍会以 `AGENT_RUN_WORKFLOW_NOT_REGISTERED` 失败。
+
+当前 `BaseAgent` 只做 `run_type` 到 Workflow 的分发；以下流程由 `execute_agent_run`、具体 Workflow 和 Repository 协作完成：
 
 ```text
 创建/恢复 AgentRun
@@ -97,7 +103,7 @@ Schema + 业务校验
   ↓
 有限修复
   ↓
-主流程最终校验仍失败 → 强制 Tavily MCP 兜底
+主流程最终校验仍失败 → 按该 Workflow 的恢复策略处理
   ↓
 兜底后最终校验
   ↓
@@ -135,7 +141,7 @@ Route Planner 读取：
 
 ### 3.2 前测与路线生成是同一个 Agent
 
-前测和路线生成不是两个 Agent，而是学习规划 Agent 的两个阶段。二者可以创建不同的 `AgentRun`，但共享同一个 `goal_id` 逻辑会话范围，并通过结构化快照和 Checkpoint 交接上下文。
+前测和路线生成不是两个 Agent，而是学习规划 Agent 的两个阶段。二者可以创建不同的 `AgentRun`，但共享同一个 `goal_id` 逻辑会话范围，并通过结构化快照交接上下文。Checkpoint 是后续可选增强，当前 P0 不以它保存或恢复对话状态。
 
 ```text
 创建目标
@@ -157,7 +163,7 @@ Route Planner 读取：
    └─ 生成 6–12 章书籍式学习目录
 ```
 
-首轮生成和修复阶段，模型可以自行决定是否调用 Tavily MCP；系统不强制每次调用工具。只有在修复次数耗尽且最终校验仍不合法时，才强制调用同一个 Tavily MCP 的搜索和资源阅读能力，再基于权威资料重建结果。
+前测和路线首轮会向模型提供 Tavily MCP，由模型自主决定是否调用；当前前测共享题集管线的修复阶段不开放 Tavily，最终恢复阶段才开放 Tavily 并由模型决定是否调用。路线工作流的修复阶段同样不开放工具，主流程最终校验失败后才强制执行 Tavily 恢复；所有恢复结果都必须重新校验。
 
 ### 3.3 路线生成工作流
 
@@ -193,7 +199,7 @@ Route Planner 读取：
                                                  Persist
 ```
 
-路线必须采用书籍章节目录式结构，而不是通用的“了解概念—完成练习—复盘”阶段模板。`PlanValidator` 应校验字段完整性、节点数量、章节顺序连续性、`node_key` 唯一性、前置依赖存在性、依赖无环，以及学习目标的主题覆盖关系。模型首轮和修复阶段都可以自行调用 Tavily；只有主流程最终校验仍不合法时，才强制使用 Tavily MCP 进行搜索和资源阅读。Tavily 资料会被用于重建章节目录，重建结果还必须再次通过同一套校验。
+路线必须采用书籍章节目录式结构，而不是通用的“了解概念—完成练习—复盘”阶段模板。`PlanValidator` 应校验字段完整性、节点数量、章节顺序连续性、`node_key` 唯一性、前置依赖存在性、依赖无环，以及学习目标的主题覆盖关系。当前路线工作流的首轮模型可以自主调用 Tavily；修复请求不开放工具；主流程最终校验仍不合法时，才强制使用 Tavily MCP 进行搜索和资源阅读。Tavily 资料会被用于重建章节目录，重建结果还必须再次通过同一套校验。
 
 只要最终得到合法章节目录，对用户侧就是正常成功；首轮失败、修复失败、工具调用、校验错误和兜底路径仅写入内部 AgentRun 事件和日志。
 
@@ -201,7 +207,7 @@ Route Planner 读取：
 
 ### 4.1 节点内容与后测是同一个 Agent
 
-节点内容生成和节点后测生成不是两个 Agent，而是节点教学 Agent 的两个阶段。二者可以创建不同的 `AgentRun`，但共享同一个 `plan_node_id` 逻辑会话范围，并通过 Checkpoint、固定内容和 `teaching_memory` 保持上下文。
+节点内容生成和节点后测生成不是两个 Agent，而是节点教学 Agent 的两个阶段。二者可以创建不同的 `AgentRun`，但共享同一个 `plan_node_id` 逻辑会话范围，并通过已保存的固定内容和 `teaching_memory` 交接上下文；当前 P0 不使用 Checkpoint 恢复对话状态。
 
 Node Tutor 在用户首次请求某节点内容时按需执行；同一节点已有成功内容时，应直接返回该内容而非再次调用模型。用户可以独立标记节点完成作为个人进度记录；后测只要求对应节点存在 ready 内容，不受节点完成状态或前置关系限制。它读取：
 
@@ -216,14 +222,14 @@ Node Tutor 在用户首次请求某节点内容时按需执行；同一节点已
 节点教学 Agent：card_content_generate
    ├─ 生成 foundation、worked_example、pitfalls_debug
    ├─ 校验引用和内容结构
-   └─ 保存唯一成功内容、Demo 和 teaching_memory
+   └─ 保存唯一成功内容、worked_example 和 teaching_memory
            │
            ▼
 用户阅读内容后可主动选择生成后测（节点完成标记仅用于记录）
            │
            ▼
 节点教学 Agent：posttest_generate
-   ├─ 读取固定内容、Demo 和 teaching_memory
+   ├─ 读取固定内容、worked_example 和 teaching_memory
    └─ 生成新的节点后测题集
 ```
 
@@ -261,7 +267,9 @@ ContentInputNormalizer
                                                  Persist
 ```
 
-首轮生成和修复阶段，模型可以自行决定是否调用 Tavily MCP。只有主流程最终校验仍不合法时，才强制调用 Tavily 的搜索和资源阅读能力，并基于资料重建内容。兜底结果必须再次通过 `ContentValidator`，用户侧不展示“降级”或“生成失败”。
+节点内容首轮模型可以自主调用 Tavily；当前修复请求不开放工具，主流程最终校验仍不合法时才强制执行 Tavily 搜索和资源阅读，并基于资料重建内容。若 Tavily 本身不可用，当前实现会改用模型已有稳定知识进行一次同合同恢复。任一路径的结果都必须再次通过 `ContentValidator`；用户侧不展示中间修复或恢复路径。
+
+前测和后测题集共享 `apps/agent-worker/src/learncraft_agent/workflows/question_set_generation.py` 中的 `QuestionSetGenerationPipeline`。共享管线负责题集 JSON 解析、字段合同校验、题量校验、错误路径摘要和有限恢复，不负责业务持久化。前测首轮开放 Tavily、修复阶段不开放、最终恢复阶段开放；后测首轮只使用固定 `CardContent` 和 `teaching_memory`，修复和最终恢复阶段开放 Tavily。
 
 ### 4.3 内容合同
 
@@ -293,11 +301,11 @@ ContentInputNormalizer
 - `AgentRun` 的 `queued`、`running`、`succeeded`、`failed` 等状态流转，以及运行事件；
 - Outbox 事务消息、Dispatcher 可靠领取和 Celery 投递；
 - 幂等、超时、有限重试和安全的用户失败文案；
-- `AgentExecutionProfile`：按 Agent 固化 Prompt 版本、输出 Schema、Token/费用上限、超时、工具白名单与重试策略；
-- Tavily MCP 适配：同一个 MCP 提供搜索和资源阅读；首轮与修复阶段由模型自主选择，主流程最终校验失败后由工作流强制调用；
+- 当前由各 Workflow 固化 Prompt、输出 Schema、超时、工具白名单与重试策略；版本化 `AgentExecutionProfile` 是后续可抽取的配置能力；
+- Tavily MCP 适配：同一个 MCP 提供搜索和资源阅读；是否开放以及是否强制调用由具体工作流阶段决定；
 - 账户默认模型连接的安全读取，及经过 `SafeModelEgressClient` 的模型调用；
-- `trace_id`、`agent_run_id`、模型版本、Token、费用估算、错误类别等可观测数据；
-- LangGraph Checkpoint 和可重放运行事件。
+- 当前已持久化的 `trace_id`、`agent_run_id`、运行状态、重试次数、模型标识和安全错误摘要；
+- 后续可增加 Token/费用汇总、细粒度工具 Trace、LangGraph Checkpoint 和可重放运行事件。
 
 ### 5.1 Tavily MCP 检索策略
 
@@ -308,13 +316,13 @@ Tavily MCP 的连接配置、认证方式、超时、预算、调用次数和安
 3. **资源阅读**：读取最终选定的来源，提取可用于章节目录、知识内容或校验修复的结构化资料；
 4. **结果重建**：将资料交给当前 Agent 重建章节目录、内容或题目，再执行原有 Schema 和业务校验。
 
-首轮和修复阶段由模型自主决定是否调用 Tavily；只有主流程最终校验仍不合法时，工作流才强制执行上述 Tavily 兜底流程。
+首轮、修复和最终恢复阶段的 Tavily 策略由具体工作流决定。开放 Tavily 的阶段由模型自主决定是否调用；只有明确配置为强制恢复的工作流才在最终校验失败后强制执行 Tavily。
 
 `AgentRun` 记录“如何执行”，不定义“什么是合格的学习计划或学习内容”。Outbox、Celery 消息、日志和 API 响应不得携带用户 API Key、完整 Prompt、未脱敏模型响应或用户私密资料。
 
 ## 6. 推荐目录结构
 
-以下结构与现有 `apps/web`、`apps/agent-worker` 和 `packages/contracts` 的边界一致；其中具体文件按当前迭代增量创建。
+以下是**后续演进的推荐结构**，用于保持 `apps/web`、`apps/agent-worker` 和 `packages/contracts` 的边界一致，并非当前仓库的逐文件清单。当前 Worker 的四个 P0 工作流位于 `apps/agent-worker/src/learncraft_agent/workflows/`，尚未拆为下述 `route_planner/`、`node_tutor/` 目录，也没有运行 LangGraph 图。
 
 ```text
 apps/
@@ -413,7 +421,7 @@ apps/
       └─ python/
 ```
 
-Web 端的 `planning`、`content` 和 `agent-run` 分别承载路线、内容和异步运行管理。Worker 的 `workflows/` 只保存 LangGraph 工作流；`application/ports/` 声明对 Core API、模型和检索的依赖；`acl/` 负责 Web Core DTO 与 Agent DTO 的防腐转换；第三方具体实现集中在 `infrastructure/`。跨语言接口和事件只通过 `packages/contracts` 共享并进行版本化。
+Web 端的 `planning`、`content` 和 `agent-run` 分别承载路线、内容和异步运行管理。当前 Worker 的 `workflows/` 保存显式 Python 工作流；未来接入 LangGraph 后，图定义可按上方结构拆分。`application/ports/` 声明对 Core API、模型和检索的依赖；`acl/` 负责 Web Core DTO 与 Agent DTO 的防腐转换；第三方具体实现集中在 `infrastructure/`。跨语言接口和事件只通过 `packages/contracts` 共享并进行版本化。
 
 ## 7. 实施不变量
 
@@ -421,7 +429,7 @@ Web 端的 `planning`、`content` 和 `agent-run` 分别承载路线、内容和
 
 1. 所有模型长任务创建 `AgentRun` 并返回可查询的 `agent_run_id`；确定性评分不创建 `AgentRun`。
 2. LLM 输出先经 Pydantic/JSON Schema、业务校验和安全策略，再调用持久化接口；未经校验的 JSON 不得写入 Core。
-3. 首轮和修复阶段的模型可以自主调用 Tavily；主流程最终校验仍不合法时，必须强制调用 Tavily MCP 并重建结果；只有再次通过校验的结果才能持久化，用户侧不展示内部失败或兜底路径。
+3. 各工作流按阶段决定 Tavily 是否开放：前测首轮和最终恢复、后测修复和最终恢复由模型自主决定；路线和内容在最终恢复阶段强制执行 Tavily；所有修复阶段均不开放工具。只有再次通过校验的结果才能持久化，用户侧不展示内部恢复路径。
 4. 每个会产生任务或费用的写操作使用 `Idempotency-Key`；每节点只允许一份成功内容。
 5. Web 的浏览器边界使用 Zod，Worker 的 HTTP、队列和模型输出使用 Pydantic；跨语言只共享 OpenAPI/JSON Schema，不共享 ORM Model。
 6. P0 数据库迁移仍以 Drizzle 为唯一入口；不启用 Alembic 与其竞争同一 PostgreSQL Schema 的迁移所有权。

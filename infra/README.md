@@ -2,11 +2,11 @@
 
 ## Agent 生成相关配置
 
-开发 Compose 会把 `TAVILY_API_KEY`、`TAVILY_QUOTA_REDIS_URL` 和工具预算注入 `agent-celery-worker`。Tavily 使用 Celery Redis 的 DB 0，但通过 `ratelimit:tavily:daily:` 前缀与 Celery Broker key 区分；`TAVILY_DAILY_TOOL_CALL_LIMIT` 默认是 20，`AGENT_TOOL_MAX_CALLS` 固定上限为 3。后者的执行位置是 `apps/agent-worker/src/learncraft_agent/application/services/tool_aware_generator.py`。
+开发 Compose 会把 `TAVILY_API_KEY`、`TAVILY_QUOTA_REDIS_URL` 和工具预算注入 `agent-celery-worker`。Tavily 使用 Celery Redis 的 DB 0，但通过 `ratelimit:tavily:daily:` 前缀与 Celery Broker key 区分；`TAVILY_DAILY_TOOL_CALL_LIMIT` 默认是 20，`AGENT_TOOL_MAX_CALLS` 开发默认是 6，配置层最大值也是 6。工具调用的执行位置是 `apps/agent-worker/src/learncraft_agent/application/services/tool_aware_generator.py`。
 
-`assessment_generate` 的结果由 Worker 通过内部共享密钥提交到 Web；Web 才负责在事务中写入题集表。首次联调前，请在 `infra/.env` 设置 `TAVILY_API_KEY`，并确认 `MODEL_EGRESS_ENABLED=true`、账户存在 active 且 default 的模型连接。没有 Tavily Key 或配额 Redis 时，任务会返回结构化失败，不会静默绕过工具限制。
+`assessment_generate`、`plan_generate`、`card_content_generate` 和 `posttest_generate` 的结果均由 Worker 通过内部共享密钥提交到 Web；Web 才负责在事务中写入业务表。首次联调前，请在 `infra/.env` 设置 `CREDENTIAL_ENCRYPTION_KEY`，确认 `MODEL_EGRESS_ENABLED=true`，并确保账户存在 active 且 default 的模型连接。只有实际调用联网工具时才需要 `TAVILY_API_KEY`；Tavily Key 或配额 Redis 不可用时，工具调用会返回受控错误给模型，不会绕过工具限制。
 
-`compose.yaml` 提供 P0 本地开发与联调基线：PostgreSQL + pgvector、认证限流 Redis、独立的 Celery Redis Broker、MinIO、Web、Agent API、Outbox Dispatcher 与 Celery Worker。Web 默认使用 `next dev` 并挂载前端源码，以支持热更新。它不自动执行 Drizzle 迁移、不启动代码 Runner；配置 `TAVILY_API_KEY`、凭据密钥和模型出网后，可运行 `assessment_generate` 题集工作流。
+`compose.yaml` 提供 P0 本地开发与联调基线：PostgreSQL + pgvector、认证限流 Redis、独立的 Celery Redis Broker、MinIO、Web、Agent API、Outbox Dispatcher 与 Celery Worker。Web 默认使用 `next dev` 并挂载前端源码，以支持热更新。它不自动执行 Drizzle 迁移、不启动代码 Runner；配置凭据密钥和模型出网后，可运行四个已注册的 P0 Agent 工作流。
 Python Agent 的开发源码 `apps/agent-worker/src` 同样会被挂载：`agent-api` 使用 Uvicorn 重载，`agent-dispatcher` 与 `agent-celery-worker` 使用 `watchfiles` 重启各自的子进程。保存 `.py` 文件不需要重启 Docker 容器，也不会自动执行数据库迁移。
 
 `private` 是本地开发服务的共享网络，并不自动将端口开放给宿主机；是否可从 Windows 访问仍只由服务的 `ports` 配置决定。当前 Web、PostgreSQL、MinIO 与 Agent Worker 都绑定到 `127.0.0.1`，只供本机开发调试，不向局域网暴露。
@@ -88,7 +88,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 
 将输出填到 `CREDENTIAL_ENCRYPTION_KEY=`，并保留 `CREDENTIAL_ENCRYPTION_KEY_VERSION=local-v1`。Web 与实际调用生成模型的 Celery Worker 必须使用同一个主密钥和版本；丢失它将无法解密既有用户连接。不要将其写进 Git、浏览器、日志或 Docker 镜像。产品永久不支持用户填写 IP 字面量、localhost、局域网、私有地址或本地 vLLM；保存阶段只接受公网 HTTPS 域名/443。真实调用必须经过 Worker 的 `SafeModelEgressClient`：每次重新解析并校验全部 DNS 结果、以已验证 IP 进行 TCP/CONNECT、保留原域名 TLS SNI、拒绝重定向、限制响应体，并向 `model_connection_egress_audits` 写入不含密钥和请求正文的 30 天审计记录。
 
-本地 `.env` 默认 `MODEL_EGRESS_ENABLED=false`，需要联调 `assessment_generate` 时显式改为 `true`；真实调用只能由 `agent-celery-worker` 使用该客户端，Web、Agent API、Dispatcher 或 Runner 不得直接调用用户 Base URL。
+本地 `.env` 默认 `MODEL_EGRESS_ENABLED=true`（仅用于本地开发联调）；真实调用只能由 `agent-celery-worker` 使用该客户端，Web、Agent API、Dispatcher 或 Runner 不得直接调用用户 Base URL。生产环境必须按生产代理和安全策略单独配置。
 
 ## Redis 限流
 
@@ -102,7 +102,7 @@ Redis 使用 `infra/.env` 中的 `REDIS_PASSWORD` 启动并启用 AOF 持久化�
 
 `agent-dispatcher` 每秒使用 `FOR UPDATE SKIP LOCKED` 领取 `public.outbox_events` 中的 `agent.run.requested`。它将最小载荷投递到 `agent.run`，再标记 Outbox 为 `published`。若 Dispatcher 在“已发消息、未回写数据库”之间中断，事件会重新投递；`agent_run_id` 同时是 Celery `task_id`，Worker 通过 `agent.agent_runs` 的状态与事件序列处理这种至少一次投递。
 
-Celery Worker 固定 `concurrency=1` 与 `prefetch_multiplier=1`。任务软超时为 480 秒、硬超时为 600 秒，Redis 可见性超时为 660 秒；模型 Provider 或 Web 内部服务的可恢复错误最多按配置重试 2 次。`assessment_generate` 每次 AgentRun 最多执行 3 次工具调用，Tavily 每个用户每天默认最多 20 次可见工具调用；其他工作流尚未注册时仍会失败，不会伪造成功结果。
+Celery Worker 固定 `concurrency=1` 与 `prefetch_multiplier=1`。任务软超时为 480 秒、硬超时为 600 秒，Redis 可见性超时为 660 秒；模型请求的可恢复重试次数由 `MODEL_GATEWAY_REQUEST_MAX_RETRIES` 控制，开发示例为 5，生产 Compose 默认是 2；Celery 任务级重试由 `CELERY_TASK_MAX_RETRIES` 单独控制。每个 AgentRun 的工具调用上限由 `AGENT_TOOL_MAX_CALLS` 控制，开发默认和配置上限为 6，生产 Compose 默认是 3；Tavily 每个用户每天默认最多 20 次可见工具调用。当前四个 P0 工作流已注册，其他未支持的 `run_type` 仍会失败，不会伪造成功结果。
 
 可在 Redis Insight 中连接 `127.0.0.1:${CELERY_REDIS_HOST_PORT}`、数据库 `0` 并填写 `CELERY_REDIS_PASSWORD` 查看 Broker。队列内部键统一使用 `learncraft:celery:` 前缀；不要手工删除队列或未确认消息键。
 
