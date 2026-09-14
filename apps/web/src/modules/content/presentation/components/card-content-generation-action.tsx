@@ -31,7 +31,7 @@ export function CardContentGenerationAction({
 }: Readonly<{
   planNodeId: string;
   contentStatus: string;
-  onCompleted: () => void;
+  onCompleted: () => void | Promise<void>;
 }>) {
   const [agentRun, setAgentRun] = useState<CardContentGenerationRun | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,18 +49,27 @@ export function CardContentGenerationAction({
     let active = true;
     let timeoutId: number | undefined;
 
+    const schedulePoll = (): void => {
+      if (active) {
+        timeoutId = window.setTimeout(() => void poll(), POLL_INTERVAL_MS);
+      }
+    };
+
     const poll = async (): Promise<void> => {
       try {
         const latestRun = await getCardContentGenerationRun(activeRunId);
         if (!active) {
           return;
         }
-        setAgentRun(latestRun);
-
         if (latestRun.status === "succeeded") {
-          onCompleted();
+          setErrorMessage(null);
+          await onCompleted();
+          if (active) {
+            setAgentRun(latestRun);
+          }
           return;
         }
+        setAgentRun(latestRun);
         if (latestRun.status === "failed") {
           setErrorMessage(latestRun.error?.message ?? "节点知识内容生成失败，请重新发起。");
           return;
@@ -72,13 +81,12 @@ export function CardContentGenerationAction({
       } catch (error) {
         if (active) {
           setErrorMessage(toDisplayError(error, "节点知识内容任务状态暂时无法读取。"));
+          schedulePoll();
         }
         return;
       }
 
-      if (active) {
-        timeoutId = window.setTimeout(() => void poll(), POLL_INTERVAL_MS);
-      }
+      schedulePoll();
     };
 
     void poll();
@@ -90,6 +98,36 @@ export function CardContentGenerationAction({
       }
     };
   }, [activeRunId, activeRunStatus, onCompleted]);
+
+  useEffect(() => {
+    if (contentStatus !== "generating" || agentRun) {
+      return;
+    }
+
+    let active = true;
+    let timeoutId: number | undefined;
+
+    const pollNode = async (): Promise<void> => {
+      try {
+        await onCompleted();
+      } catch (error) {
+        if (active) {
+          setErrorMessage(toDisplayError(error, "节点知识内容状态暂时无法读取。"));
+        }
+      }
+      if (active) {
+        timeoutId = window.setTimeout(() => void pollNode(), POLL_INTERVAL_MS);
+      }
+    };
+
+    void pollNode();
+    return () => {
+      active = false;
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [agentRun, contentStatus, onCompleted]);
 
   async function handleGenerate(): Promise<void> {
     setErrorMessage(null);
@@ -112,11 +150,11 @@ export function CardContentGenerationAction({
     );
   }
 
-  if (contentStatus === "generating" && !taskIsInFlight) {
+  if (contentStatus === "generating" && !agentRun) {
     return (
       <section className="mt-7 rounded-2xl border border-border/80 bg-background/65 p-5">
         <p className="inline-flex items-center gap-2 font-medium"><LoaderCircle aria-hidden className="size-4 animate-spin text-primary" />节点知识内容正在生成</p>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">任务已在后台执行，请稍后刷新本页查看状态。</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">任务已在后台执行，页面会自动检查完成状态。</p>
       </section>
     );
   }

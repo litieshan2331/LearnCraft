@@ -103,10 +103,9 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
       active = false;
     };
   }, [node?.id]);
-  const refreshNode = useCallback(() => {
-    void getPlanNode(nodeId)
-      .then((nextNode) => setNode(nextNode))
-      .catch(() => undefined);
+  const refreshNode = useCallback(async (): Promise<void> => {
+    const nextNode = await getPlanNode(nodeId);
+    setNode(nextNode);
   }, [nodeId]);
 
   if (error) {
