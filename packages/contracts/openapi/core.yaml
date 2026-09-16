@@ -912,12 +912,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CardContentContext'
+        '400':
+          $ref: '#/components/responses/InternalBadRequest'
         '401':
           $ref: '#/components/responses/InternalAuthenticationFailed'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/InternalNotFound'
         '422':
-          $ref: '#/components/responses/ValidationError'
+          $ref: '#/components/responses/InternalValidationError'
   /internal/v1/agent-runs/{agent_run_id}/card-content-result:
     post:
       tags: [内部接口]
@@ -949,18 +951,44 @@ paths:
                     format: uuid
                   status:
                     type: string
+        '400':
+          $ref: '#/components/responses/InternalBadRequest'
         '401':
           $ref: '#/components/responses/InternalAuthenticationFailed'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/InternalNotFound'
         '422':
-          $ref: '#/components/responses/ValidationError'
-  /internal/v1/agent-runs/{agent_run_id}/results:
+          $ref: '#/components/responses/InternalValidationError'
+  /internal/v1/agent-runs/{agent_run_id}/default-model-connection:
+    get:
+      tags: [内部接口]
+      summary: Worker 读取账户默认模型连接与加密凭据
+      description: 仅允许 Agent Worker 在私有网络中调用。credential 为 AES-256-GCM 密文（AAD 为 learncraft:model-connection:{owner_id}），明文 API Key 只在 Worker 进程内解密使用，不得写入日志、队列或 AgentRun。
+      operationId: get_default_model_connection
+      x-internal: true
+      security:
+        - internalServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/AgentRunId'
+      responses:
+        '200':
+          description: 账户默认模型连接
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultModelConnectionEnvelope'
+        '400':
+          $ref: '#/components/responses/InternalBadRequest'
+        '401':
+          $ref: '#/components/responses/InternalAuthenticationFailed'
+        '404':
+          $ref: '#/components/responses/InternalNotFound'
+  /internal/v1/agent-runs/{agent_run_id}/assessment-result:
     post:
       tags: [内部接口]
-      summary: Worker 回写已校验的 Agent 结果
-      description: 仅允许 Agent Worker 在私有网络中调用，不能映射到浏览器可访问的公网入口。
-      operationId: submit_agent_run_result
+      summary: Worker 回写已校验的前测或后测题集
+      description: 仅允许 Agent Worker 在私有网络中调用，且只接受 assessment_generate 或 posttest_generate 的 AgentRun。所有字段为 snake_case 且不接受额外字段。交叉校验：diagnostic 的 question_count 必须为 10-20 且不得携带 plan_id、plan_node_id、source_card_content_id；post_test 的 question_count 必须为 5-10、必须携带 plan_node_id 与 source_card_content_id 且不得携带 plan_id；questions 长度必须等于 question_count。重复调用按 generation_metadata.agent_run_id 幂等。实现见 apps/web/src/app/internal/v1/agent-runs/[agentRunId]/assessment-result/route.ts。
+      operationId: submit_assessment_result
       x-internal: true
       security:
         - internalServiceToken: []
@@ -971,16 +999,54 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AgentRunResultSubmission'
+              $ref: '#/components/schemas/AssessmentResultSubmission'
       responses:
-        '204':
-          description: 结果已接收
+        '200':
+          description: 题集已幂等持久化
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersistedAssessmentEnvelope'
+        '400':
+          $ref: '#/components/responses/InternalBadRequest'
         '401':
           $ref: '#/components/responses/InternalAuthenticationFailed'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/InternalNotFound'
         '422':
-          $ref: '#/components/responses/ValidationError'
+          $ref: '#/components/responses/InternalValidationError'
+  /internal/v1/agent-runs/{agent_run_id}/plan-result:
+    post:
+      tags: [内部接口]
+      summary: Worker 回写已校验的学习路线
+      description: 仅允许 Agent Worker 在私有网络中调用，且只接受 plan_generate 的 AgentRun（target_type 必须是 learning_goal 且 target_id 与 goal_id 一致）。所有字段为 snake_case 且不接受额外字段。nodes 必须为 6-12 项，node_key 与 ordinal 唯一、ordinal 从 1 连续编号、前置节点必须存在于本路线且不能自依赖、依赖图必须无环；输入快照中的 learner_profile.profile_version 必须为正整数。重复调用按 generation_metadata.agent_run_id 幂等。实现见 apps/web/src/app/internal/v1/agent-runs/[agentRunId]/plan-result/route.ts。
+      operationId: submit_plan_result
+      x-internal: true
+      security:
+        - internalServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/AgentRunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearningPlanResultSubmission'
+      responses:
+        '200':
+          description: 学习路线已幂等持久化
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersistedLearningPlanEnvelope'
+        '400':
+          $ref: '#/components/responses/InternalBadRequest'
+        '401':
+          $ref: '#/components/responses/InternalAuthenticationFailed'
+        '404':
+          $ref: '#/components/responses/InternalNotFound'
+        '422':
+          $ref: '#/components/responses/InternalValidationError'
 components:
   securitySchemes:
     sessionCookie:
@@ -991,8 +1057,8 @@ components:
     internalServiceToken:
       type: apiKey
       in: header
-      name: X-Internal-Service-Token
-      description: 仅用于 Web 与 Agent Worker 的私有服务认证。
+      name: X-LearnCraft-Internal-Secret
+      description: 仅用于 Web 与 Agent Worker 的私有服务认证；取值来自环境变量 INTERNAL_SERVICE_SECRET，Web 侧使用长度比较与 timingSafeEqual 校验。
   headers:
     SessionCookie:
       description: 不透明 Session Cookie。生产环境必须带 Secure 与 HttpOnly 属性。
@@ -1083,11 +1149,29 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     InternalAuthenticationFailed:
-      description: 内部服务身份校验失败。
+      description: 内部服务身份校验失败（UNAUTHORIZED）。
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: '#/components/schemas/InternalErrorResponse'
+    InternalBadRequest:
+      description: 请求参数或请求体不合法（INVALID_AGENT_RUN_ID、INVALID_JSON）。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InternalErrorResponse'
+    InternalNotFound:
+      description: 目标资源不存在（AGENT_RUN_NOT_FOUND、DEFAULT_MODEL_CONNECTION_NOT_FOUND、CARD_CONTENT_CONTEXT_NOT_FOUND 等）。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InternalErrorResponse'
+    InternalValidationError:
+      description: 请求体不符合契约（VALIDATION_ERROR 等），field_errors 为校验问题列表。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InternalErrorResponse'
     NotFound:
       description: 资源不存在或当前用户无权读取。
       content:
@@ -2314,6 +2398,8 @@ components:
           type: object
           additionalProperties: true
     AgentRunResultSubmission:
+      deprecated: true
+      description: 预留的通用结果容器，当前没有任何接口实现它。实际回写请使用 assessment-result、plan-result、card-content-result 三个内部端点；保留该 schema 仅为记录早期设计，不得据此实现客户端。
       type: object
       additionalProperties: false
       required: [result_type, result, trace_id]
@@ -2370,3 +2456,252 @@ components:
           type: string
         message:
           type: string
+    InternalErrorResponse:
+      type: object
+      additionalProperties: true
+      required: [error]
+      description: 内部接口（/internal/v1）的错误响应体，与公共 API 的对象信封不同：error 是稳定的字符串错误码，校验失败时通过 field_errors 返回 Zod 问题列表。
+      properties:
+        error:
+          type: string
+          description: 稳定错误码，例如 UNAUTHORIZED、INVALID_AGENT_RUN_ID、INVALID_JSON、VALIDATION_ERROR、AGENT_RUN_NOT_FOUND、DEFAULT_MODEL_CONNECTION_NOT_FOUND、CARD_CONTENT_CONTEXT_NOT_FOUND。
+        field_errors:
+          type: array
+          description: 仅在校验失败时出现。
+          items:
+            type: object
+            additionalProperties: true
+    DefaultModelConnectionEnvelope:
+      type: object
+      additionalProperties: false
+      required: [owner_id, connection_id, base_url, model_id, credential]
+      properties:
+        owner_id:
+          type: string
+          format: uuid
+        connection_id:
+          type: string
+          format: uuid
+        base_url:
+          type: string
+          maxLength: 2048
+        model_id:
+          type: string
+          maxLength: 255
+        credential:
+          $ref: '#/components/schemas/EncryptedModelCredential'
+    EncryptedModelCredential:
+      type: object
+      additionalProperties: false
+      required: [ciphertext_base64, iv_base64, auth_tag_base64, encryption_key_version]
+      description: AES-256-GCM 密文的三段 Base64 编码与密钥版本；AAD 固定为 learncraft:model-connection:{owner_id}，加密与解密由 Web 与 Agent Worker 共用同一份实现。
+      properties:
+        ciphertext_base64:
+          type: string
+          minLength: 1
+        iv_base64:
+          type: string
+          minLength: 1
+          description: 12 字节随机 IV 的 Base64 编码。
+        auth_tag_base64:
+          type: string
+          minLength: 1
+          description: 16 字节认证标签的 Base64 编码（独立存储，不与密文拼接）。
+        encryption_key_version:
+          type: string
+          minLength: 1
+          maxLength: 50
+    AssessmentResultSubmission:
+      type: object
+      additionalProperties: false
+      required: [kind, question_count, difficulty, schema_version, questions]
+      description: 前测与后测共用的回写载荷；skill_tags 与 max_score 在服务端有默认值，questions 长度必须等于 question_count。
+      properties:
+        kind:
+          type: string
+          enum:
+            - diagnostic
+            - post_test
+        question_count:
+          type: integer
+          minimum: 5
+          maximum: 20
+        difficulty:
+          type: string
+          enum:
+            - normal
+            - hard
+        schema_version:
+          type: string
+          enum:
+            - assessment.single_choice.v1
+        plan_id:
+          type: string
+          format: uuid
+          nullable: true
+        plan_node_id:
+          type: string
+          format: uuid
+          nullable: true
+        source_card_content_id:
+          type: string
+          format: uuid
+          nullable: true
+        questions:
+          type: array
+          minItems: 5
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/AssessmentResultQuestion'
+        generation_metadata:
+          type: object
+          additionalProperties: true
+          default: {}
+    AssessmentResultQuestion:
+      type: object
+      additionalProperties: false
+      required: [prompt, options, answer_key, explanation]
+      description: answer_key 必须引用 options 中已存在的 key；skill_tags 默认空数组，max_score 默认 1。
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        options:
+          type: array
+          minItems: 2
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/AssessmentOption'
+        answer_key:
+          type: string
+          pattern: '^[A-F]$'
+        explanation:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        skill_tags:
+          type: array
+          maxItems: 10
+          default: []
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+        max_score:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 100
+          default: 1
+    LearningPlanResultSubmission:
+      type: object
+      additionalProperties: false
+      required: [schema_version, title, summary, nodes]
+      description: 学习路线回写载荷；nodes 必须为 6-12 项且 ordinal 从 1 连续编号。
+      properties:
+        schema_version:
+          type: string
+          enum:
+            - learning_plan.v1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        nodes:
+          type: array
+          minItems: 6
+          maxItems: 12
+          items:
+            $ref: '#/components/schemas/LearningPlanResultNode'
+        generation_metadata:
+          type: object
+          additionalProperties: true
+          default: {}
+    LearningPlanResultNode:
+      type: object
+      additionalProperties: false
+      required: [node_key, ordinal, title, node_brief, learning_objective, rationale, difficulty, estimated_minutes, completion_criteria]
+      description: prerequisite_node_keys 默认空数组、最多 11 项；同一路线内 node_key 与 ordinal 必须唯一，前置节点必须存在且不能自依赖，依赖图必须无环。
+      properties:
+        node_key:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '^[a-z][a-z0-9_]*$'
+        ordinal:
+          type: integer
+          minimum: 1
+          maximum: 12
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        node_brief:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        learning_objective:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        rationale:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        difficulty:
+          type: integer
+          minimum: 1
+          maximum: 5
+        estimated_minutes:
+          type: integer
+          minimum: 5
+          maximum: 1440
+        prerequisite_node_keys:
+          type: array
+          maxItems: 11
+          default: []
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+            pattern: '^[a-z][a-z0-9_]*$'
+        completion_criteria:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1000
+    PersistedAssessmentEnvelope:
+      type: object
+      additionalProperties: false
+      required: [assessment_id, status, question_count]
+      properties:
+        assessment_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          minLength: 1
+          maxLength: 30
+        question_count:
+          type: integer
+          minimum: 1
+          maximum: 20
+    PersistedLearningPlanEnvelope:
+      type: object
+      additionalProperties: false
+      required: [learning_plan_id, node_count]
+      properties:
+        learning_plan_id:
+          type: string
+          format: uuid
+        node_count:
+          type: integer
+          minimum: 6
+          maximum: 12
