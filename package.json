@@ -15,6 +15,11 @@
     "typecheck:web": "pnpm --filter @learncraft/web exec tsc --noEmit",
     "db:generate": "pnpm --filter @learncraft/web db:generate",
     "db:migrate": "pnpm --filter @learncraft/web db:migrate",
-    "db:check": "pnpm --filter @learncraft/web db:check"
+    "db:check": "pnpm --filter @learncraft/web db:check",
+    "build:agent-worker": "pnpm --filter @learncraft/agent-worker-ts build",
+    "test:agent-worker": "pnpm --filter @learncraft/agent-worker-ts test",
+    "typecheck:agent-worker": "pnpm --filter @learncraft/agent-worker-ts typecheck",
+    "test:shared": "pnpm --filter @learncraft/security-primitives test",
+    "typecheck:shared": "pnpm --filter @learncraft/security-primitives typecheck"
   }
 }

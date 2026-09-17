@@ -313,7 +313,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       # 队列 Redis 与认证 Redis 物理隔离；键前缀与 Celery 的 learncraft:celery: 不共用。
       AGENT_QUEUE_REDIS_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
-      AGENT_QUEUE_PREFIX: ${AGENT_QUEUE_PREFIX:-learncraft:agent-queue:}
+      AGENT_QUEUE_PREFIX: ${AGENT_QUEUE_PREFIX:-learncraft:agent-queue}
       AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-agent.run}
       AGENT_WORKER_CONCURRENCY: ${AGENT_WORKER_CONCURRENCY:-1}
       AGENT_JOB_LOCK_DURATION_MS: ${AGENT_JOB_LOCK_DURATION_MS:-660000}
@@ -366,7 +366,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       AGENT_QUEUE_REDIS_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
-      AGENT_QUEUE_PREFIX: ${AGENT_QUEUE_PREFIX:-learncraft:agent-queue:}
+      AGENT_QUEUE_PREFIX: ${AGENT_QUEUE_PREFIX:-learncraft:agent-queue}
       AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-agent.run}
       # 多实例必须各自唯一，否则会互相覆盖 Outbox 状态。
       OUTBOX_DISPATCHER_ID: ${OUTBOX_DISPATCHER_ID_TS:-agent-dispatcher-ts}

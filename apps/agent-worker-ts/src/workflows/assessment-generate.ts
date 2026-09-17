@@ -18,9 +18,12 @@
  * 本实现把跨阶段累计的 usage 通过返回值交给调用方，调用方必须写入 agent_runs 的 token 列，
  * 使用量与成本可观测。因此 outputSummary 保持 Python 的 6 键，usage 单独返回。
  *
+ * 阶段控制流（首轮 → 修复、恢复消息顺序、错误取舍）已抽到 question-set-pipeline.ts，
+ * 与 posttest_generate 共用同一份实现。
+ *
  * **与 Python 现状的已知差异（阶段 5 补齐）：**
  * 1. 未接入 Tavily 远程 MCP，首轮与修复阶段都不提供工具，因此 tool_call_count 恒为 0、
- *    search_extract 恒为 not_used，且三阶段恢复只实现 initial 与 repair，缺少 tavily_recovery；
+ *    search_extract 恒为 not_used，且共享管线只实现 initial 与 repair，缺少 tavily_recovery；
  * 2. system 提示词用“不提供联网工具”替换了 Python 的两句 Tavily 指令。
  * 上述差异不影响前两阶段的等价性。
  *
@@ -37,16 +40,13 @@ import type { AgentWorkflow } from '../application/commands/execute-agent-run.js
 import type { ModelCredentialDecryptor } from '../infrastructure/llm/credential-decryptor.js';
 import {
   ModelGatewayError,
-  type ModelCompletionRequest,
-  type ModelCompletionResponse,
   type ModelMessage,
 } from '../infrastructure/llm/model-gateway.js';
 import type { DefaultModelConnectionEnvelope, PersistedAssessmentEnvelope } from '../schemas/core-internal.js';
 import {
-  AssessmentQuestionSetSchema,
-  extractJsonText,
-  type AssessmentQuestionSet,
-} from '../schemas/assessment-question-set.js';
+  runQuestionSetStages,
+  type QuestionSetModelGatewayPort,
+} from './question-set-pipeline.js';
 
 const REPAIR_INSTRUCTION =
   '请修复题集 JSON，只返回合法 schema_version 和 questions；每道题必须严格包含 prompt、options、answer_key、explanation、skill_tags、max_score，options 必须是 {key,text} 对象数组，answer_key 必须引用已有选项。';
@@ -94,10 +94,8 @@ export interface AssessmentInternalPort {
   persistAssessment(agentRunId: string, payload: Record<string, unknown>): Promise<PersistedAssessmentEnvelope>;
 }
 
-/** 模型网关端口：工作流只依赖 complete。 */
-export interface AssessmentModelGatewayPort {
-  complete(request: ModelCompletionRequest): Promise<ModelCompletionResponse>;
-}
+/** 模型网关端口：与共享管线使用同一个最小端口，保留原名供调用方与测试使用。 */
+export type AssessmentModelGatewayPort = QuestionSetModelGatewayPort;
 
 export interface AssessmentGenerationDeps {
   internalClient: AssessmentInternalPort;
@@ -122,48 +120,6 @@ function buildUserPrompt(input: AssessmentGenerationInput): string {
     '难度：' + input.difficulty,
     '请生成恰好 ' + String(input.question_count) + ' 道题，每题包含 prompt、options、answer_key、explanation、skill_tags、max_score。',
   ].join('\n');
-}
-
-/** 构造修复请求：先追加上一轮原文的 assistant 消息，再追加修复指令（与 Python 顺序一致）。 */
-function buildRecoveryMessages(
-  baseMessages: readonly ModelMessage[],
-  previousContent: string,
-  instruction: string,
-): ModelMessage[] {
-  return [
-    ...baseMessages,
-    { role: 'assistant', content: previousContent },
-    { role: 'system', content: instruction },
-  ];
-}
-
-/** 解析并校验题集；失败时返回字段路径，且绝不记录模型正文。 */
-function validateQuestionSet(
-  content: string,
-  expectedQuestionCount: number,
-): { value: AssessmentQuestionSet | null; paths: string[] } {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(extractJsonText(content));
-  } catch {
-    return { value: null, paths: ['response.json'] };
-  }
-  const parsed = AssessmentQuestionSetSchema.safeParse(raw);
-  if (!parsed.success) {
-    const paths: string[] = [];
-    for (const issue of parsed.error.issues) {
-      const path = issue.path.map((segment) => String(segment)).join('.');
-      const effective = path.length > 0 ? path : 'response.json';
-      if (!paths.includes(effective)) {
-        paths.push(effective);
-      }
-    }
-    return { value: null, paths: paths.length > 0 ? paths : ['response.json'] };
-  }
-  if (parsed.data.questions.length !== expectedQuestionCount) {
-    return { value: null, paths: ['questions'] };
-  }
-  return { value: parsed.data, paths: [] };
 }
 
 /** 执行一次前测生成；失败时抛出带稳定错误码的 ModelGatewayError 或 CoreInternalClientError。 */
@@ -195,71 +151,17 @@ export async function runAssessmentGenerate(
     { role: 'user', content: buildUserPrompt(generationInput) },
   ];
 
-  // 阶段顺序与 Python 一致；tavily_recovery 因未接入 MCP 而暂缺。
-  const stages = ['initial', 'repair'] as const;
-  let questionSet: AssessmentQuestionSet | null = null;
-  let recoveryStage: (typeof stages)[number] = 'initial';
-  let previousContent = '';
-  let paths: string[] = [];
-  let lastError: ModelGatewayError | null = null;
-  let inputTokens = 0;
-  let outputTokens = 0;
-
-  for (const stage of stages) {
-    const messages =
-      stage === 'initial'
-        ? baseMessages
-        : buildRecoveryMessages(baseMessages, previousContent, REPAIR_INSTRUCTION);
-    try {
-      const response = await deps.gateway.complete({
-        agentRunId: input.runId,
-        connection: modelConnection,
-        messages,
-        responseFormat: 'json_object',
-      });
-      inputTokens += response.usage.inputTokens;
-      outputTokens += response.usage.outputTokens;
-
-      // 与 Python 的 _complete 一致：返回工具调用或没有正文都算结构错误。
-      if ((response.message.toolCalls?.length ?? 0) > 0 || !response.message.content) {
-        throw new ModelGatewayError(
-          'MODEL_STRUCTURED_OUTPUT_INVALID',
-          '模型没有返回可校验的结构化文本结果。',
-          false,
-          ['response.content_missing'],
-        );
-      }
-
-      previousContent = response.message.content;
-      const validated = validateQuestionSet(previousContent, generationInput.question_count);
-      if (validated.value !== null) {
-        questionSet = validated.value;
-        recoveryStage = stage;
-        break;
-      }
-      paths = validated.paths;
-    } catch (error) {
-      if (error instanceof ModelGatewayError) {
-        lastError = error;
-        paths = error.validationPaths.length > 0 ? [...error.validationPaths] : paths;
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  if (questionSet === null) {
-    if (lastError !== null && lastError.code !== 'MODEL_STRUCTURED_OUTPUT_INVALID') {
-      throw lastError;
-    }
-    const finalPaths = paths.length > 0 ? paths : ['response.json'];
-    throw new ModelGatewayError(
-      'MODEL_STRUCTURED_OUTPUT_INVALID',
-      '题集结果经过恢复后仍不符合合同。校验路径: ' + finalPaths.slice(0, 8).join(', '),
-      false,
-      finalPaths.slice(0, 8),
-    );
-  }
+  // 阶段顺序、恢复消息与错误取舍都在共享管线里，与 posttest_generate 使用同一份实现。
+  const outcome = await runQuestionSetStages({
+    gateway: deps.gateway,
+    runId: input.runId,
+    connection: modelConnection,
+    baseMessages,
+    expectedQuestionCount: generationInput.question_count,
+    repairInstruction: REPAIR_INSTRUCTION,
+  });
+  const questionSet = outcome.questionSet;
+  const recoveryStage = outcome.recoveryStage;
 
   const persisted = await deps.internalClient.persistAssessment(input.runId, {
     kind: generationInput.kind,
@@ -293,7 +195,7 @@ export async function runAssessmentGenerate(
       recovery_stage: recoveryStage,
       model_id: connection.model_id,
     },
-    usage: { inputTokens, outputTokens },
+    usage: outcome.usage,
   };
 }
 

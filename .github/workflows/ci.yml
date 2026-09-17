@@ -1,0 +1,160 @@
+# LearnCraft 持续集成。
+# 触发：推送到 main、所有拉取请求，以及手动触发。
+# 覆盖内容：
+# - TypeScript 工作区：共享安全原语、Agent Worker（类型检查、单元测试、esbuild 打包）、Web（类型检查、规范、测试）。
+# - Python Agent：ruff 规范与 pytest 单元测试。
+# - 编排文件：compose YAML 解析与生产编排的配置展开。
+# - 容器镜像：三个生产 Dockerfile 的构建验证（只构建，不推送）。
+# 说明：需要真实数据库、Redis 与模型服务的集成用例由环境变量开关控制，CI 中自动跳过。
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    name: TypeScript 工作区
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 共享安全原语类型检查
+        run: pnpm --filter @learncraft/security-primitives typecheck
+
+      - name: 共享安全原语测试
+        run: pnpm --filter @learncraft/security-primitives test
+
+      - name: Agent Worker 类型检查
+        run: pnpm --filter @learncraft/agent-worker-ts typecheck
+
+      - name: Agent Worker 测试
+        run: pnpm --filter @learncraft/agent-worker-ts test
+
+      - name: Agent Worker 打包
+        run: pnpm --filter @learncraft/agent-worker-ts build
+
+      - name: Web 类型检查
+        run: pnpm --filter @learncraft/web exec tsc --noEmit
+
+      - name: Web 代码规范
+        run: pnpm --filter @learncraft/web lint
+
+      - name: Web 测试
+        run: pnpm --filter @learncraft/web test
+
+  python:
+    name: Python Agent
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/agent-worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: 0.11.29
+          enable-cache: true
+          cache-dependency-glob: apps/agent-worker/uv.lock
+
+      - name: 安装依赖
+        run: uv sync --frozen
+
+      - name: 代码规范
+        run: uv run ruff check .
+
+      - name: 测试
+        run: uv run pytest -q
+
+  compose:
+    name: 编排文件校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装 PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: 解析所有 compose 文件
+        run: |
+          python - <<'PY'
+          import glob
+          import yaml
+
+          for path in sorted(glob.glob("infra/*.yaml")):
+              with open(path, encoding="utf-8") as handle:
+                  document = yaml.safe_load(handle)
+              services = sorted((document or {}).get("services", {}))
+              print(f"{path}: {services}")
+          PY
+
+      - name: 生成占位环境变量
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+
+          # 生产编排里的必填变量都用占位值填充，仅用于验证配置能否展开。
+          text = pathlib.Path("infra/compose.production.yaml").read_text(encoding="utf-8")
+          names = sorted(set(re.findall(r"\$\{([A-Z][A-Z0-9_]*)", text)))
+          pathlib.Path("infra/.env.ci").write_text(
+              "".join(f"{name}=ci-placeholder\n" for name in names), encoding="utf-8"
+          )
+          print(f"{len(names)} 个变量已生成占位值")
+          PY
+
+      - name: 校验生产编排
+        run: docker compose -f infra/compose.production.yaml --env-file infra/.env.ci config --quiet
+
+      - name: 校验本地编排
+        run: docker compose -f infra/compose.yaml config --quiet
+
+  images:
+    name: 镜像构建
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile:
+          - web.Dockerfile
+          - agent-worker.Dockerfile
+          - agent-worker-ts.Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/${{ matrix.dockerfile }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.dockerfile }}
+          cache-to: type=gha,scope=${{ matrix.dockerfile }},mode=max

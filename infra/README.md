@@ -6,7 +6,7 @@
 
 `assessment_generate`、`plan_generate`、`card_content_generate` 和 `posttest_generate` 的结果均由 Worker 通过内部共享密钥提交到 Web；Web 才负责在事务中写入业务表。首次联调前，请在 `infra/.env` 设置 `CREDENTIAL_ENCRYPTION_KEY`，确认 `MODEL_EGRESS_ENABLED=true`，并确保账户存在 active 且 default 的模型连接。只有实际调用联网工具时才需要 `TAVILY_API_KEY`；Tavily Key 或配额 Redis 不可用时，工具调用会返回受控错误给模型，不会绕过工具限制。
 
-`compose.yaml` 提供 P0 本地开发与联调基线：PostgreSQL + pgvector、认证限流 Redis、独立的 Celery Redis Broker、MinIO、Web、Agent API、Outbox Dispatcher 与 Celery Worker。Web 默认使用 `next dev` 并挂载前端源码，以支持热更新。它不自动执行 Drizzle 迁移、不启动代码 Runner；配置凭据密钥和模型出网后，可运行四个已注册的 P0 Agent 工作流。
+`compose.yaml` 提供 P0 本地开发与联调基线：PostgreSQL + pgvector、认证限流 Redis、独立的 Celery Redis Broker、MinIO、Web、Agent API、Python 侧的 Outbox Dispatcher 与 Celery Worker，以及 TypeScript 侧的 `agent-dispatcher-ts` 与 `agent-worker-ts`。两套运行时通过 `AGENT_RUNTIME_ROUTES` 划分 `run_type` 归属：本地默认留空，全部由 Python 领取（等价于未迁移状态）。Web 默认使用 `next dev` 并挂载前端源码，以支持热更新。它不自动执行 Drizzle 迁移、不启动代码 Runner；配置凭据密钥和模型出网后，可运行四个已注册的 P0 Agent 工作流。
 Python Agent 的开发源码 `apps/agent-worker/src` 同样会被挂载：`agent-api` 使用 Uvicorn 重载，`agent-dispatcher` 与 `agent-celery-worker` 使用 `watchfiles` 重启各自的子进程。保存 `.py` 文件不需要重启 Docker 容器，也不会自动执行数据库迁移。
 
 `private` 是本地开发服务的共享网络，并不自动将端口开放给宿主机；是否可从 Windows 访问仍只由服务的 `ports` 配置决定。当前 Web、PostgreSQL、MinIO 与 Agent Worker 都绑定到 `127.0.0.1`，只供本机开发调试，不向局域网暴露。
@@ -102,13 +102,20 @@ Redis 使用 `infra/.env` 中的 `REDIS_PASSWORD` 启动并启用 AOF 持久化�
 
 `agent-dispatcher` 每秒使用 `FOR UPDATE SKIP LOCKED` 领取 `public.outbox_events` 中的 `agent.run.requested`。它将最小载荷投递到 `agent.run`，再标记 Outbox 为 `published`。若 Dispatcher 在“已发消息、未回写数据库”之间中断，事件会重新投递；`agent_run_id` 同时是 Celery `task_id`，Worker 通过 `agent.agent_runs` 的状态与事件序列处理这种至少一次投递。
 
-Celery Worker 固定 `concurrency=1` 与 `prefetch_multiplier=1`。任务软超时为 480 秒、硬超时为 600 秒，Redis 可见性超时为 660 秒；模型请求的可恢复重试次数由 `MODEL_GATEWAY_REQUEST_MAX_RETRIES` 控制，开发示例为 5，生产 Compose 默认是 2；Celery 任务级重试由 `CELERY_TASK_MAX_RETRIES` 单独控制。每个 AgentRun 的工具调用上限由 `AGENT_TOOL_MAX_CALLS` 控制，开发默认和配置上限为 6，生产 Compose 默认是 3；Tavily 每个用户每天默认最多 20 次可见工具调用。当前四个 P0 工作流已注册，其他未支持的 `run_type` 仍会失败，不会伪造成功结果。
+Celery Worker 固定 `concurrency=1` 与 `prefetch_multiplier=1`。任务软超时为 480 秒、硬超时为 600 秒，Redis 可见性超时为 660 秒；模型请求的可恢复重试次数由 `MODEL_GATEWAY_REQUEST_MAX_RETRIES` 控制，开发示例为 5，生产 Compose 默认是 2；Celery 任务级重试由 `CELERY_TASK_MAX_RETRIES` 单独控制。每个 AgentRun 的工具调用上限由 `AGENT_TOOL_MAX_CALLS` 控制，开发默认和配置上限为 6，生产 Compose 默认是 3；Tavily 每个用户每天默认最多 20 次可见工具调用。当前四个 P0 工作流已注册，其他未支持的 `run_type` 仍会失败，不会伪造成功结果。TypeScript 侧（`agent-worker-ts`）同样已注册这四个 `run_type`，两侧通过 `AGENT_RUNTIME_ROUTES` 划分归属，同一个 AgentRun 不会被两个运行时同时领取。
 
 可在 Redis Insight 中连接 `127.0.0.1:${CELERY_REDIS_HOST_PORT}`、数据库 `0` 并填写 `CELERY_REDIS_PASSWORD` 查看 Broker。队列内部键统一使用 `learncraft:celery:` 前缀；不要手工删除队列或未确认消息键。
 
 ## 生产 Compose
 
-`compose.production.yaml` 是独立编排文件，只启动 Web、Agent API、Dispatcher 与 Celery Worker，不创建 PostgreSQL、Redis 或 MinIO。本地开发不要启动它。
+`compose.production.yaml` 是独立编排文件，只启动 Web、Agent API、Python 侧的 Dispatcher 与 Celery Worker，以及 TypeScript 侧的 `agent-dispatcher-ts` 与 `agent-worker-ts`，不创建 PostgreSQL、Redis 或 MinIO。本地开发不要启动它。
+
+TypeScript 侧的两个服务共用 `infra/docker/agent-worker-ts.Dockerfile` 构建：`agent-worker-ts` 默认入口是 `dist/worker.js`，`agent-dispatcher-ts` 覆盖 `command` 为 `dist/dispatcher.js`。与 Python 侧一致，Worker 接入 `private` 与 `egress` 两个网络、宽限期 11 分钟；Dispatcher 只接入 `private`。除通用的 `DATABASE_URL`、`INTERNAL_SERVICE_SECRET`、`CREDENTIAL_ENCRYPTION_KEY` 外，TypeScript 侧额外要求：
+
+- `AGENT_QUEUE_REDIS_URL`：BullMQ 连接串，必须同时被 `agent-dispatcher-ts` 与 `agent-worker-ts` 指向同一个 Redis 实例与 db；生产环境不要直接复用 Celery 的可见性超时假设。
+- `AGENT_QUEUE_NAME` / `AGENT_QUEUE_PREFIX`：队列名与 Redis 键前缀，实际键名为 `<前缀>:<队列名>`，必须与 Celery 的 `learncraft:celery:` 前缀区分开。
+- `AGENT_WORKER_CONCURRENCY`：BullMQ Worker 并发，按 `docs/09-全栈TypeScript迁移方案.md` 的容量分级设置，不要与 Celery 的 `CELERY_WORKER_CONCURRENCY` 混用。
+- `AGENT_RUNTIME_ROUTES`：Python 与 TypeScript 两个 Dispatcher 必须读到**同一份**映射，例如 `{"assessment_generate":"ts"}`；映射为 `ts` 的 `run_type` 只由 TypeScript 领取，其余只由 Python 领取。回滚时清空该变量并重启两个 Dispatcher 即可，不需要改数据库。
 
 部署服务器时复制统一模板 `.env.example` 为被 Git 忽略的 `.env.production`，删除或替换其中的本地默认值，填写外部 PostgreSQL、认证 Redis、Celery Redis、Provider Secret 与 `MODEL_EGRESS_PROXY_URL`，再执行：
 
@@ -117,6 +124,19 @@ docker compose -f infra/compose.production.yaml --env-file infra/.env.production
 ```
 
 首版可以使用受管 Redis 或单 Redis 加备份。未来 Celery Redis 切换 Sentinel 时修改 `CELERY_BROKER_URL` 与 `CELERY_BROKER_MASTER_NAME` 即可；认证 Redis 的 Sentinel 连接器尚未实现，切换前需要单独确认并实现。生产中的 `MODEL_EGRESS_PROXY_URL` 必须是受控 HTTP CONNECT 代理；它和云防火墙均须禁止私网、云 metadata、非 443 与除 Worker 外的应用出网。Compose 的 `egress` 网络不是防火墙，不能替代这些部署侧规则。
+
+## 持续集成
+
+`.github/workflows/ci.yml` 在推送到 `main`、所有拉取请求与手动触发时运行四个作业，本地可用同名命令复现：
+
+| 作业 | 覆盖内容 | 本地等价命令 |
+| --- | --- | --- |
+| TypeScript 工作区 | 共享安全原语与 Agent Worker 的类型检查、单元测试、esbuild 打包，Web 的类型检查、规范与测试 | `pnpm --filter <包名> typecheck\|test\|build` |
+| Python Agent | ruff 规范与 pytest 单元测试 | `uv run ruff check .`、`uv run pytest -q`（在 `apps/agent-worker`） |
+| 编排文件校验 | 解析 `infra/*.yaml` 并用占位值展开 `compose.production.yaml` | `docker compose -f infra/compose.yaml config --quiet` |
+| 镜像构建 | 用三个生产 Dockerfile 各构建一次镜像，只构建不推送 | `docker compose -f infra/compose.production.yaml build` |
+
+需要真实数据库、Redis 与模型服务的集成用例由环境变量开关控制，CI 中自动跳过；它们只在本地按需执行。镜像构建作业是 Dockerfile 改动的唯一自动验证手段，改动 `infra/docker/` 后请等它通过再合并。
 
 ## VS Code 查看 PostgreSQL
 

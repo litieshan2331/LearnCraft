@@ -1,8 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    // 本包以 TypeScript 源码形式被 Web（Turbopack）与 Agent Worker（esbuild）消费，
+    // 两者都在打包阶段解析依赖，因此使用 bundler 解析：包内相对导入不带扩展名。
+    // 注意：源码不能直接被 Node 以 ESM 方式加载，需要消费方打包。
+    "moduleResolution": "bundler",
     "lib": [
       "ES2023"
     ],

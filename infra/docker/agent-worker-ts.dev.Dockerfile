@@ -15,10 +15,12 @@ WORKDIR /app
 
 # 仅复制依赖描述文件，使源码改动不会使依赖安装层失效。
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/package.json
 COPY apps/agent-worker-ts/package.json apps/agent-worker-ts/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/security-primitives/package.json packages/security-primitives/package.json
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --filter @learncraft/agent-worker-ts...
 
 WORKDIR /app/apps/agent-worker-ts
 

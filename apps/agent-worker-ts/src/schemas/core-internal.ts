@@ -11,7 +11,7 @@
  * 导出：
  * - EncryptedModelCredentialSchema / DefaultModelConnectionEnvelopeSchema
  * - PersistedAssessmentEnvelopeSchema / PersistedLearningPlanEnvelopeSchema
- * - CardContentContextEnvelopeSchema / PersistedCardContentEnvelopeSchema
+ * - CardContentContextEnvelopeSchema / CardContentPitfallDebugSchema / PersistedCardContentEnvelopeSchema
  */
 
 import { z } from 'zod';
@@ -50,13 +50,22 @@ export const PersistedLearningPlanEnvelopeSchema = z
   })
   .strict();
 
+/** 与 Web 路由 card-content-context 的 pitfallDebugSchema 完全一致：strict 且三个字段都必填。 */
+export const CardContentPitfallDebugSchema = z
+  .object({
+    title: z.string().min(1).max(300),
+    cause: z.string().min(1).max(2_000),
+    fix: z.string().min(1).max(2_000),
+  })
+  .strict();
+
 export const CardContentContextEnvelopeSchema = z
   .object({
     plan_node_id: z.uuid(),
     card_content_id: z.uuid(),
     foundation: z.string().min(1).max(12_000),
     worked_example: z.record(z.string(), z.unknown()),
-    pitfalls_debug: z.array(z.record(z.string(), z.string())).min(1),
+    pitfalls_debug: z.array(CardContentPitfallDebugSchema).min(1),
     teaching_memory: z.record(z.string(), z.unknown()),
   })
   .strict();

@@ -14,7 +14,7 @@ import {
   CredentialCryptoConfigurationError,
   decryptCredential,
   encryptCredential,
-} from "../src/credential-crypto.js";
+} from "../src/credential-crypto";
 
 const previousKey = process.env.CREDENTIAL_ENCRYPTION_KEY;
 const previousKeyVersion = process.env.CREDENTIAL_ENCRYPTION_KEY_VERSION;

@@ -11,4 +11,4 @@ export {
   decryptCredentialWithKey,
   encryptCredential,
   type EncryptedCredential,
-} from "./credential-crypto.js";
+} from "./credential-crypto";

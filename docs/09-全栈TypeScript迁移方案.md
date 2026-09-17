@@ -199,10 +199,11 @@ Dispatcher（灰度期：Python 与 TS 各一个，按 run_type 过滤领取）
 
 | 缺口 | 现状 | 迁移必须补齐 |
 | --- | --- | --- |
-| CI | 无 `.github/`、无 `.gitlab-ci.yml` | TS Worker 的 lint/typecheck/test/build 流水线 + 契约破坏性变更检查 |
+| CI | 无 `.github/`、无 `.gitlab-ci.yml` | TS Worker 的 lint/typecheck/test/build 流水线 + 契约破坏性变更检查（**已落地**：`.github/workflows/ci.yml` 覆盖 TypeScript 工作区、Python Agent、编排文件校验与三个生产镜像构建；契约破坏性变更检查仍未做） |
 | 共享 tsconfig | 只有 `apps/web/tsconfig.json` | TS Worker 自己的严格 tsconfig |
 | 测试配置 | 没有 `vitest.config.*`，依赖默认发现规则 | Worker 侧显式配置 |
 | 包导出 | `@learncraft/web` 与 `@learncraft/contracts` 都是 `private` 且**没有 `exports` 字段** | 跨包复用前必须补包导出，或新建独立包 |
+| 共享包解析方式 | `@learncraft/security-primitives` 以 TypeScript 源码被 Web 与 Worker 共同消费 | **Turbopack 不做 `.js` → `.ts` 映射**：包内相对导入一旦写成 NodeNext 风格（`./x.js`），`next build` 会报 `Module not found`，而 `tsc`、Vitest、esbuild 都能解析，属于只在生产构建暴露的故障。因此共享包与其消费方统一使用 `moduleResolution: "bundler"`、包内相对导入不带扩展名；源码不可被 Node 直接以 ESM 加载，必须由消费方打包 |
 | 契约产物 | `packages/contracts/{ts,python}` 只有 README | TS 侧 DTO 的生成或包装方案 |
 | 跨语言加密向量 | **不存在** | 见 8.4 |
 
@@ -295,8 +296,8 @@ packages/
 
 配套改动：
 - 根 `package.json` 增加 `dev:worker`、`build:worker`、`test:worker`、`typecheck:worker` 脚本（当前只有 web 脚本）。
-- 新增 TS Worker 的 tsconfig、ESLint、Vitest 与 CI 流水线。
-- `infra/compose.yaml` 与 `compose.production.yaml` 增加 TS Dispatcher/Worker 服务；灰度期 Python 三个服务保持不变；切换完成后移除 `agent-api`（FastAPI）与 `agent-celery-worker`。
+- 新增 TS Worker 的 tsconfig、ESLint、Vitest 与 CI 流水线（**已落地**：tsconfig 与 Vitest 已就绪，ESLint 尚未引入，CI 见 `.github/workflows/ci.yml`）。
+- `infra/compose.yaml` 与 `compose.production.yaml` 增加 TS Dispatcher/Worker 服务（**已落地**：两份编排均加入 `agent-worker-ts` 与 `agent-dispatcher-ts`，生产侧另有 `infra/docker/agent-worker-ts.Dockerfile`）；灰度期 Python 三个服务保持不变；切换完成后移除 `agent-api`（FastAPI）与 `agent-celery-worker`。
 - 环境变量：新增 `AGENT_*`，保留 `OUTBOX_*`、`MODEL_EGRESS_*`、`TAVILY_*`、`CREDENTIAL_ENCRYPTION_*`；`CELERY_*` 在切换完成后删除。
 
 ## 7. 队列、投递与灰度路由
@@ -500,7 +501,7 @@ Web 侧**已有 TypeScript 实现**：`apps/web/src/lib/security/credential-cryp
 | 2 | 契约、Schema 与基础设施 Port | 由 Web 侧 Zod 与 `packages/contracts` 生成/包装 DTO；`PgAgentRunRepository`（`begin_execution`、取消、事件序号、mark_*）；跨语言 AES-GCM 向量 | 运行时能拒绝非法结构；与现有密文互操作；Repository 覆盖并发领取与重复投递 | 10–15 |
 | 3 | **安全出网 PoC（门禁）** | `ModelEgressPolicy` + 固定 IP/SNI/代理连接、SSE 有界聚合、错误分类、最小审计 | 第 8.1 节安全性质全部可自动测试；与 Python 错误码、可重试性一致 | 15–25 |
 | 4 | Dispatcher + BullMQ + 路由 | `SKIP LOCKED` 领取（含 `FOR UPDATE OF o` 路由 SQL）、锁超时回收、退避、**优雅关闭**；按 `run_type` 的运行时路由 | 端到端处理模拟 AgentRun；重复消息不产生重复业务结果；两种关闭路径均有测试 | 5–8 |
-| 5 | 四个工作流按风险从低到高重建 | `assessment_generate` → `posttest_generate` → `plan_generate` → `card_content_generate` 的 LangGraph.js 图 | 每个 run_type 的成功/失败/重试/取消/幂等路径全通过；golden fixtures 回放一致 | 35–50 |
+| 5 | 四个工作流按风险从低到高重建（**四个 run_type 已全部落地**：共享题集管线 `question-set-pipeline.ts`、路线合同 `plan-document.ts` 与兜底规范化 `plan-recovery.ts`、节点内容合同 `card-content-document.ts`；每个 run_type 均有单元测试与真实端到端用例。**仍未完成**：Tavily MCP 接入与 LangGraph.js 图化） | `assessment_generate` → `posttest_generate` → `plan_generate` → `card_content_generate` 的 LangGraph.js 图 | 每个 run_type 的成功/失败/重试/取消/幂等路径全通过；golden fixtures 回放一致 | 35–50 |
 | 6 | 压测与容量配置 | 按 3.2 四档（20 / 100 / 150 / 300–500 峰值）压测；Provider 与用户级限流；数据库连接预算与 PgBouncer 评估；egress proxy 容量验证；扩容规则 | 有明确上线初值与各档扩容规则；未突破 Provider、数据库、代理、Redis、内存与成本预算 | 8–12 |
 | 7 | 影子验证与灰度 | 脱敏 fixtures/测试账户下的影子执行；按 `run_type` 逐类切换 | 无重复业务写入、无密钥泄露、无未解释的 Schema 回归 | 5–10 |
 | 8 | 切换、观察、退役与文档 | 停止 Python 三个进程；删除 Celery 依赖与 Redis 键；同步技术栈/架构/部署/运维/事故文档 | 生产不再依赖 Python；所有历史任务可追踪归属 | 5–8 |

@@ -26,6 +26,9 @@ import { SafeModelEgressClient } from '../infrastructure/llm/safe-egress-client.
 import { createAgentRunWorker } from '../infrastructure/queue/bullmq-agent-queue.js';
 import { createAgentRunProcessor } from '../interfaces/queue/agent-run-processor.js';
 import { createAssessmentGenerateWorkflow } from '../workflows/assessment-generate.js';
+import { createCardContentGenerateWorkflow } from '../workflows/card-content-generate.js';
+import { createPlanGenerateWorkflow } from '../workflows/plan-generate.js';
+import { createPosttestGenerateWorkflow } from '../workflows/posttest-generate.js';
 
 function requireDatabaseUrl(): string {
   const url = process.env.DATABASE_URL?.trim();
@@ -48,7 +51,11 @@ async function main(): Promise<void> {
   const gateway = new OpenAiCompatibleModelGateway(egress, Number(process.env.MODEL_GATEWAY_REQUEST_MAX_RETRIES ?? 5));
 
   const workflows = new AgentWorkflowRegistry();
-  workflows.register('assessment_generate', createAssessmentGenerateWorkflow({ internalClient, decryptor, gateway }));
+  const workflowDeps = { internalClient, decryptor, gateway };
+  workflows.register('assessment_generate', createAssessmentGenerateWorkflow(workflowDeps));
+  workflows.register('posttest_generate', createPosttestGenerateWorkflow(workflowDeps));
+  workflows.register('plan_generate', createPlanGenerateWorkflow(workflowDeps));
+  workflows.register('card_content_generate', createCardContentGenerateWorkflow(workflowDeps));
 
   const worker = createAgentRunWorker(
     queueConfig,

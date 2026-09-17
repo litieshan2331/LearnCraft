@@ -1,5 +1,6 @@
 # LearnCraft 生产应用编排。
-# 服务：Web、Agent API、PostgreSQL Outbox Dispatcher 与 Celery Worker。
+# 服务：Web、Agent API、PostgreSQL Outbox Dispatcher（Python 与 TypeScript 各一个）与 Agent Worker（Celery 与 BullMQ 各一个）。
+# 灰度方式：AGENT_RUNTIME_ROUTES 声明 run_type 归属哪个运行时，两侧读取同一份映射，互不重叠。
 # 外部依赖：PostgreSQL、认证 Redis、Celery Redis Broker 与对象存储均由环境变量提供，不在此文件创建。
 
 name: ${COMPOSE_PROJECT_NAME:-learncraft-production}
@@ -79,6 +80,8 @@ services:
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
       OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-900}
       OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-10}
+      # 与 agent-dispatcher-ts 必须使用同一份映射：映射为 ts 的 run_type 由 TS 侧领取，本进程只领取其余部分。
+      AGENT_RUNTIME_ROUTES: ${AGENT_RUNTIME_ROUTES:?set AGENT_RUNTIME_ROUTES in .env.production}
     stop_grace_period: 30s
     networks: [private]
 
@@ -135,6 +138,64 @@ services:
     depends_on:
       web:
         condition: service_healthy
+    stop_grace_period: 11m
+    networks: [private, egress]
+
+  agent-dispatcher-ts:
+    build:
+      context: ..
+      dockerfile: infra/docker/agent-worker-ts.Dockerfile
+    command: ["node", "dist/dispatcher.js"]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
+      # BullMQ 连接串：必须与 agent-worker-ts 指向同一个 Redis 实例与 db。
+      AGENT_QUEUE_REDIS_URL: ${AGENT_QUEUE_REDIS_URL:?set AGENT_QUEUE_REDIS_URL in .env.production}
+      AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-agent.run}
+      AGENT_QUEUE_PREFIX: ${AGENT_QUEUE_PREFIX:-learncraft:agent-queue}
+      AGENT_RUNTIME_ROUTES: ${AGENT_RUNTIME_ROUTES:?set AGENT_RUNTIME_ROUTES in .env.production}
+      OUTBOX_DISPATCHER_ID_TS: ${OUTBOX_DISPATCHER_ID_TS:-agent-dispatcher-ts-production}
+      OUTBOX_POLL_INTERVAL_SECONDS: ${OUTBOX_POLL_INTERVAL_SECONDS:-1}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
+      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-900}
+      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-10}
+      OUTBOX_MAX_BACKOFF_SECONDS: ${OUTBOX_MAX_BACKOFF_SECONDS:-300}
+    stop_grace_period: 30s
+    networks: [private]
+
+  agent-worker-ts:
+    build:
+      context: ..
+      dockerfile: infra/docker/agent-worker-ts.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
+      AGENT_QUEUE_REDIS_URL: ${AGENT_QUEUE_REDIS_URL:?set AGENT_QUEUE_REDIS_URL in .env.production}
+      AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-agent.run}
+      AGENT_QUEUE_PREFIX: ${AGENT_QUEUE_PREFIX:-learncraft:agent-queue}
+      AGENT_WORKER_CONCURRENCY: ${AGENT_WORKER_CONCURRENCY:-4}
+      AGENT_JOB_MAX_ATTEMPTS: ${AGENT_JOB_MAX_ATTEMPTS:-3}
+      AGENT_JOB_BACKOFF_MS: ${AGENT_JOB_BACKOFF_MS:-10000}
+      AGENT_JOB_BACKOFF_MAX_MS: ${AGENT_JOB_BACKOFF_MAX_MS:-300000}
+      AGENT_JOB_LOCK_DURATION_MS: ${AGENT_JOB_LOCK_DURATION_MS:-660000}
+      CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env.production}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set CREDENTIAL_ENCRYPTION_KEY in .env.production}
+      CREDENTIAL_ENCRYPTION_KEY_VERSION: ${CREDENTIAL_ENCRYPTION_KEY_VERSION:?set CREDENTIAL_ENCRYPTION_KEY_VERSION in .env.production}
+      MODEL_GATEWAY_REQUEST_MAX_RETRIES: ${MODEL_GATEWAY_REQUEST_MAX_RETRIES:-2}
+      MODEL_EGRESS_ENABLED: ${MODEL_EGRESS_ENABLED:?set MODEL_EGRESS_ENABLED in .env.production}
+      MODEL_EGRESS_ENVIRONMENT: production
+      MODEL_EGRESS_PROXY_URL: ${MODEL_EGRESS_PROXY_URL:?set MODEL_EGRESS_PROXY_URL in .env.production}
+      MODEL_EGRESS_CONNECT_TIMEOUT_SECONDS: ${MODEL_EGRESS_CONNECT_TIMEOUT_SECONDS:-10}
+      MODEL_EGRESS_READ_TIMEOUT_SECONDS: ${MODEL_EGRESS_READ_TIMEOUT_SECONDS:-120}
+      MODEL_EGRESS_MAX_RESPONSE_BYTES: ${MODEL_EGRESS_MAX_RESPONSE_BYTES:-4194304}
+      MODEL_EGRESS_AUDIT_RETENTION_DAYS: ${MODEL_EGRESS_AUDIT_RETENTION_DAYS:-30}
+    depends_on:
+      web:
+        condition: service_healthy
+    # 与 Celery 侧一致的宽限期：等待在途任务收尾，避免被强制中断后重复执行。
     stop_grace_period: 11m
     networks: [private, egress]
 

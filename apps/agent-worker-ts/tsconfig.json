@@ -1,8 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    // 本工程只做类型检查，产物由 esbuild 打包生成（dist/*.js），
+    // 且依赖 @learncraft/security-primitives 的 TypeScript 源码，因此使用 bundler 解析。
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "lib": [
       "ES2023"
     ],

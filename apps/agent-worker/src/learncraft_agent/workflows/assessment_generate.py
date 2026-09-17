@@ -11,7 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from learncraft_agent.acl.web_core_internal_client import WebCoreInternalClient
 from learncraft_agent.application.ports.model_gateway import ModelCompletionRequest, ModelGatewayError, ModelMessage, ModelProviderConnection
-from learncraft_agent.workflows.question_set_generation import AssessmentQuestionSet, QuestionSetGenerationPipeline
+from learncraft_agent.workflows.question_set_generation import (
+    AssessmentQuestionSet as AssessmentQuestionSet,  # 显式再导出：外部按本模块路径导入该类型
+    QuestionSetGenerationPipeline,
+)
 from learncraft_agent.core.config import get_settings
 from learncraft_agent.infrastructure.llm.credential_decryptor import ModelCredentialDecryptor
 from learncraft_agent.infrastructure.llm.openai_compatible_model_gateway import OpenAiCompatibleModelGateway
