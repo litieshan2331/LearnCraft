@@ -17,6 +17,17 @@
 | `src/infrastructure/llm/safe-egress-client.ts` | 受控出网客户端：固定 IP 连接 + 原域名 SNI/证书校验 + 显式 Host 头、禁止重定向、按解压后字节限制响应体、SSE 结构校验、出网前审计 fail-closed |
 | `src/infrastructure/llm/credential-decryptor.ts` | 凭据信封解密，错误码与 Python 的 `ModelCredentialDecryptor` 一致；加密实现来自共享包 |
 | `src/infrastructure/database/agent-run-repository.ts` | AgentRun 生命周期 Repository：`FOR UPDATE` 行锁、终态短路幂等、事件序号、retry_count 单调、错误字段截断 |
+| `src/infrastructure/llm/model-gateway.ts` | OpenAI-compatible 网关：载荷构造、SSE 聚合（含工具调用分片合并）、错误分类与退避重试 |
+| `src/acl/core-internal-client.ts` | Web 内部接口防腐层：5 个端点、统一超时与鉴权、错误分类、响应契约校验 |
+| `src/schemas/*.ts` | zod 运行时契约：内部接口响应与题集业务合同 |
+| `src/workflows/assessment-generate.ts` | `assessment_generate` 工作流（显式实现，后续替换为 LangGraph.js 图） |
+| `src/application/commands/execute-agent-run.ts` | 命令层：领取 → 取消检查 → 路由 → 执行 → 回写（含真实 token 用量）；错误归类与重试策略 |
+| `src/application/services/agent-workflow-registry.ts` | `run_type` → 工作流注册表 |
+| `src/infrastructure/queue/outbox-dispatcher.ts` | Outbox 投递器：`FOR UPDATE OF o SKIP LOCKED` + `run_type` 路由 + 优雅关闭 |
+| `src/infrastructure/queue/bullmq-agent-queue.ts` | BullMQ 装配：jobId 去重、attempts、自定义退避、锁时长、键前缀隔离 |
+| `src/interfaces/queue/agent-run-processor.ts` | BullMQ 消费适配器：重投与 `UnrecoverableError` 语义 |
+| `src/infrastructure/database/model-egress-audit-repository.ts` | 出网审计写入 `public.model_connection_egress_audits`：同事务清理过期行 + 插入，只含七个安全字段 |
+| `src/main/dispatcher.ts`、`src/main/worker.ts` | 进程入口与优雅关闭 |
 
 共享包 `packages/security-primitives` 提供 Web 与 Worker 共用的 AES-256-GCM 实现；Web 侧
 `apps/web/src/lib/security/credential-crypto.ts` 已改为转出该包，对外行为不变。
@@ -26,9 +37,20 @@ WHATWG URL 会归一化 `..` 与整数主机名）记录在 `docs/09` 第 8.1 �
 
 ## 尚未实现
 
-- BullMQ 队列与 Dispatcher、Web 内部 API ACL 客户端、Tavily MCP。
-- 四个业务工作流的 LangGraph.js 图。
-- 进程入口（dispatcher/worker/health）、Compose 服务与 CI。
+- Tavily 远程 MCP，以及由此缺失的 tavily_recovery 兜底阶段。
+- `plan_generate`、`card_content_generate`、`posttest_generate` 三个工作流。
+- 四个工作流的 LangGraph.js 图化、健康检查入口与 CI。
+- **生产 Compose 与镜像发布流程**：当前只接入本地 `infra/compose.yaml`；`compose.production.yaml` 尚未包含 TypeScript 两个进程。
+- 字段级 HTTP/SSE 超时总预算的压测。
+
+已知差异（做等价性复核时不要当成缺陷）：
+
+- `assessment-generate.ts` 首轮与修复阶段都不提供 `tavily_search`，因此 `tool_call_count` 恒为 0、
+  `search_extract` 恒为 not_used，且缺少 `tavily_recovery` 阶段（阶段 5 接入 MCP 后消除）。
+- **token 用量写真实值**（2026-09-17 用户确认）：Python 的 `mark_succeeded` 恒定写 0，本实现要求调用方
+  把工作流返回的 `usage` 写入 `agent_runs` 的 token 列；`outputSummary` 仍保持 Python 的 6 键。
+
+除此之外，提示词（除 Tavily 两句）、修复指令、校验规则、回写载荷字段、输出摘要键与错误码与 Python 一致。
 
 在完成 `docs/09` 阶段 2 与阶段 3 的全部验收项之前，**不得**给本工程配置真实用户 BYOK 密钥。
 
@@ -37,6 +59,54 @@ WHATWG URL 会归一化 `..` 与整数主机名）记录在 `docs/09` 第 8.1 �
 ```powershell
 pnpm --filter @learncraft/agent-worker-ts typecheck
 pnpm --filter @learncraft/agent-worker-ts test
+```
+
+## 进程与环境变量
+
+两个进程入口均为独立 Node 进程，不暴露公网：
+
+```powershell
+node --experimental-strip-types src/main/dispatcher.ts   # 或构建后运行
+node --experimental-strip-types src/main/worker.ts
+```
+
+| 环境变量 | 用途 |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL 连接串（Dispatcher 与 Worker） |
+| `AGENT_QUEUE_REDIS_URL` | **独立于认证 Redis** 的队列 Redis；键前缀默认 `learncraft:agent-queue:` |
+| `AGENT_QUEUE_PREFIX` / `AGENT_QUEUE_NAME` | 队列键前缀与队列名（默认 `agent.run`） |
+| `AGENT_WORKER_CONCURRENCY` | 单进程异步并发（默认 1） |
+| `AGENT_JOB_LOCK_DURATION_MS` | 必须大于任务硬超时（默认 660000） |
+| `AGENT_JOB_MAX_ATTEMPTS` / `_BACKOFF_MS` / `_BACKOFF_MAX_MS` | 重试次数与退避（默认 3 / 10000 / 300000） |
+| `AGENT_RUNTIME_ROUTES` | **灰度路由映射**，如 `{"assessment_generate":"ts"}`；置为 `{}` 即可让 TS 侧停止领取任何事件（回滚） |
+| `OUTBOX_DISPATCHER_ID` | 多实例必须各自唯一 |
+| `OUTBOX_BATCH_SIZE` / `_POLL_INTERVAL_SECONDS` / `_LOCK_TIMEOUT_SECONDS` / `_MAX_ATTEMPTS` | 领取参数（默认 20 / 1 / 900 / 10） |
+| `CORE_INTERNAL_BASE_URL` / `INTERNAL_SERVICE_SECRET` | Web 内部接口地址与服务密钥 |
+| `CREDENTIAL_ENCRYPTION_KEY` / `_VERSION` | 凭据解密主密钥与版本 |
+| `MODEL_EGRESS_*` | 受控出网参数；生产启用出网时必须配置代理 |
+
+灰度切换：把一个 `run_type` 加入 `AGENT_RUNTIME_ROUTES` 并重启 Dispatcher 即可让 TS 运行时接管；
+反向操作即可回滚。**同一个 AgentRun 永远只属于一个运行时**（由 Dispatcher 的领取条件保证）。
+
+### 本机 Compose
+
+`infra/compose.yaml` 已包含两个 TypeScript 进程（镜像 `infra/docker/agent-worker-ts.dev.Dockerfile`）：
+
+| 服务 | 作用 |
+| --- | --- |
+| `agent-worker-ts` | 消费 BullMQ 队列执行 AgentRun；加入 `private + egress` 双网 |
+| `agent-dispatcher-ts` | 按 `run_type` 路由领取 Outbox 并投递 BullMQ；只在内网 |
+
+灰度互斥由两侧共同保证：TypeScript Dispatcher 只领 `AGENT_RUNTIME_ROUTES` 中映射为 `ts` 的
+`run_type`，而 Python Dispatcher 已同步支持该变量并**跳过**这些 `run_type`
+（`apps/agent-worker/src/learncraft_agent/infrastructure/queue/dispatcher.py`）。
+默认留空表示完全不接管，行为与引入 TypeScript 之前一致。
+
+本地不启动 Compose 时，可直接运行两个入口（需要先 `pnpm build`）：
+
+```powershell
+node dist/worker.js
+node dist/dispatcher.js
 ```
 
 ### 真实数据库只读冒烟（默认跳过，只执行 SELECT）
@@ -69,5 +139,15 @@ pnpm --filter @learncraft/agent-worker-ts exec vitest run tests/integration/live
 
 用例**不会**自行删除夹具（便于人工核对运行记录），执行结束会打印三条清理 SQL。
 该用例只应在本机开发库运行，不得指向生产库。
+
+### 队列链路真实验证（真实 Redis）
+
+`tests/integration/live-queue.test.ts` 包含两个用例：
+
+1. 在真实数据库上校验领取 SQL：`run_type` 路由过滤生效，且 `FOR UPDATE OF o` 不会锁住 `agent.agent_runs`
+   （用第二个事务对同一行做 `FOR UPDATE NOWAIT` 证明；若写成裸 `FOR UPDATE` 会得到 55P03）。
+2. 发布到 BullMQ 并由 Worker 消费，完成一次真实 AgentRun（需要 `AGENT_TS_LIVE_QUEUE_MODEL=1`）。
+
+用例使用形如 `learncraft:agent-queue:itest:<pid>:` 的独立前缀并在结束时 `obliterate`，不污染生产键。
 
 `tests/fixtures/test-only-*.pem` 是仅用于回环 TLS 测试的自签证书，不是任何环境的真实凭据。

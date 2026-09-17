@@ -5,5 +5,7 @@ packages:
 allowBuilds:
   argon2: true
   esbuild: true
+  # BullMQ 使用 msgpackr 序列化；该可选原生加速模块的构建脚本不执行，纯 JS 回退即可。
+  msgpackr-extract: false
   sharp: true
   unrs-resolver: true

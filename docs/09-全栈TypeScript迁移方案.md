@@ -249,6 +249,19 @@ Dispatcher（灰度期：Python 与 TS 各一个，按 run_type 过滤领取）
 - 现状 Python 使用 `NullPool`（每会话新建物理连接）。TS 侧改用有界连接池是**行为改进**：必须同时确认最大连接数、锁持有时间与 PG `max_connections` 的关系，并保证 `FOR UPDATE` 始终在同一连接的事务内。
 - 现状存在**混合时钟**（`mark_*` 用进程时钟，Dispatcher 与 Web 用数据库 `now()`）。迁移时必须明确统一策略，否则 `available_at <= now()` 与 `finished_at` 会互相矛盾。
 
+### 5.5 与 Python 的已确认差异清单
+
+以下差异是**有意为之**，不是实现遗漏；做等价性复核时不应把它们当成缺陷。除此之外的 AgentRun 状态机、
+事件序号、终态短路、回写载荷字段、提示词（除 Tavily 相关两句）、修复指令与校验规则都与 Python 逐条一致。
+
+| 差异 | 内容 | 状态 |
+| --- | --- | --- |
+| **Token 用量写真实值** | Python 的 `mark_succeeded` 恒定写 `input_tokens=0` / `output_tokens=0`；TypeScript 版本要求调用方把工作流返回的 `usage`（跨阶段累计）写入 `agent_runs` 的 token 列，使用量与成本可观测。`output_summary_json` 仍保持 Python 的 6 个键 | 已确认（2026-09-17） |
+| **无 Tavily 工具** | 首轮与修复阶段都不向模型提供 `tavily_search`，因此 `tool_call_count` 恒为 0、`search_extract` 恒为 not_used，且缺少 `tavily_recovery` 阶段 | 临时差异，阶段 5 接入 MCP 后消除 |
+| **skill_tags 元素校验更严** | Pydantic 未限制元素长度；TypeScript 与 Web 路由一致地施加 1-100 长度限制 | 与最终裁判（路由）一致，保留 |
+| **UUID 校验更严** | zod v4 的 `z.uuid()` 会校验 RFC 版本与变体位，Pydantic 更宽松；非标准 UUID 会被判为 `CORE_INTERNAL_RESPONSE_INVALID` | 保留（数据库使用 `gen_random_uuid()`，正常数据不受影响） |
+| **时间源统一** | TypeScript 侧统一使用数据库 `now()`；Python 混用进程时钟与库时钟（对应 D12） | 建议方向，保留 |
+
 ## 6. 目标架构与仓库改动
 
 ```text

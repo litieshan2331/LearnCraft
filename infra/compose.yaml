@@ -204,6 +204,8 @@ services:
       CELERY_RETRY_BACKOFF_SECONDS: ${CELERY_RETRY_BACKOFF_SECONDS:-10}
       CELERY_RETRY_BACKOFF_MAX_SECONDS: ${CELERY_RETRY_BACKOFF_MAX_SECONDS:-300}
       CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-1}
+      # 灰度路由：已映射为 ts 的 run_type 必须跳过，避免与 TypeScript Dispatcher 抢同一事件。
+      AGENT_RUNTIME_ROUTES: ${AGENT_RUNTIME_ROUTES:-}
       OUTBOX_DISPATCHER_ID: ${OUTBOX_DISPATCHER_ID:-agent-dispatcher-local}
       OUTBOX_POLL_INTERVAL_SECONDS: ${OUTBOX_POLL_INTERVAL_SECONDS:-1}
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
@@ -297,6 +299,101 @@ services:
         target: /app/src
     networks: [private, egress]
 
+  agent-worker-ts:
+    # TypeScript Agent Worker：消费 BullMQ 队列并执行 AgentRun（迁移中与 Python Worker 并存）。
+    build:
+      context: ..
+      dockerfile: infra/docker/agent-worker-ts.dev.Dockerfile
+    command:
+      - sh
+      - -c
+      - pnpm build && node dist/worker.js
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # 队列 Redis 与认证 Redis 物理隔离；键前缀与 Celery 的 learncraft:celery: 不共用。
+      AGENT_QUEUE_REDIS_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
+      AGENT_QUEUE_PREFIX: ${AGENT_QUEUE_PREFIX:-learncraft:agent-queue:}
+      AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-agent.run}
+      AGENT_WORKER_CONCURRENCY: ${AGENT_WORKER_CONCURRENCY:-1}
+      AGENT_JOB_LOCK_DURATION_MS: ${AGENT_JOB_LOCK_DURATION_MS:-660000}
+      AGENT_JOB_MAX_ATTEMPTS: ${AGENT_JOB_MAX_ATTEMPTS:-3}
+      AGENT_JOB_BACKOFF_MS: ${AGENT_JOB_BACKOFF_MS:-10000}
+      AGENT_JOB_BACKOFF_MAX_MS: ${AGENT_JOB_BACKOFF_MAX_MS:-300000}
+      CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+      CREDENTIAL_ENCRYPTION_KEY_VERSION: ${CREDENTIAL_ENCRYPTION_KEY_VERSION:-local-v1}
+      MODEL_GATEWAY_REQUEST_MAX_RETRIES: ${MODEL_GATEWAY_REQUEST_MAX_RETRIES:-5}
+      MODEL_EGRESS_ENABLED: ${MODEL_EGRESS_ENABLED:-false}
+      MODEL_EGRESS_ENVIRONMENT: ${MODEL_EGRESS_ENVIRONMENT:-development}
+      MODEL_EGRESS_PROXY_URL: ${MODEL_EGRESS_PROXY_URL:-}
+      MODEL_EGRESS_CONNECT_TIMEOUT_SECONDS: ${MODEL_EGRESS_CONNECT_TIMEOUT_SECONDS:-10}
+      MODEL_EGRESS_READ_TIMEOUT_SECONDS: ${MODEL_EGRESS_READ_TIMEOUT_SECONDS:-120}
+      MODEL_EGRESS_MAX_RESPONSE_BYTES: ${MODEL_EGRESS_MAX_RESPONSE_BYTES:-8388608}
+      MODEL_EGRESS_AUDIT_RETENTION_DAYS: ${MODEL_EGRESS_AUDIT_RETENTION_DAYS:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      celery-redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    # 与 Celery Worker 一致：关闭窗口覆盖 600 秒硬超时，不中断在飞任务。
+    stop_grace_period: 11m
+    volumes:
+      - type: bind
+        source: ../apps/agent-worker-ts
+        target: /app/apps/agent-worker-ts
+      - type: bind
+        source: ../packages/security-primitives
+        target: /app/packages/security-primitives
+      - type: volume
+        source: agent-worker-ts-node-modules
+        target: /app/apps/agent-worker-ts/node_modules
+    networks: [private, egress]
+
+  agent-dispatcher-ts:
+    # TypeScript Dispatcher：按 run_type 路由领取 Outbox 并投递 BullMQ。
+    build:
+      context: ..
+      dockerfile: infra/docker/agent-worker-ts.dev.Dockerfile
+    command:
+      - sh
+      - -c
+      - pnpm build && node dist/dispatcher.js
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AGENT_QUEUE_REDIS_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
+      AGENT_QUEUE_PREFIX: ${AGENT_QUEUE_PREFIX:-learncraft:agent-queue:}
+      AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-agent.run}
+      # 多实例必须各自唯一，否则会互相覆盖 Outbox 状态。
+      OUTBOX_DISPATCHER_ID: ${OUTBOX_DISPATCHER_ID_TS:-agent-dispatcher-ts}
+      OUTBOX_POLL_INTERVAL_SECONDS: ${OUTBOX_POLL_INTERVAL_SECONDS:-1}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
+      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-900}
+      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-10}
+      # 灰度路由：只有映射为 ts 的 run_type 由本运行时领取；留空表示不接管任何工作流。
+      AGENT_RUNTIME_ROUTES: ${AGENT_RUNTIME_ROUTES:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      celery-redis:
+        condition: service_healthy
+    stop_grace_period: 30s
+    volumes:
+      - type: bind
+        source: ../apps/agent-worker-ts
+        target: /app/apps/agent-worker-ts
+      - type: bind
+        source: ../packages/security-primitives
+        target: /app/packages/security-primitives
+      - type: volume
+        source: agent-worker-ts-node-modules
+        target: /app/apps/agent-worker-ts/node_modules
+    networks: [private]
+
 networks:
   edge:
   # 本地 P0 调试服务通过显式 ports 绑定到 127.0.0.1。
@@ -311,3 +408,4 @@ volumes:
   minio-data:
   web-dev-node-modules:
   web-dev-next-cache:
+  agent-worker-ts-node-modules:

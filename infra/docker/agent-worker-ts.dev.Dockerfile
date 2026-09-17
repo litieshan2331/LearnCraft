@@ -1,0 +1,26 @@
+# LearnCraft Agent Worker（TypeScript）开发容器镜像。
+# 功能：安装 pnpm 工作区依赖；源码由 infra/compose.yaml 以绑定挂载提供，
+# 容器启动时先打包（esbuild）再运行指定的入口（worker 或 dispatcher）。
+
+FROM node:24.18.0-bookworm-slim
+
+ENV PNPM_HOME=/pnpm
+ENV PATH="${PNPM_HOME}:${PATH}"
+ENV NODE_ENV=development
+
+# 在基础层安装并激活锁定版本，容器每次重启均可直接运行 pnpm。
+RUN corepack enable && corepack install --global pnpm@11.15.0
+
+WORKDIR /app
+
+# 仅复制依赖描述文件，使源码改动不会使依赖安装层失效。
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/agent-worker-ts/package.json apps/agent-worker-ts/package.json
+COPY packages/security-primitives/package.json packages/security-primitives/package.json
+
+RUN pnpm install --frozen-lockfile
+
+WORKDIR /app/apps/agent-worker-ts
+
+# 默认入口为 BullMQ Worker；dispatcher 服务在 compose 中覆盖 command。
+CMD ["sh", "-c", "pnpm build && node dist/worker.js"]
