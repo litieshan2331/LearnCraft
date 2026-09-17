@@ -13,7 +13,8 @@
 | D1 | 迁移范围 | Agent 侧**全部**迁移到 TypeScript/Node.js，**不保留任何 Python 运行时**（原“特殊数据处理保留 Python”的白名单为空，不再有 `data-processor` 服务） | 已确认 |
 | D2 | 队列产品 | 以 **BullMQ + 独立队列 Redis** 替代 Celery；Redis 键前缀与 Celery 完全隔离 | 已确认 |
 | D3 | 切换方式 | **按 `run_type` 灰度路由**：Dispatcher 侧 join `agent.agent_runs` 决定投递到 Celery 还是 BullMQ。**零 Schema 变更、不停服、回滚只需改映射并重启 Dispatcher** | 已确认 |
-| D4 | 并发与限流 | 设计目标**峰值 20 并发 AgentRun**；所有并发、限流、超时、重试参数必须参数化，压测后再定值 | 已确认 |
+| D4 | 并发与限流 | 规模口径已确认：**数千到数万注册用户 → 峰值并发约 2–150**。初始上线 20 并发（2 × 10），目标规模档 150（6 × 25），并保留余量到 300–500 | 已确认 |
+| D4a | 参数化要求 | 所有并发、限流、超时、重试参数必须由环境变量注入、禁止硬编码，压测后再定值 | 已确认 |
 | D5 | 优雅关闭 | Dispatcher 与 Worker 必须补上 `SIGTERM`/`SIGINT` 优雅关闭与在飞任务回收（现状完全没有，属**行为改进**，已确认纳入本次范围） | 已确认 |
 | D6 | 契约文档 | 顺手修正 `packages/contracts/openapi/core.yaml` 的三处实现漂移（见第 13 节） | 已确认 |
 | D7 | 安全出网实现 | 先完成 PoC（`node:https`/`node:tls` 与 undici `Agent` 两条路线二选一），**PoC 通过前不得给 TS Worker 配置真实用户 BYOK 密钥** | 待 PoC 结果确认 |
@@ -21,45 +22,73 @@
 | D9 | Worker Threads | 仅承接纯 CPU、可序列化的子任务，使用有界常驻池，默认**不启用** | 待确认（默认保守） |
 | D10 | 真实流量影子测试 | 默认**禁止**对真实用户 BYOK 做双调用影子流量（双倍成本 + 隐私风险）；只用测试账户/测试 Provider | 已确认（默认禁止） |
 
-## 2. 决策依据：真实收益与两个必须纠正的假设
+## 2. 决策依据：面向数千到数万用户的长期取舍
 
-迁移方向已定，但实施者必须知道真实理由，否则会在后续设计里做出错误取舍。
+目标规模已明确：**长期要承接数千到数万注册用户**，并把 Agent 侧统一为 TypeScript。迁移理由不是“Python 做不到”，而是**在数百并发量级上 TypeScript 每单位并发所需的资源更少，同时能把双栈合并为一栈**。以下把“可验证的差异”与“不能写错的表述”分开陈述，避免后续设计建立在错误前提上。
 
-**本次迁移的真实收益：**
+### 2.1 支持 TypeScript 的三条可验证差异
 
-1. **双栈合一**：目前 Web 是 TypeScript、Agent 是 Python，需要维护两套运行时、两套依赖锁、两套 CI 与 OpenAPI/JSON Schema ↔ Pydantic/Zod 的双向手工对齐（`packages/contracts` 目前只有 README，没有生成产物）。
-2. **每并发槽位的边际内存成本更低**：Python 当前是 Celery prefork 池，“一个并发 = 一个进程”（含 SQLAlchemy、httpx、pydantic、cryptography 等已导入模块）；Node 中“一个并发 = 一个 async 任务”。达到同样的 20 并发，Node 的内存增量显著更小，这对峰值并发与容器密度是实质差别。
-3. **契约单点化**：内部 API 的 Zod schema、Drizzle 表定义、`output_summary_json` 结构都可以在 TS 内共享类型，减少漂移。
+1. **每并发槽位的内存成本**：Python 侧当前是 Celery prefork 池，“一个并发 = 一个进程”，每个子进程都要独立加载 SQLAlchemy、httpx、pydantic、cryptography 等模块；Node 中“一个并发 = 一个 async 任务”，共享同一份运行时。到数百并发时，这直接决定需要多少内存、多少台机器与多少运维成本。
+2. **每次运行的 CPU 成本**：一个 AgentRun 的 CPU 工作包括 SSE 逐块 JSON 解析、结构化输出校验、字符串与 Markdown 处理、AES-256-GCM 解密、Prompt 拼接。Pydantic v2 与 orjson 是 Rust 扩展，缓解了校验与序列化；但工具循环、恢复归一化器、状态机等纯逻辑仍是解释执行，V8 在同一类工作上的单位耗时更低。**在数百并发下，“每次运行省一点 CPU”会直接变成核心数与成本差异**，这是本项目选择 TypeScript 的主要技术理由。
+3. **单语言栈的长期成本**：Web 已是 TypeScript；合并后可共用类型、Zod 契约、Drizzle 表定义、CI、依赖锁与团队技能画像，OpenAPI/JSON Schema ↔ Pydantic 的双向手工对齐随之消失（`packages/contracts` 目前只有 README，没有生成产物）。
 
-**必须纠正的假设一：Python 在 I/O 密集场景不如 TypeScript。**
-不成立。当前系统同时只能执行 1 个 AgentRun，原因不是语言，而是部署配置与执行壳：
+### 2.2 两条不能写错的表述
+
+**不能写成“Python 的 I/O 并发能力差”。** 这个说法不成立：asyncio 基于 epoll，单进程承载数千 socket 的能力与 Node 属同一量级。把“Python I/O 弱”当作迁移理由会直接误导容量设计与压测口径。准确的因果关系是：**单位并发的内存与 CPU 开销更高，因此同样预算下可承载的并发更少、单位并发成本更高**。
+
+**不能写成“TypeScript 更擅长 CPU 密集，因此不必做隔离”。** Node 主线程同样是单线程。CPU 密集任务在两种语言下都必须移出主执行体（Python 多进程 / Node `worker_threads`），否则阻塞的都是同一个事件循环。因此**不得因为“TS 更快”而省略限流、背压与 CPU 隔离设计**（见 D9、第 8.6 节）。
+
+### 2.3 现状的并发上限来自配置与执行壳，不是语言
+
+这一条与上面的结论不冲突，但必须记录，否则会误判“迁移完成即自动获得高并发”：
 
 | 事实 | 位置 |
 | --- | --- |
 | 并发默认 1，Linux 容器内 Celery 默认 prefork 池，即“并发数 = 子进程数” | `apps/agent-worker/src/learncraft_agent/core/config.py:261-265`、`core/celery_app.py:50-51` |
 | Compose 注入 `CELERY_WORKER_CONCURRENCY:-1`，且**没有任何 `replicas` 或资源限制** | `infra/compose.yaml:206,258`、`infra/compose.production.yaml:76,108` |
 | `infra/.env` 实际值 1，`worker_prefetch_multiplier=1` | `infra/.env:31`、`core/celery_app.py:51` |
-| 执行壳用模块级全局 `asyncio.Runner` 复用事件循环，隐含“每进程独占一个事件循环”的假设；直接改用线程池并发会让多个任务争用同一个 Runner | `interfaces/celery/tasks.py:31-38` |
+| 执行壳用模块级全局 `asyncio.Runner` 复用事件循环，隐含“每进程独占一个事件循环”的假设 | `interfaces/celery/tasks.py:31-38` |
 
-也就是说：把并发调到 8、或把执行壳改成“单事件循环 + 信号量并发”，Python 同样可以承载几十个并发 AgentRun。**迁移到 TS 并不会自动带来更高吞吐**，第 3 节的并发设计必须照做。
+**结论：迁移不会自动带来更高吞吐。** 第 3 节的容量设计、限流、连接预算与压测必须照做，否则 TypeScript 版本同样会在低并发处撞墙。
 
-**必须纠正的假设二：TypeScript 更擅长 CPU 密集任务。**
-Node 与 CPython 的差别是真实的（V8 的纯计算、JSON 处理、字符串处理通常快于 CPython），但 **Node 主线程同样是单线程**：CPU 密集任务在两种语言下都必须移出主执行体（Python 多进程 / Node `worker_threads`），否则阻塞的都是同一个事件循环。因此**不得因为“TS 更快”而省略限流、背压与 CPU 隔离设计**。当前 Agent 主链路（LLM SSE、Tavily、内部 HTTP）是 I/O 密集型，CPU 隔离只在实测证明必要时启用（见 D9、第 8.6 节）。
+## 3. 容量设计：从初始 20 并发到数百并发
 
-## 3. 容量基线与并发设计（峰值 20）
+### 3.1 用户规模换算并发（口径已确认，参数待实测替换）
 
-### 3.1 容量模型
+> **口径确认（2026-09-16）：**目标规模中的“几千到数万用户”指**注册用户总数**，不是同时在线或并发用户数。按本表换算，该区间的峰值并发约 **2–150**。若将来口径改为“并发用户”，必须整体重新建模，不得沿用本表。
 
-已确认的 SLO：路线生成 p95 ≤ 60 秒、卡片内容 p95 ≤ 30 秒、TTFV 中位数 ≤ 5 分钟（`docs/03-MVP-PRD.md:337-338,366`）。据此按 Little 定律估算：
+| 假设 | 取值 | 说明 |
+| --- | --- | --- |
+| 日活比例 | 20% | 待真实数据替换 |
+| 日活用户当日发起学习目标的比例 | 30% | 每个目标触发 4 次 AgentRun（前测、路线、节点内容、后测） |
+| 单次 AgentRun 平均占用时长 | 45 秒 | 与“路线 p95 ≤ 60 秒、卡片 p95 ≤ 30 秒、TTFV 中位数 ≤ 5 分钟”一致（`docs/03-MVP-PRD.md:337-338,366`） |
+| 峰值小时承载当日流量 | 25% | 峰值集中度 |
+| 峰值系数 | ×2 | 峰值小时内的瞬时峰 |
 
-| 目标吞吐 | 平均并发 | 峰值并发（×2.5） | Python prefork 内存（按 250MB/槽估算） | Node 单进程 |
-| --- | --- | --- | --- | --- |
-| 60 目标/小时 | ≈2.5 | 6–8 | 1.5–2 GB | 约 150 MB |
-| 300 目标/小时 | ≈12.5 | 30–40 | 7.5–10 GB | 约 250 MB |
+按 Little 定律 `并发 = 吞吐 × 占用时长`，每目标 4 次运行：
 
-本次设计目标取**峰值 20 并发**，位于两档之间。`250MB/槽` 与 `150–250MB/进程` 均为待实测的经验值，**必须**在阶段 0 用 `docker stats` 与真实 AgentRun 实测替换（见 3.5）。
+| 注册用户 | AgentRun/日 | 峰值小时运行数 | 峰值平均并发 | 峰值瞬时并发 | 峰值吞吐 |
+| --- | --- | --- | --- | --- | --- |
+| 1,000 | 240 | 60 | ≈0.8 | ≈2 | 0.02 次/秒 |
+| 10,000 | 2,400 | 600 | ≈7.5 | ≈15 | 0.17 次/秒 |
+| 50,000 | 12,000 | 3,000 | ≈38 | ≈75 | 0.83 次/秒 |
+| 100,000 | 24,000 | 6,000 | ≈75 | ≈150 | 1.7 次/秒 |
+| 200,000 | 48,000 | 12,000 | ≈150 | ≈300 | 3.3 次/秒 |
 
-### 3.2 目标拓扑
+**结论：数千到数万注册用户对应峰值并发约 2–150。** 架构必须能覆盖该区间，并保留一倍余量到峰值 300（约 20 万注册用户）；再往上属于新的规模档，需要重新建模。上表的假设全部可替换，但替换后必须重算本表并同步更新 3.2 的分档配置。
+
+### 3.2 分档配置（全部参数化，压测后定值）
+
+| 档位 | 对应注册用户 | 换算峰值并发 | 副本数 × 每副本并发 | 部署峰值上限 | 前置条件 |
+| --- | --- | --- | --- | --- | --- |
+| 初始上线 | ≤ 1 万 | ≤ 15 | 2 × 10 | 20 | 与 D4 一致；先证明行为正确与幂等边界 |
+| 增长期 | 1 万 – 5 万 | 15 – 75 | 4 × 25 | 100 | 必须已有 Provider 限流与数据库连接预算 |
+| **目标规模** | **5 万 – 10 万** | **75 – 150** | 6 × 25 | 150 | 必须完成多机部署与 3.4 的全部瓶颈项 |
+| 扩容余量 | 10 万以上 | 150 – 300 | 8–10 × 40–50 | 300–500 | 需重算 3.1 假设并重新评估数据库、代理与成本预算 |
+
+初始值取最低档（10 并发 × 2 副本 = 20 峰值），按注册用户增长逐档上调；**在任何压测数据出来之前不得对外承诺吞吐数字**，也不得跳过 3.4 的瓶颈项直接上线更高档位。
+
+### 3.3 目标拓扑
 
 ```text
 Browser
@@ -81,38 +110,54 @@ Dispatcher（灰度期：Python 与 TS 各一个，按 run_type 过滤领取）
 - TS Agent Worker **不暴露公网**，只保留一个最小 `/health`（字段与现状一致：`status`/`service`/`version`/`git_sha`），供 Compose 健康检查使用；现状的 `/health` 不探测数据库、Redis 与 Broker，**不作为 readiness 依据**，迁移后保持等价，不得擅自升级为 readiness（升级属新增能力，另行确认）。
 - 只有 Worker 容器加入 `egress` 网络，并独占 `CREDENTIAL_ENCRYPTION_KEY`、`TAVILY_API_KEY` 等敏感变量；Dispatcher 只需要 `DATABASE_URL`、队列连接与 `INTERNAL_SERVICE_SECRET`。
 
-### 3.3 参数化配置清单（全部由环境变量注入，禁止硬编码）
+### 3.4 参数化配置清单（全部由环境变量注入，禁止硬编码）
 
 | 配置项（建议命名） | 初值 | 对应现状 | 说明 |
 | --- | --- | --- | --- |
-| `AGENT_WORKER_CONCURRENCY` | 10 | `CELERY_WORKER_CONCURRENCY=1` | 单 Node 进程内的异步并发 AgentRun 数 |
-| `AGENT_WORKER_REPLICAS` | 2 | 无（当前固定 1 容器） | 通过 Compose `replicas` 配置 |
-| `AGENT_QUEUE_LIMITER_MAX` / `_DURATION_MS` | 待压测定 | 无 | BullMQ `limiter`，Provider 侧限流 |
+| `AGENT_WORKER_CONCURRENCY` | 10 | `CELERY_WORKER_CONCURRENCY=1` | 单 Node 进程内的异步并发 AgentRun 数；分档见 3.2 |
+| `AGENT_WORKER_REPLICAS` | 2 | 无（当前固定 1 容器） | 通过 Compose `replicas` 或编排平台配置 |
+| `AGENT_QUEUE_LIMITER_MAX` / `_DURATION_MS` | 待压测定 | 无 | BullMQ `limiter`，版本内全局限流 |
+| `AGENT_USER_INFLIGHT_LIMIT` | 2 | 无 | **每用户**同时在飞的 AgentRun 上限；BYOK 下防止同一用户的多个任务互相打爆其自有 Provider 配额 |
+| `AGENT_EGRESS_MAX_INFLIGHT` | 待压测定 | 无 | 节点级受控出网并发上限，受 egress proxy 容量约束（见 3.5） |
+| `AGENT_DB_POOL_MAX` | 12 | `NullPool`（每会话新建连接） | 按“事务并发”而非“AgentRun 并发”设置，**不得**随并发线性增长（见 3.5） |
 | `AGENT_JOB_LOCK_DURATION_MS` | 660000 | `CELERY_VISIBILITY_TIMEOUT_SECONDS=660` | 必须 **大于**硬超时 |
 | `AGENT_JOB_SOFT_TIMEOUT_MS` | 480000 | `CELERY_TASK_SOFT_TIME_LIMIT_SECONDS=480` | 协作式取消 + `AbortController` |
 | `AGENT_JOB_HARD_TIMEOUT_MS` | 600000 | `CELERY_TASK_TIME_LIMIT_SECONDS=600` | 硬超时后中止外部请求并标记失败 |
 | `AGENT_JOB_MAX_ATTEMPTS` | 3 | `CELERY_TASK_MAX_RETRIES=3` | 业务重试次数 |
 | `AGENT_JOB_BACKOFF_MS` / `_MAX_MS` | 10000 / 300000 | `CELERY_RETRY_BACKOFF_SECONDS=10` / `_MAX=300` | 退避必须封顶 300 秒 |
 | `AGENT_SHUTDOWN_GRACE_MS` | 30000 | Dispatcher `stop_grace_period: 30s` | 优雅关闭窗口 |
-| `AGENT_DB_POOL_MAX` | 12 | `NullPool`（每会话新建连接） | TS 侧改用有界连接池，见 5.4 |
-| `OUTBOX_*` | 保持现值 | `OUTBOX_POLL_INTERVAL_SECONDS=1`、`BATCH_SIZE=20`、`LOCK_TIMEOUT_SECONDS=900`、`MAX_ATTEMPTS=10` | 领取语义不得改变 |
+| `OUTBOX_POLL_INTERVAL_SECONDS` / `OUTBOX_BATCH_SIZE` | 1 / 20 | 同现状 | 决定单 Dispatcher 的投递吞吐上限（≈批量 ÷ 轮询间隔） |
+| `OUTBOX_LOCK_TIMEOUT_SECONDS` / `OUTBOX_MAX_ATTEMPTS` | 900 / 10 | 同现状 | 领取语义不得改变 |
 | `AGENT_TOOL_MAX_CALLS` | 6 | 同现状（配置层上限亦为 6） | 工具调用硬上限 |
 | `TAVILY_DAILY_TOOL_CALL_LIMIT` | 20 | 同现状 | 每用户每日可见工具调用次数 |
 | `MODEL_EGRESS_*` | 保持现值 | connect 10s / read 120s / 8MiB / 审计 30 天 | 生产必须配置 `MODEL_EGRESS_PROXY_URL` |
 
-初始值取“10 并发 × 2 副本 = 20 峰值”，全部可调；**在任何压测数据出来之前，不得对外承诺吞吐数字**。
+### 3.5 数百并发下的真实瓶颈（必须先设计的六项）
 
-### 3.4 三条并发不变式
+| 瓶颈 | 现状/事实 | 必须做的设计 |
+| --- | --- | --- |
+| **PostgreSQL 连接数** | 当前用 `NullPool`，每会话新建物理连接 | 连接池按“事务并发”设置：一次 AgentRun 只有几条 < 10ms 的短事务（`begin_execution`、`is_cancelled`、`mark_*`），因此 `pool ≈ 12/副本` 足够。总连接数必须 ≤ PG `max_connections` 的 60%；目标规模（8–10 副本）超过该预算时必须引入 PgBouncer（transaction pooling）。**严禁把池大小设成等于并发数** |
+| **受控出网代理容量** | 生产环境启用出网时强制配置 `MODEL_EGRESS_PROXY_URL`（配置层硬校验） | 数百个并发 SSE 长连接（每个持续 30–60 秒）与 Tavily 调用共享同一代理。代理的并发连接数、带宽、超时与失败模式必须计入容量表；**不得为扩容而绕过代理** |
+| **Outbox 投递吞吐** | `BATCH_SIZE=20` + `POLL_INTERVAL=1s`，单 Dispatcher 上限约 20 条/秒 | 目标规模峰值仅 3.3 次/秒，余量充足；但批量、轮询与 Dispatcher 副本数必须参数化，多实例并存时 `locked_by` 必须各自唯一 |
+| **`agent_run_events` 增长** | 每 run 约 3–6 条事件 | 20 万用户档约 15–29 万行/日。留存、归档与分区策略必须在上线目标规模前单独确认（涉及 Schema 与数据治理，不在本文实施范围） |
+| **Provider 限流（BYOK）** | 配额按用户各自的 Key 生效 | 需要“每用户并发上限 + 每连接并发上限”，避免同一用户的多个任务互相 429；全局出网并发由代理容量与 Provider 配额共同约束 |
+| **部署形态** | 单主机 Compose、无 `replicas`、无资源限制 | 百级以上必须多副本跨机器（或编排平台）共享 PG/Redis/对象存储，并配套滚动发布与 7.2/7.3 的优雅关闭 |
+
+另需与成本一起规划：token 成本随用户数线性增长，是主要成本项；容量档位必须与成本预算同步确认。
+
+### 3.6 四条并发不变式
 
 1. **超时分层不变**：软超时 480s < 硬超时 600s < 队列锁 660s。BullMQ 的 `lockDuration` 取代 Celery 的 `visibility_timeout`，必须保持在硬超时之上。
-2. **提高本地并发必须同时提高 Provider 限流**，否则只是把等待从队列搬到 HTTP 429，并放大成本与失败率。本项目为 BYOK，Provider 配额按用户各自的 Key 生效，因此需要“全局 + 每用户/每连接”两级限流。
+2. **提高本地并发必须同时提高限流**，否则只是把等待从队列搬到 HTTP 429，并放大成本与失败率。本项目为 BYOK，Provider 配额按用户各自的 Key 生效，因此需要“全局 + 每用户/每连接”两级限流。
 3. **`agent.agent_runs` 的行锁与状态机是唯一幂等边界**：并发提高会提高重复投递概率，`begin_execution` 的 `SELECT ... FOR UPDATE`、`trace_id` 比对、终态短路必须在同一事务内逐项等价复现，事件序号 `MAX(sequence_no)+1` 不得脱离行锁执行。
+4. **数据库连接、出网代理与 Provider 配额必须与并发同时预算**：三者任一先到上限，继续加 Worker 副本只会把故障从队列转移到数据库或 429。任何并发档位的上线都必须同时给出这三项的上限证明（见 3.5）。
 
-### 3.5 压测方法（阶段 0 与阶段 6）
+### 3.7 压测方法（阶段 0 与阶段 6）
 
-- 阶段 0：记录当前 Python 侧基线 —— 单次各 run_type 的耗时分布、并发 1/2/4 时的队列等待、prefork 子进程实际内存、Provider 429 比例、PostgreSQL 连接数。
-- 阶段 6：对 TS Worker 压测 1/2/4 副本 × 每副本不同 `concurrency`，观察队列等待、AgentRun p50/p95、429、Redis 内存、PG 连接、事件循环延迟（`perf_hooks.monitorEventLoopDelay`）、RSS。
+- **阶段 0（基线）**：记录当前 Python 侧单次各 run_type 的耗时分布、并发 1/2/4 时的队列等待、prefork 子进程实际内存、**每次运行的 CPU 时间**、Provider 429 比例与 PostgreSQL 连接数。`每次运行的 CPU 时间` 与 `每并发 RSS` 是验证第 2.1 节取舍的关键指标，必须实测而非估算。
+- **阶段 6（目标规模验证）**：按 3.2 的四档分别压测（20 / 100 / 150 / 300–500 峰值），观察队列等待、AgentRun p50/p95、429 比例、Redis 内存、PG 连接数与使用率、egress proxy 并发与带宽、事件循环延迟（`perf_hooks.monitorEventLoopDelay`）、RSS 与单位并发成本。
 - 只有 `worker_threads` 在真实负载下优于主线程且不突破内存预算时才启用，并定义最大输入/输出字节、执行时限、池大小与拒绝策略。
+- 压测结论必须回写到本节与 3.2 的分档表：**没有实测数据的并发档位不得上线**。
 
 ## 4. 现状盘点
 
@@ -319,10 +364,77 @@ RETURNING e.id, e.aggregate_id, e.event_version, e.payload_json, e.attempt_count
 
 ### 8.1 R1 受控模型出网（最高风险，阶段 3 门禁）
 
+**为什么必须单独做 PoC（威胁模型）**
+
+这一层是全系统**唯一**让外部输入（用户自己填写的 Base URL）决定“服务器向哪个地址发起带认证头的请求”的地方。它挡的不是理论风险，而是四类具体攻击：
+
+| 攻击 | 具体做法 | 失败后果 |
+| --- | --- | --- |
+| **SSRF** | 把 `base_url` 指向 `169.254.169.254`（云元数据，视部署环境而定）、内网服务，或 Compose 服务名 `postgres`/`redis`/`minio`/`web`；Worker 本身同时位于 `private` 网络 | 内网可达、云凭据或内网数据泄露、对内网端点发起状态变更或端口探测 |
+| **DNS rebinding** | 首次解析返回合法公网 IP 通过校验，实际连接时再解析到内网地址（校验与连接之间的 TOCTOU） | 上述全部 IP 校验失效 |
+| **TLS 降级** | 为了“连固定 IP”而放弃 SNI/证书校验，或用 IP 做证书匹配后关闭校验 | 用户 BYOK API Key 在链路上可被中间人窃取 |
+| **资源耗尽** | 3xx 跳转到内网地址；声明 8MiB 却流式无限；gzip 解压炸弹 | 绕过响应大小上限，内存与成本失控 |
+
+当前实现逐条挡住了它们（见下），**这些不是可选的加固项，而是已经在生产生效的安全边界**。迁移到 TypeScript 后若实现不等价，属于**静默退化**：功能测试全绿、用户无感，直到有人主动利用。
+
+**为什么不能“迁移时顺手写”**：Node 生态没有与 `httpx` 的 `extensions["sni_hostname"]` 等价的一行替代 —— “连接落到已验证 IP，但 TLS SNI 与证书校验仍按原域名进行”这条组合，在 `fetch`/undici 上要么做不到，要么必须绕道 `node:https`/`node:tls` 手工组装，且 undici 在代理 + SNI 组合上存在已知问题。因此必须先用最小实验证明可行，再决定后续 5 个阶段怎么写。
+
+**PoC 若失败的出路**（届时需单独决策，见 D7）。三条路不是并列的实现方案，而是“这道校验由谁来做”的三种位置：
+
+| 选项 | 谁负责挡住攻击 | 用户 API Key 经过谁 | 与“不保留 Python / 单一 TS 栈”的关系 | 代价与风险 |
+| --- | --- | --- | --- | --- |
+| ① 独立受控出网服务 | 一个**独立进程**复用已验证的实现（当前即 Python 的 `SafeModelEgressClient`，或另写一份） | 从 Worker 经内网调用传给该服务，**该服务内存中持有明文 Key**，多一个信任点 | **冲突**：要么保留一个 Python 进程，要么引入第三种运行时 | 新增一跳延迟、新容器与新故障点；出网并发全部压在该服务上；必须严格限制其权限（无数据库、无内网访问、只允许出网 443） |
+| ② 强制经受控代理 | **代理与网络策略**（Worker 只被允许连代理，由代理解析 DNS 并阻断私网/元数据地址） | 端到端经 CONNECT 隧道直达 Provider，**代理看不到 Key 与正文** | **兼容**：Worker 仍是纯 TS，且生产环境本已强制 `MODEL_EGRESS_PROXY_URL` | 必须是真正的出网策略（防火墙/安全组/网络命名空间），现有 `egress` 只是 Docker 网络、不是防火墙；代理需具备“解析后按 IP 段判定”的能力，不能是固定域名清单（BYOK 允许用户填任意 Provider 域名） |
+| ③ 接受能力降级 | 无人负责，仅登记风险 | 与现状相同（Key 只在 Worker 内存） | 兼容 | 多租户产品中用户可控 URL 却缺少地址校验，等于保留 SSRF 面；**只有**在网络层已封死私网/元数据/非 443 时才勉强成立，而那基本等于已做了选项 ② 的一半 |
+
+补充说明：
+
+- 三者**不是互斥的**：现状本身已经是“应用层校验 + 生产强制代理”两层；选项 ② 是把代理从补充层提升为主防线，同时把应用层代码简化，而不是取消应用层校验。
+- 选项 ① 会让用户明文 Key 多经一个进程；选项 ② 在这一点上反而更好（CONNECT 隧道不解密）。这是两者最不直观的差别。
+- 选项 ③ 需要**需求方书面确认**，并由实施者同步登记到风险清单与网络补偿措施，不得由实施者自行选择。
+
+**顺带必须回答的并发问题**：Python 现状是**每次请求新建 `httpx.AsyncClient`（无连接复用）**；TS 版本必须在“安全（不跨域名复用连接、不为复用而重新解析 DNS）”与“可承受的连接开销”之间给出明确策略，并在 20/100/150 并发档下实测。
+
 现状能力（`infrastructure/llm/`）：URL 只允许公网 HTTPS 443，禁止字面量 IP 与 localhost/数字域名；每次调用重新解析全部 DNS 并逐个用 `ipaddress.is_global` 校验，**任一结果不合格即整体拒绝**；以**已验证 IP** 作为连接目标（URL host 即 IP），同时通过 httpcore 扩展键 `request.extensions["sni_hostname"]` 保留原域名 TLS SNI 与证书校验；`follow_redirects=False`；响应体预检 + 流式累计限制 8MiB；**发请求前先写 `allowed` 审计，写失败即以 `MODEL_EGRESS_AUDIT_UNAVAILABLE` 拒绝（fail-closed）**。
 
+**可行性实测结论（2026-09-16，本机 Node v22.23.1，回环 + 只签 `DNS:api.example.com` 的自签证书）：**
+
+“连固定 IP、但按原域名做 SNI 与证书校验”这套机制**在 Node 上可以实现，且与 Python 一一对应**：
+
+| 编号 | 验证内容 | 结果 |
+| --- | --- | --- |
+| T1 | `https.request({ host: '127.0.0.1', servername: 'api.example.com', ca })` + 显式 `Host` 头 | ✅ 服务端观测到 SNI = `api.example.com`、`Host: api.example.com`、证书按域名校验通过、`Authorization` 正常送达 |
+| T2 | 同上但 `servername` 故意不匹配 | ✅ `ERR_TLS_CERT_ALTNAME_INVALID` —— 证书校验跟随 `servername` 而非 IP，安全性质与 Python 等价 |
+| T3 | `host: 'api.example.com'` + 自定义 `lookup` 固定到 `127.0.0.1` | ✅ 成功；SNI 自动取 `host`。**注意 `lookup` 必须兼容 `options.all === true`（Node 20+ 默认 Happy Eyeballs），否则报 `ERR_INVALID_IP_ADDRESS`** |
+| T4 | 全局 `fetch('https://127.0.0.1/...')` | ❌ `ERR_TLS_CERT_ALTNAME_INVALID`（`error.cause`）—— fetch 的证书校验对象是 URL 的 host，写 IP 必然失败，只能靠关闭校验“绕过”= 安全降级 |
+| T5 | 全局 `fetch` 显式设置 `Host: api.example.com` | ❌ 服务端实际收到 `Host: 127.0.0.1:<port>`，**显式 Host 被丢弃**（fetch 规范的 forbidden header）；而 `node:https` 可以正常设置 |
+| T6 | 全局 fetch 是否有 `servername`/`lookup`/`ca` 选项 | ❌ 均无；undici 在 Node 22 中未对外暴露（`require('undici')` 失败），使用它需新增依赖 |
+
+**Python ↔ Node 对应关系**：
+
+| Python 现状 | Node 对应写法 |
+| --- | --- |
+| URL 的 host 直接写 pinned IP（`_build_pinned_request_url`） | `https.request({ host: pinnedIp, port })`，或 `host: 域名 + lookup: () => pinnedIp` |
+| `request.extensions["sni_hostname"]`（httpcore 私有键） | `servername`（Node 的一等公民选项，无需私有键） |
+| 显式 `Host: 原域名` | `headers: { Host: 域名 }`（**fetch 做不到**） |
+| `follow_redirects=False` | `https.request` 默认不跟随重定向（fetch 默认跟随） |
+| 每次新建 `httpx.AsyncClient` | `agent: false` 或每次新建 Agent |
+| `ipaddress.is_global` 全量 DNS 校验 | **无等价物，必须自建 CIDR 表**（本项与 above 无关，仍需自行实现） |
+
+**代理（CONNECT 隧道）路径实测（同一天，本地自建最小 CONNECT 代理）：**
+
+| 编号 | 验证内容 | 结果 |
+| --- | --- | --- |
+| P1 | 应用侧钉 IP：`CONNECT 127.0.0.1:<port>`，隧道上 `tls.connect({ socket, servername })` | ✅ `authorized: true`，服务端观测到 SNI = `api.example.com`、`Host` 正确、`Authorization` 正常送达。**代理只能看到 IP，看不到域名** |
+| P2 | 代理侧解析：`CONNECT api.example.com:<port>`，应用不解析 | ✅ 同样成功。**代理能看到域名**，但 DNS 解析与 rebinding 防护责任转移到代理 |
+| P3 | 反面：隧道上忘记传 `servername` | ❌ `ERR_TLS_CERT_ALTNAME_INVALID: Host: localhost` —— Node 会退化为按隧道对端（localhost）校验证书。这属于“配置错了才报错”的风险点，实现时必须显式传 `servername` |
+
+**结论：P1 与现状完全等价**（Python 的 `httpx` 在带代理且 URL host 为 pinned IP 时，发给代理的同样是 `CONNECT <pinned_ip>:443`，即代理只看到 IP），因此 TS 版本应采用 P1，行为不变；P2 属于设计变更（谁负责 DNS 与 IP 判定），仅在将来要做域名级策略时才考虑。
+
+**因此技术路线确定为 `node:https`/`node:tls`（或显式引入 undici `Agent`）+ 应用侧 IP 钉死（P1 风格），排除裸 `fetch`。** 仍未覆盖的只剩：真实 Provider 证书链（建议并入阶段 5 首次真实联调）、IPv4-mapped/NAT64 判定与压缩/重定向边界（这两项属于**必须实现并对齐的行为**，不是可行性验证）。
+
 TypeScript 实施要求：
-- **不使用裸 `fetch(baseUrl)`**。候选实现为 `node:https`/`node:tls` 显式 `connect({ host: pinnedIp, servername: hostname, lookup: () => pinnedIp })`，或 undici `Agent({ connect: { servername } })`；undici 在 SNI/代理场景存在已知问题（undici issue #3401、PR #2939），两条路线都必须实测后再定。
+- **不使用裸 `fetch(baseUrl)`**（已实测：T4/T5/T6 三条硬伤）。实现走 `node:https`/`node:tls` 显式 `connect({ host: pinnedIp, servername: hostname, lookup: () => pinnedIp })`，或显式引入 undici `Agent({ connect: { servername } })` 并单独验证代理场景。
 - **Node 没有 `ipaddress.is_global`**：必须自建 CIDR 拒绝表，覆盖 `100.64/10`、`169.254/16`（含云元数据）、`192.0.0.0/24`、`198.18/15`、`240/4`、IPv4-mapped IPv6（`::ffff:10.0.0.1`）、NAT64 `64:ff9b::/96`、IPv6 ULA/link-local 等；漏掉任何一条都是 SSRF 回归。
 - 重定向：`redirect: 'manual'` 并对 3xx 显式拒绝；**禁用自动解压或按解压后字节计数**，否则 gzip 炸弹可绕过响应上限。
 - IDNA：Python 使用内置 IDNA2003 codec，Node 的 `domainToASCII` 是 UTS#46，边界域名归一化结果不同，需明确取舍并测试。
@@ -376,12 +488,12 @@ Web 侧**已有 TypeScript 实现**：`apps/web/src/lib/security/credential-cryp
 | 3 | **安全出网 PoC（门禁）** | `ModelEgressPolicy` + 固定 IP/SNI/代理连接、SSE 有界聚合、错误分类、最小审计 | 第 8.1 节安全性质全部可自动测试；与 Python 错误码、可重试性一致 | 15–25 |
 | 4 | Dispatcher + BullMQ + 路由 | `SKIP LOCKED` 领取（含 `FOR UPDATE OF o` 路由 SQL）、锁超时回收、退避、**优雅关闭**；按 `run_type` 的运行时路由 | 端到端处理模拟 AgentRun；重复消息不产生重复业务结果；两种关闭路径均有测试 | 5–8 |
 | 5 | 四个工作流按风险从低到高重建 | `assessment_generate` → `posttest_generate` → `plan_generate` → `card_content_generate` 的 LangGraph.js 图 | 每个 run_type 的成功/失败/重试/取消/幂等路径全通过；golden fixtures 回放一致 | 35–50 |
-| 6 | 压测与容量配置 | 1/2/4 副本 × 不同 concurrency 的压测报告；Provider 与用户级限流；初始并发与扩容规则 | 有明确上线初值；未突破 Provider、数据库、Redis、内存与成本预算 | 5–8 |
+| 6 | 压测与容量配置 | 按 3.2 四档（20 / 100 / 150 / 300–500 峰值）压测；Provider 与用户级限流；数据库连接预算与 PgBouncer 评估；egress proxy 容量验证；扩容规则 | 有明确上线初值与各档扩容规则；未突破 Provider、数据库、代理、Redis、内存与成本预算 | 8–12 |
 | 7 | 影子验证与灰度 | 脱敏 fixtures/测试账户下的影子执行；按 `run_type` 逐类切换 | 无重复业务写入、无密钥泄露、无未解释的 Schema 回归 | 5–10 |
 | 8 | 切换、观察、退役与文档 | 停止 Python 三个进程；删除 Celery 依赖与 Redis 键；同步技术栈/架构/部署/运维/事故文档 | 生产不再依赖 Python；所有历史任务可追踪归属 | 5–8 |
-| | | | **合计** | **≈ 85–135 人日** |
+| | | | **合计** | **≈ 90–140 人日** |
 
-单人全职约 4–6.5 个月；两人并行（一人负责 8.1 出网 PoC 与基础设施，一人负责工作流）约 10–14 周。**阶段 3 是唯一可能在 PoC 失败后推翻技术选型的阶段，建议最先启动。**
+单人全职约 4.5–7 个月；两人并行（一人负责 8.1 出网 PoC 与基础设施，一人负责工作流）约 11–16 周。**阶段 3 是唯一可能在 PoC 失败后推翻技术选型的阶段，建议最先启动。** 阶段 0、3、6 的产出是后续所有容量承诺的前提，不得跳过。
 
 ## 10. 测试与验收矩阵
 
@@ -394,7 +506,7 @@ Web 侧**已有 TypeScript 实现**：`apps/web/src/lib/security/credential-cryp
 | 队列集成测试 | Redis 不可用、发布后崩溃、延迟重试、Worker 崩溃与 stalled 重投、两种优雅关闭、死信与保留策略 |
 | 工作流回归测试 | 四个 run_type 的首轮成功、工具循环、修复、Tavily 兜底、无资料重建、无效输入、取消、可重试与不可重试失败 |
 | E2E 测试 | 创建目标 → 前测 → 评分 → 路线 → 节点内容 → 后测全链路；浏览器只看到通过校验的最终产物 |
-| 性能/稳定性 | 队列等待、p95、429 比例、RSS、事件循环延迟、PG 连接、Redis 内存、单次运行成本、24 小时稳定性 |
+| 性能/稳定性 | 队列等待、p95、429 比例、RSS、**每次运行 CPU 时间与每并发 RSS（验证 2.1 的取舍）**、事件循环延迟、PG 连接数与使用率、egress proxy 并发与带宽、Redis 内存、单次运行成本、24 小时稳定性 |
 
 模型输出**不适合**作为逐字回归基线。验收比较的是：题目数量与选项/答案关系、路线节点数与依赖无环、内容必填字段与来源合同、持久化幂等性、错误码、工具调用次数、密钥不泄露与用户可见状态。
 
@@ -410,8 +522,12 @@ Web 侧**已有 TypeScript 实现**：`apps/web/src/lib/security/credential-cryp
 
 | 风险 | 错误做法 | 必须采取的处理 |
 | --- | --- | --- |
-| 认为“换 TS 就更快” | 迁移后不配置并发、限流与副本 | 第 3 节容量设计与阶段 6 压测；并发由配置决定 |
+| 认为“换 TS 就更快” | 迁移后不配置并发、限流与副本 | 第 3 节容量设计与阶段 6 压测；并发由配置决定，收益体现在**单位并发的内存与 CPU 成本**上（2.1） |
+| 把“Python I/O 弱”当作迁移理由 | 用错误前提推导容量与压测口径 | 2.2：准确表述是单位并发成本更高，不是 I/O 能力更差 |
 | 认为 Node 天然擅长 CPU | 省略线程池与背压设计 | 8.6：CPU 密集一律移出主线程，默认关闭线程池 |
+| 连接池按并发数配置 | 几百并发 → 几百条 PG 连接，直接打满数据库 | 3.5：池按事务并发设置（≈12/副本），总量 ≤ `max_connections` 的 60%，超出则引入 PgBouncer |
+| 忽略出网代理容量 | 只加 Worker 副本，代理先被打满 | 3.5：代理并发、带宽与超时计入容量表；不得绕过代理 |
+| 事件表无界增长 | 到目标规模才发现单表过亿 | 3.5 与 D14：上线目标规模前确认留存、归档与分区策略 |
 | 安全能力退化 | 对用户 Base URL 用普通 `fetch` 或官方 SDK | 8.1 门禁；未通过不得接真实用户 Key |
 | 路由 SQL 引入锁竞争 | `FOR UPDATE` 不加 `OF o`，锁住 `agent_runs` | 严格使用 `FOR UPDATE OF o SKIP LOCKED`，并做并发回归测试 |
 | 业务重复写入 | 两个运行时同时执行同一 AgentRun | 领取条件互斥；DB 状态机仍是最终幂等边界 |
@@ -441,7 +557,7 @@ Web 侧**已有 TypeScript 实现**：`apps/web/src/lib/security/credential-cryp
 2. 四个 `run_type` 全部以 LangGraph.js 图实现，并通过 Zod 与契约测试；
 3. Celery、Python Agent Worker、FastAPI Agent API 的生产职责已移除，镜像与依赖清理完毕；
 4. AgentRun/Outbox/业务写入/模型密钥/安全出网/取消/重试/审计的验收项全部通过；
-5. 完成压测并给出受 Provider 配额约束的并发配置；
+5. 完成 3.2 三档压测，给出受 Provider 配额、数据库连接与出网代理容量共同约束的并发配置与扩容规则；
 6. 完成观察期，无未解释的重复执行、数据不一致、密钥暴露、安全绕过或显著成本回归；
 7. 代码、Compose、环境变量、CI、运行手册与架构文档均反映 TypeScript 单语言常态架构；`docs/01`、`docs/04`、`docs/05`、`apps/agent-worker/README.md` 中的 Python/双栈表述已同步更新。
 
@@ -449,9 +565,12 @@ Web 侧**已有 TypeScript 实现**：`apps/web/src/lib/security/credential-cryp
 
 | 编号 | 待确认事项 | 推荐方向 | 影响 |
 | --- | --- | --- | --- |
-| D7 | 出网实现路线（`node:https` vs undici `Agent`） | 阶段 3 两条都做 PoC，取能同时满足“固定 IP + 原域名 SNI/证书 + 代理”的那条 | 直接决定 SSRF 防护与 BYOK 密钥安全 |
+| D7 | 出网实现路线 | **已定（2026-09-16 实测）**：`node:https`/`node:tls` + 应用侧 IP 钉死（P1 风格，与现状等价）+ 显式 `servername`；裸 `fetch` 已排除；代理 CONNECT 路径已验证。§8.1 的三条兜底方案**均不需要**，风险等级降为“逐项对齐” | 剩余工作转为实现与回归：IP 段判定表、压缩与大小口径、真实 Provider 联调 |
 | D8 | 是否引入 LangGraph.js 持久化 Checkpointer | 首期不引入；后续单独确认表结构、`thread_id` 规则、留存与隐私策略 | 涉及数据库 Schema、数据留存与恢复语义 |
 | D9 | `worker_threads` 使用范围 | 仅纯 CPU 子任务，有界常驻池，默认不启用 | 影响内存、故障隔离与代码复杂度 |
 | D11 | Tavily 配额是否改为单条 Lua | 建议改（修掉无 TTL 残留窗口），但属语义变更 | 影响配额精确性，需回归 |
 | D12 | 混合时钟统一策略（进程时钟 vs 数据库 `now()`） | 统一使用数据库时间，避免 `available_at` 与 `finished_at` 矛盾 | 影响 Outbox 与状态机语义 |
 | D13 | 最终目录：是否在观察期后把 TS 工程重命名为 `apps/agent-worker` | 建议重命名并删除 Python 目录，保持仓库整洁 | 影响仓库结构与历史引用 |
+| D14 | `agent.agent_run_events` 的留存、归档与分区策略 | 目标规模上线前确定；20 万用户档约 15–29 万行/日 | 涉及 Schema 与数据治理，属迁移外但必须先决策的事项 |
+| D15 | 是否引入 PgBouncer（transaction pooling） | 总连接数接近 PG `max_connections` 的 60% 时引入 | 影响连接语义（尤其 `FOR UPDATE` 与事务边界）与部署拓扑 |
+| D16 | 目标规模的部署形态：多机 Compose 还是编排平台 | 百级并发以上建议迁移到编排平台；当前单主机 Compose 无 `replicas` | 影响发布、扩缩容、密钥分发与可观测性建设 |

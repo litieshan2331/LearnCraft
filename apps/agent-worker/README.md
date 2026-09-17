@@ -1,5 +1,9 @@
 # LearnCraft Agent Worker
 
+> **迁移中（2026-09-16）：**本目录的 Python Worker 将由 TypeScript 实现取代。已确认 Agent 侧迁移到 TypeScript/Node.js（LangGraph.js），**不保留 Python 运行时**；迁移方案、容量设计（已确认口径：数千到数万注册用户 → 峰值并发约 2–150；初始上线 20，目标规模档 150）、按 `run_type` 的灰度切换与验收标准见 [docs/09-全栈TypeScript迁移方案.md](../../docs/09-全栈TypeScript迁移方案.md)。
+>
+> 在切换完成前，本文描述的行为仍是生产运行时的事实来源，同时也是 TypeScript 版本的**行为兼容基线**；除“Dispatcher 增加 `run_type` 过滤”这一迁移前置改动外，本目录不再新增功能。
+
 ## P0 Agent 工作流
 
 当前已接入四个 P0 工作流：`assessment_generate` 前测、`plan_generate` 学习路线、`card_content_generate` 节点知识内容和 `posttest_generate` 节点后测。Worker 从 `agent.agent_runs.input_summary_json` 读取任务快照，向 Web 内部接口读取账户默认模型连接，使用 `ModelCredentialDecryptor` 解密 API Key，再通过 `OpenAiCompatibleModelGateway` 调用模型。

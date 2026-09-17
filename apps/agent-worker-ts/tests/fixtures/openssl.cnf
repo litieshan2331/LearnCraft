@@ -1,0 +1,9 @@
+[ req ]
+distinguished_name = dn
+x509_extensions = v3
+prompt = no
+[ dn ]
+CN = api.example.com
+[ v3 ]
+subjectAltName = DNS:api.example.com
+basicConstraints = critical,CA:true

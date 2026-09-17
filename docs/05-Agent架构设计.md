@@ -1,8 +1,10 @@
 # LearnCraft Agent 架构设计
 
 > 文档状态：P0 架构与当前实现说明
-> 更新日期：2026-09-14
+> 更新日期：2026-09-16
 > 适用范围：P0 前测、学习路线、节点内容与节点后测
+>
+> **Agent 侧技术栈变更（2026-09-16）：**Agent 侧已确认由 Python 迁移到 TypeScript/Node.js（LangGraph.js），不保留 Python 运行时。本文的业务分工、责任边界、上下文交接、契约与可靠性不变量**与实现语言无关，继续有效**；文中描述 Celery、Python 工作流与 Python 目录结构的段落仅代表迁移期现状，目标形态以 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 为准。
 
 本文依据现有 DDD 边界、P0 实施约束和 Agent 运行模型，说明 LearnCraft 的 Agent 分工、执行流程、可靠投递和推荐目录结构。本文不新增数据库、模型或安全策略决策；当前行为以实现代码、`packages/contracts` 与 `apps/agent-worker/README.md` 为准，`04-MVP-P0实施需求与开发指南.md` 仅保留历史实施基线。
 
@@ -12,7 +14,7 @@
 
 - **Route Planner Agent**：现有文档中的 `Learning Architect` 工作流别名，负责同一目标逻辑会话中的前测生成和学习路线生成。前测用于了解学习者水平，路线生成读取前测的结构化交接快照；该 Agent 不生成知识正文。
 - **Node Tutor Agent**：现有文档中的节点教学工作流，负责同一节点逻辑会话中的节点知识生成和节点后测生成。后测只在用户主动选择后生成，并读取已保存的节点内容、`worked_example` 和 `teaching_memory`；该 Agent 不调整学习路线。
-- **共享基础设施**：负责 `AgentRun` 生命周期、Outbox 可靠投递、Celery 任务路由与重试、模型连接、安全出网和最小审计；不包含学习路线或教学内容的业务规则。LangGraph Checkpoint、费用汇总和细粒度 Trace 是保留的扩展方向，当前 P0 代码尚未接入完整实现。
+- **共享基础设施**：负责 `AgentRun` 生命周期、Outbox 可靠投递、队列任务路由与重试、模型连接、安全出网和最小审计；不包含学习路线或教学内容的业务规则。LangGraph Checkpoint、费用汇总和细粒度 Trace 是保留的扩展方向，当前 P0 代码尚未接入完整实现。
 
 两个 Agent 不直接相互调用，也不共享无限制的对话历史。当前 P0 通过 `goal_id` 或 `plan_node_id` 范围内的结构化输入快照、已保存内容和业务结果交接上下文；LangGraph Checkpoint 仍是保留方向，不能视为已启用能力。两个 Agent 之间只通过版本化、可持久化的结构化数据交接：Route Planner 将 `PlanNode.node_brief` 写入路线节点；Node Tutor 读取该摘要与目标、画像、受控资料来生成内容。
 
@@ -27,12 +29,12 @@ Web / BFF
           AgentRun + Outbox
                  │
                  ▼
-      Dispatcher → Celery Worker
+      Dispatcher → Agent Worker（迁移期 Celery，目标 BullMQ）
                  ├─ Learning Architect：前测 + 路线
                  └─ Node Tutor：节点内容 + 后测
 ```
 
-Web/BFF 在同一事务内完成请求校验、创建 `AgentRun` 和写入 Outbox。独立 Dispatcher 领取 Outbox 事件并投递 Celery；Celery Worker 按运行类型执行对应工作流。这样可将用户请求、异步任务、执行状态和业务结果关联起来，并避免业务数据已提交但异步任务未投递的情况。
+Web/BFF 在同一事务内完成请求校验、创建 `AgentRun` 和写入 Outbox。独立 Dispatcher 领取 Outbox 事件并投递队列（迁移期 Celery，目标 BullMQ）；Agent Worker 按运行类型执行对应工作流。这样可将用户请求、异步任务、执行状态和业务结果关联起来，并避免业务数据已提交但异步任务未投递的情况。
 
 ## 2. 责任边界
 
@@ -54,7 +56,7 @@ BaseAgent
 └─ 按 run_type 路由已注册 Workflow
 
 execute_agent_run + Repository
-├─ AgentRun 生命周期、Celery 重试和终态写入
+├─ AgentRun 生命周期、队列重试和终态写入
 └─ 运行事件与最小错误摘要
 
 具体 Workflow
@@ -269,7 +271,7 @@ ContentInputNormalizer
 
 节点内容首轮模型可以自主调用 Tavily；当前修复请求不开放工具，主流程最终校验仍不合法时才强制执行 Tavily 搜索和资源阅读，并基于资料重建内容。若 Tavily 本身不可用，当前实现会改用模型已有稳定知识进行一次同合同恢复。任一路径的结果都必须再次通过 `ContentValidator`；用户侧不展示中间修复或恢复路径。
 
-前测和后测题集共享 `apps/agent-worker/src/learncraft_agent/workflows/question_set_generation.py` 中的 `QuestionSetGenerationPipeline`。共享管线负责题集 JSON 解析、字段合同校验、题量校验、错误路径摘要和有限恢复，不负责业务持久化。前测首轮开放 Tavily、修复阶段不开放、最终恢复阶段开放；后测首轮只使用固定 `CardContent` 和 `teaching_memory`，修复和最终恢复阶段开放 Tavily。
+前测和后测题集共享题集生成管线（迁移期实现位于 `apps/agent-worker/src/learncraft_agent/workflows/question_set_generation.py` 的 `QuestionSetGenerationPipeline`，迁移后为 TypeScript 中的同一份共享子图）。共享管线负责题集 JSON 解析、字段合同校验、题量校验、错误路径摘要和有限恢复，不负责业务持久化；三个阶段（首轮、修复、最终恢复）与各自的工具开放策略是行为合同，迁移时必须逐条保留。前测首轮开放 Tavily、修复阶段不开放、最终恢复阶段开放；后测首轮只使用固定 `CardContent` 和 `teaching_memory`，修复和最终恢复阶段开放 Tavily。
 
 ### 4.3 内容合同
 
@@ -299,7 +301,7 @@ ContentInputNormalizer
 共享层承担以下通用能力：
 
 - `AgentRun` 的 `queued`、`running`、`succeeded`、`failed` 等状态流转，以及运行事件；
-- Outbox 事务消息、Dispatcher 可靠领取和 Celery 投递；
+- Outbox 事务消息、Dispatcher 可靠领取和队列投递；
 - 幂等、超时、有限重试和安全的用户失败文案；
 - 当前由各 Workflow 固化 Prompt、输出 Schema、超时、工具白名单与重试策略；版本化 `AgentExecutionProfile` 是后续可抽取的配置能力；
 - Tavily MCP 适配：同一个 MCP 提供搜索和资源阅读；是否开放以及是否强制调用由具体工作流阶段决定；
@@ -318,7 +320,7 @@ Tavily MCP 的连接配置、认证方式、超时、预算、调用次数和安
 
 首轮、修复和最终恢复阶段的 Tavily 策略由具体工作流决定。开放 Tavily 的阶段由模型自主决定是否调用；只有明确配置为强制恢复的工作流才在最终校验失败后强制执行 Tavily。
 
-`AgentRun` 记录“如何执行”，不定义“什么是合格的学习计划或学习内容”。Outbox、Celery 消息、日志和 API 响应不得携带用户 API Key、完整 Prompt、未脱敏模型响应或用户私密资料。
+`AgentRun` 记录“如何执行”，不定义“什么是合格的学习计划或学习内容”。Outbox、队列消息、日志和 API 响应不得携带用户 API Key、完整 Prompt、未脱敏模型响应或用户私密资料。
 
 ## 6. 推荐目录结构
 
@@ -421,7 +423,7 @@ apps/
       └─ python/
 ```
 
-Web 端的 `planning`、`content` 和 `agent-run` 分别承载路线、内容和异步运行管理。当前 Worker 的 `workflows/` 保存显式 Python 工作流；未来接入 LangGraph 后，图定义可按上方结构拆分。`application/ports/` 声明对 Core API、模型和检索的依赖；`acl/` 负责 Web Core DTO 与 Agent DTO 的防腐转换；第三方具体实现集中在 `infrastructure/`。跨语言接口和事件只通过 `packages/contracts` 共享并进行版本化。
+Web 端的 `planning`、`content` 和 `agent-run` 分别承载路线、内容和异步运行管理。迁移期 Worker 的 `workflows/` 保存显式 Python 工作流；迁移到 TypeScript 后，四个 `run_type` 将以 LangGraph.js 图实现，并按上方结构拆分（见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 第 8.2 节）。`application/ports/` 声明对 Core API、模型和检索的依赖；`acl/` 负责 Web Core DTO 与 Agent DTO 的防腐转换；第三方具体实现集中在 `infrastructure/`。跨语言接口和事件只通过 `packages/contracts` 共享并进行版本化。
 
 ## 7. 实施不变量
 
