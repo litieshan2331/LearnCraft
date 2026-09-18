@@ -2,23 +2,21 @@
 
 类：
 - ClaimedOutboxEvent：已由当前 Dispatcher 领取的 Outbox 事件快照。
-- OutboxDispatcher：使用 FOR UPDATE OF outbox_event SKIP LOCKED 领取，并按 run_type 路由投递与回写。
+- OutboxDispatcher：使用 SKIP LOCKED 领取、投递并回写事件状态。
 
 函数：
-- ts_owned_run_types：解析 AGENT_RUNTIME_ROUTES，返回已交给 TypeScript 运行时的 run_type。
 - run_dispatcher：循环投递待发送事件。
 - main：供 Docker Compose 启动 Dispatcher 的命令行入口。
 """
 
 import asyncio
-import json
 import logging
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 from pydantic import ValidationError
-from sqlalchemy import String, bindparam, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from learncraft_agent.application.dto.agent_run_task import (
@@ -32,23 +30,6 @@ from learncraft_agent.infrastructure.persistence.database import create_session_
 logger = logging.getLogger(__name__)
 
 
-def ts_owned_run_types(routes_json: str) -> list[str]:
-    """解析运行时路由映射，返回已交给 TypeScript 运行时的 run_type 列表。
-
-    未配置或空对象表示尚未灰度：返回空列表，本进程继续领取全部事件（可随时回滚）。
-    """
-    raw = routes_json.strip()
-    if not raw:
-        return []
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as error:
-        raise ValueError("AGENT_RUNTIME_ROUTES 必须是 JSON 对象。") from error
-    if not isinstance(parsed, dict):
-        raise ValueError("AGENT_RUNTIME_ROUTES 必须是 JSON 对象。")
-    return sorted(str(key) for key, value in parsed.items() if value == "ts")
-
-
 @dataclass(frozen=True)
 class ClaimedOutboxEvent:
     """表示当前进程已锁定、必须完成或标记失败的一条 Outbox 事件。"""
@@ -60,52 +41,12 @@ class ClaimedOutboxEvent:
     attempt_count: int
 
 
-CLAIM_EVENTS_SQL = """
-WITH candidate_events AS (
-    SELECT outbox_event.id
-    FROM public.outbox_events AS outbox_event
-    JOIN agent.agent_runs AS agent_run
-      ON agent_run.id = outbox_event.aggregate_id
-    WHERE outbox_event.event_type = :event_type
-      -- 未灰度时 :ts_owned_run_types 为空，NOT IN 恒真，行为与改造前一致。
-      AND agent_run.run_type NOT IN :ts_owned_run_types
-      AND (
-        (outbox_event.status IN ('pending', 'failed') AND outbox_event.available_at <= now())
-        OR (
-          outbox_event.status = 'processing'
-          AND outbox_event.locked_at < now() - (:lock_timeout_seconds * interval '1 second')
-        )
-      )
-    ORDER BY outbox_event.created_at
-    -- 必须写 OF outbox_event：否则会连带锁住 agent.agent_runs，与 begin_execution 行锁互相阻塞。
-    FOR UPDATE OF outbox_event SKIP LOCKED
-    LIMIT :batch_size
-)
-UPDATE public.outbox_events AS outbox_event
-SET status = 'processing',
-    locked_by = :dispatcher_id,
-    locked_at = now(),
-    attempt_count = outbox_event.attempt_count + 1,
-    last_error = NULL
-FROM candidate_events
-WHERE outbox_event.id = candidate_events.id
-RETURNING
-    outbox_event.id,
-    outbox_event.aggregate_id,
-    outbox_event.event_version,
-    outbox_event.payload_json,
-    outbox_event.attempt_count
-"""
-
-
 class OutboxDispatcher:
     """将 Web 事务内创建的 AgentRunRequested 事件投递到 Celery。"""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
         self._settings = get_queue_settings()
-        # 已交给 TypeScript 运行时的 run_type：本进程必须跳过，避免两个运行时抢同一事件。
-        self._ts_owned_run_types = ts_owned_run_types(self._settings.agent_runtime_routes)
 
     async def dispatch_once(self) -> int:
         """领取一个批次的事件并逐条投递，返回本轮领取数量。"""
@@ -116,9 +57,38 @@ class OutboxDispatcher:
 
     async def _claim_events(self) -> list[ClaimedOutboxEvent]:
         """使用 FOR UPDATE SKIP LOCKED 安全领取未投递或过期锁定的事件。"""
-        # 必须显式给出元素类型：否则展开绑定的类型推断会让 varchar 与 integer 比较而报错。
-        query = text(CLAIM_EVENTS_SQL).bindparams(
-            bindparam("ts_owned_run_types", type_=String, expanding=True),
+        query = text(
+            """
+            WITH candidate_events AS (
+                SELECT id
+                FROM public.outbox_events
+                WHERE event_type = :event_type
+                  AND (
+                    (status IN ('pending', 'failed') AND available_at <= now())
+                    OR (
+                      status = 'processing'
+                      AND locked_at < now() - (:lock_timeout_seconds * interval '1 second')
+                    )
+                  )
+                ORDER BY created_at
+                FOR UPDATE SKIP LOCKED
+                LIMIT :batch_size
+            )
+            UPDATE public.outbox_events AS outbox_event
+            SET status = 'processing',
+                locked_by = :dispatcher_id,
+                locked_at = now(),
+                attempt_count = outbox_event.attempt_count + 1,
+                last_error = NULL
+            FROM candidate_events
+            WHERE outbox_event.id = candidate_events.id
+            RETURNING
+                outbox_event.id,
+                outbox_event.aggregate_id,
+                outbox_event.event_version,
+                outbox_event.payload_json,
+                outbox_event.attempt_count
+            """,
         )
         async with self._session_factory() as session, session.begin():
             result = await session.execute(
@@ -128,7 +98,6 @@ class OutboxDispatcher:
                     "lock_timeout_seconds": self._settings.outbox_lock_timeout_seconds,
                     "batch_size": self._settings.outbox_batch_size,
                     "dispatcher_id": self._settings.outbox_dispatcher_id,
-                    "ts_owned_run_types": self._ts_owned_run_types,
                 },
             )
             rows = result.mappings().all()

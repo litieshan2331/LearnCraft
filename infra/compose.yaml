@@ -1,3 +1,8 @@
+# LearnCraft 本地开发编排。
+# 服务：PostgreSQL + pgvector、认证限流 Redis、队列 Redis（BullMQ）、MinIO、Web，以及 TypeScript 的
+# Dispatcher（agent-dispatcher-ts）与 Worker（agent-worker-ts）。Python 运行时代码保留在 apps/agent-worker，
+# 但已不再由本文件启动或配置。
+
 name: ${COMPOSE_PROJECT_NAME:?copy .env.example to .env before starting Compose}
 
 services:
@@ -44,23 +49,23 @@ services:
       start_period: 5s
     networks: [private]
 
-  celery-redis:
-    # Celery Broker 与认证限流 Redis 分离；两者各自仅启用 DB 0，并通过键前缀区分内部用途。
+  queue-redis:
+    # 队列 Redis（BullMQ）：与认证限流 Redis 物理分离；两者各自仅启用 DB 0，通过键前缀区分用途。
     image: redis:7.4.9-alpine
     command:
       - sh
       - -c
-      - exec redis-server --appendonly yes --requirepass "$$CELERY_REDIS_PASSWORD" --databases 1
+      - exec redis-server --appendonly yes --requirepass "$$QUEUE_REDIS_PASSWORD" --databases 1
     restart: unless-stopped
     environment:
-      CELERY_REDIS_PASSWORD: ${CELERY_REDIS_PASSWORD:?set CELERY_REDIS_PASSWORD in .env}
+      QUEUE_REDIS_PASSWORD: ${QUEUE_REDIS_PASSWORD:?set QUEUE_REDIS_PASSWORD in .env}
     volumes:
-      - celery-redis-data:/data
+      - queue-redis-data:/data
     ports:
-      # Celery 本身不是 HTTP 服务；此端口仅供本机 Redis Insight/CLI 调试队列使用。
-      - "127.0.0.1:${CELERY_REDIS_HOST_PORT:-6380}:6379"
+      # Redis 不是 HTTP 服务；此端口仅供本机 Redis Insight/CLI 调试队列使用。
+      - "127.0.0.1:${QUEUE_REDIS_HOST_PORT:-6380}:6379"
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$CELERY_REDIS_PASSWORD\" ping | grep -q PONG"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$QUEUE_REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -100,7 +105,6 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
-      AGENT_INTERNAL_URL: http://agent-api:8000
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
       CREDENTIAL_ENCRYPTION_KEY_VERSION: ${CREDENTIAL_ENCRYPTION_KEY_VERSION:-local-v1}
@@ -111,14 +115,25 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    command:
+      - sh
+      - -c
+      # node_modules 是命名卷，首次创建时从当时镜像的内容初始化，之后不会自动补新工作区包的链接。
+      # 这里只在链接缺失时强制重链（pnpm 依据根 .modules.yaml 判定「已是最新」，不会自己发现），
+      # 健康状态下走亚秒级快速路径，不影响日常重启。
+      # exec 让 pnpm（进而 Next）接管信号，避免重启时被强杀。
+      - test -e node_modules/@learncraft/security-primitives || pnpm install --frozen-lockfile --force; exec pnpm dev --hostname 0.0.0.0 --port 3000
     volumes:
-      # 源码和契约变更直接同步到容器；依赖与 .next 缓存保留在 Docker 命名卷中。
+      # 源码、契约与共享安全包变更直接同步到容器；依赖与 .next 缓存保留在 Docker 命名卷中。
       - type: bind
         source: ../apps/web
         target: /app/apps/web
       - type: bind
         source: ../packages/contracts
         target: /app/packages/contracts
+      - type: bind
+        source: ../packages/security-primitives
+        target: /app/packages/security-primitives
       - type: volume
         source: web-dev-node-modules
         target: /app/apps/web/node_modules
@@ -133,186 +148,26 @@ services:
       start_period: 20s
     networks: [edge, private]
 
-  agent-api:
-    build:
-      context: ..
-      dockerfile: infra/docker/agent-worker.Dockerfile
-    command:
-      - uvicorn
-      - learncraft_agent.main:app
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8000"
-      - --reload
-      - --reload-dir
-      - /app/src
-    restart: unless-stopped
-    environment:
-      APP_VERSION: ${APP_VERSION:-0.1.0}
-      GIT_SHA: ${GIT_SHA:-unknown}
-      # Windows Docker 绑定挂载使用轮询，保证保存 Python 文件后触发 Uvicorn 重载。
-      WATCHFILES_FORCE_POLLING: "true"
-      CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
-      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      # 仅供本机独立调试 Worker 接口，不能从局域网访问。
-      - "127.0.0.1:${AGENT_WORKER_HOST_PORT:-8000}:8000"
-    volumes:
-      # 仅挂载 Python 源码；依赖仍来自镜像，依赖变更需重新构建。
-      - type: bind
-        source: ../apps/agent-worker/src
-        target: /app/src
-    healthcheck:
-      test: ["CMD", "python", "-c", "from urllib.request import urlopen; response = urlopen('http://127.0.0.1:8000/health'); raise SystemExit(0 if response.status == 200 else 1)"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 15s
-    networks: [private]
-
-  agent-dispatcher:
-    build:
-      context: ..
-      dockerfile: infra/docker/agent-worker.Dockerfile
-    command:
-      - watchfiles
-      - --filter
-      - python
-      - --ignore-permission-denied
-      - --grace-period
-      - "1"
-      - --sigint-timeout
-      - "30"
-      - --target-type
-      - command
-      - learncraft-agent-dispatcher
-      - /app/src
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      CELERY_BROKER_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
-      CELERY_QUEUE_NAME: ${CELERY_QUEUE_NAME:-agent.run}
-      CELERY_REDIS_KEY_PREFIX: ${CELERY_REDIS_KEY_PREFIX:-learncraft:celery:}
-      CELERY_VISIBILITY_TIMEOUT_SECONDS: ${CELERY_VISIBILITY_TIMEOUT_SECONDS:-660}
-      CELERY_TASK_SOFT_TIME_LIMIT_SECONDS: ${CELERY_TASK_SOFT_TIME_LIMIT_SECONDS:-480}
-      CELERY_TASK_TIME_LIMIT_SECONDS: ${CELERY_TASK_TIME_LIMIT_SECONDS:-600}
-      CELERY_TASK_MAX_RETRIES: ${CELERY_TASK_MAX_RETRIES:-3}
-      CELERY_RETRY_BACKOFF_SECONDS: ${CELERY_RETRY_BACKOFF_SECONDS:-10}
-      CELERY_RETRY_BACKOFF_MAX_SECONDS: ${CELERY_RETRY_BACKOFF_MAX_SECONDS:-300}
-      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-1}
-      # 灰度路由：已映射为 ts 的 run_type 必须跳过，避免与 TypeScript Dispatcher 抢同一事件。
-      AGENT_RUNTIME_ROUTES: ${AGENT_RUNTIME_ROUTES:-}
-      OUTBOX_DISPATCHER_ID: ${OUTBOX_DISPATCHER_ID:-agent-dispatcher-local}
-      OUTBOX_POLL_INTERVAL_SECONDS: ${OUTBOX_POLL_INTERVAL_SECONDS:-1}
-      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
-      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-900}
-      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-10}
-      # Windows Docker 绑定挂载使用轮询，保证保存 Python 文件后重启 Dispatcher 子进程。
-      WATCHFILES_FORCE_POLLING: "true"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      celery-redis:
-        condition: service_healthy
-    stop_grace_period: 30s
-    volumes:
-      # 只挂载 Python 源码；依赖仍来自镜像，依赖变更需重新构建。
-      - type: bind
-        source: ../apps/agent-worker/src
-        target: /app/src
-    networks: [private]
-
-  agent-celery-worker:
-    build:
-      context: ..
-      dockerfile: infra/docker/agent-worker.Dockerfile
-    command:
-      - watchfiles
-      - --filter
-      - python
-      - --ignore-permission-denied
-      - --grace-period
-      - "1"
-      - --sigint-timeout
-      - "600"
-      - --target-type
-      - command
-      - "celery -A learncraft_agent.core.celery_app:celery_app worker --loglevel=INFO"
-      - /app/src
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      # Windows Docker 绑定挂载使用轮询，保证保存 Python 文件后重启 Celery Worker 子进程。
-      WATCHFILES_FORCE_POLLING: "true"
-      CELERY_BROKER_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
-      CELERY_QUEUE_NAME: ${CELERY_QUEUE_NAME:-agent.run}
-      CELERY_REDIS_KEY_PREFIX: ${CELERY_REDIS_KEY_PREFIX:-learncraft:celery:}
-      CELERY_VISIBILITY_TIMEOUT_SECONDS: ${CELERY_VISIBILITY_TIMEOUT_SECONDS:-660}
-      CELERY_TASK_SOFT_TIME_LIMIT_SECONDS: ${CELERY_TASK_SOFT_TIME_LIMIT_SECONDS:-480}
-      CELERY_TASK_TIME_LIMIT_SECONDS: ${CELERY_TASK_TIME_LIMIT_SECONDS:-600}
-      CELERY_TASK_MAX_RETRIES: ${CELERY_TASK_MAX_RETRIES:-3}
-      CELERY_RETRY_BACKOFF_SECONDS: ${CELERY_RETRY_BACKOFF_SECONDS:-10}
-      CELERY_RETRY_BACKOFF_MAX_SECONDS: ${CELERY_RETRY_BACKOFF_MAX_SECONDS:-300}
-      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-1}
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:?set EMBEDDING_PROVIDER in .env}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:?set EMBEDDING_MODEL in .env}
-      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:?set EMBEDDING_DIMENSION in .env}
-      EMBEDDING_METRIC: ${EMBEDDING_METRIC:?set EMBEDDING_METRIC in .env}
-      EMBEDDING_PROFILE_VERSION: ${EMBEDDING_PROFILE_VERSION:?set EMBEDDING_PROFILE_VERSION in .env}
-      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
-      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
-      CREDENTIAL_ENCRYPTION_KEY_VERSION: ${CREDENTIAL_ENCRYPTION_KEY_VERSION:-local-v1}
-      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
-      MODEL_GATEWAY_REQUEST_MAX_RETRIES: ${MODEL_GATEWAY_REQUEST_MAX_RETRIES:-5}
-      TAVILY_SEARCH_MAX_RESULTS: ${TAVILY_SEARCH_MAX_RESULTS:-5}
-      TAVILY_EXTRACT_TOP_RESULTS: ${TAVILY_EXTRACT_TOP_RESULTS:-2}
-      TAVILY_EXTRACT_CHUNKS_PER_SOURCE: ${TAVILY_EXTRACT_CHUNKS_PER_SOURCE:-3}
-      AGENT_TOOL_MAX_CALLS: ${AGENT_TOOL_MAX_CALLS:-6}
-      TAVILY_DAILY_TOOL_CALL_LIMIT: ${TAVILY_DAILY_TOOL_CALL_LIMIT:-20}
-      TAVILY_QUOTA_REDIS_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
-      TAVILY_QUOTA_KEY_PREFIX: ${TAVILY_QUOTA_KEY_PREFIX:-ratelimit:tavily:daily:}
-      MODEL_EGRESS_ENABLED: ${MODEL_EGRESS_ENABLED:-false}
-      MODEL_EGRESS_ENVIRONMENT: ${MODEL_EGRESS_ENVIRONMENT:-development}
-      MODEL_EGRESS_PROXY_URL: ${MODEL_EGRESS_PROXY_URL:-}
-      MODEL_EGRESS_CONNECT_TIMEOUT_SECONDS: ${MODEL_EGRESS_CONNECT_TIMEOUT_SECONDS:-10}
-      MODEL_EGRESS_READ_TIMEOUT_SECONDS: ${MODEL_EGRESS_READ_TIMEOUT_SECONDS:-120}
-      MODEL_EGRESS_MAX_RESPONSE_BYTES: ${MODEL_EGRESS_MAX_RESPONSE_BYTES:-8388608}
-      MODEL_EGRESS_AUDIT_RETENTION_DAYS: ${MODEL_EGRESS_AUDIT_RETENTION_DAYS:-30}
-      CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
-      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      celery-redis:
-        condition: service_healthy
-      web:
-        condition: service_healthy
-    stop_grace_period: 11m
-    volumes:
-      # 只挂载 Python 源码；依赖仍来自镜像，依赖变更需重新构建。
-      - type: bind
-        source: ../apps/agent-worker/src
-        target: /app/src
-    networks: [private, egress]
-
   agent-worker-ts:
-    # TypeScript Agent Worker：消费 BullMQ 队列并执行 AgentRun（迁移中与 Python Worker 并存）。
+    # TypeScript Agent Worker：消费 BullMQ 队列并执行 AgentRun，是当前唯一的 Agent 运行时。
     build:
       context: ..
       dockerfile: infra/docker/agent-worker-ts.dev.Dockerfile
     command:
       - sh
       - -c
-      - pnpm build && node dist/worker.js
+      # node_modules 是命名卷（源码为 bind 挂载），依赖变更后必须先在容器内安装，否则新依赖缺失。
+      # 末尾用 exec：让 node 取代 sh 成为 PID 1，否则 SIGTERM 只发给 sh，优雅关闭收不到信号，
+      # Docker 会一直等到 stop_grace_period（11 分钟）才强杀。
+      - pnpm install --frozen-lockfile --filter @learncraft/agent-worker-ts... && pnpm build && exec node dist/worker.js
     restart: unless-stopped
     environment:
+      # 健康端点与版本接口使用的非敏感构建标识。
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      GIT_SHA: ${GIT_SHA:-unknown}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      # 队列 Redis 与认证 Redis 物理隔离；键前缀与 Celery 的 learncraft:celery: 不共用。
-      AGENT_QUEUE_REDIS_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
+      # 队列 Redis 与认证 Redis 物理隔离；键前缀 learncraft:agent-queue 与认证限流的 ratelimit: 前缀不共用。
+      AGENT_QUEUE_REDIS_URL: redis://:${QUEUE_REDIS_PASSWORD}@queue-redis:6379/0
       AGENT_QUEUE_PREFIX: ${AGENT_QUEUE_PREFIX:-learncraft:agent-queue}
       AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-agent.run}
       AGENT_WORKER_CONCURRENCY: ${AGENT_WORKER_CONCURRENCY:-1}
@@ -325,6 +180,15 @@ services:
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
       CREDENTIAL_ENCRYPTION_KEY_VERSION: ${CREDENTIAL_ENCRYPTION_KEY_VERSION:-local-v1}
       MODEL_GATEWAY_REQUEST_MAX_RETRIES: ${MODEL_GATEWAY_REQUEST_MAX_RETRIES:-5}
+      # 联网工具配置：配额按账户走队列 Redis 的独立键前缀 ratelimit:tavily:daily:。
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      TAVILY_SEARCH_MAX_RESULTS: ${TAVILY_SEARCH_MAX_RESULTS:-5}
+      TAVILY_EXTRACT_TOP_RESULTS: ${TAVILY_EXTRACT_TOP_RESULTS:-2}
+      TAVILY_EXTRACT_CHUNKS_PER_SOURCE: ${TAVILY_EXTRACT_CHUNKS_PER_SOURCE:-3}
+      AGENT_TOOL_MAX_CALLS: ${AGENT_TOOL_MAX_CALLS:-6}
+      TAVILY_DAILY_TOOL_CALL_LIMIT: ${TAVILY_DAILY_TOOL_CALL_LIMIT:-20}
+      TAVILY_QUOTA_REDIS_URL: redis://:${QUEUE_REDIS_PASSWORD}@queue-redis:6379/0
+      TAVILY_QUOTA_KEY_PREFIX: ${TAVILY_QUOTA_KEY_PREFIX:-ratelimit:tavily:daily:}
       MODEL_EGRESS_ENABLED: ${MODEL_EGRESS_ENABLED:-false}
       MODEL_EGRESS_ENVIRONMENT: ${MODEL_EGRESS_ENVIRONMENT:-development}
       MODEL_EGRESS_PROXY_URL: ${MODEL_EGRESS_PROXY_URL:-}
@@ -335,11 +199,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      celery-redis:
+      queue-redis:
         condition: service_healthy
       web:
         condition: service_healthy
-    # 与 Celery Worker 一致：关闭窗口覆盖 600 秒硬超时，不中断在飞任务。
+    # 关闭窗口覆盖 600 秒硬超时，不中断在飞任务。
     stop_grace_period: 11m
     volumes:
       - type: bind
@@ -351,6 +215,12 @@ services:
       - type: volume
         source: agent-worker-ts-node-modules
         target: /app/apps/agent-worker-ts/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     networks: [private, egress]
 
   agent-dispatcher-ts:
@@ -361,11 +231,15 @@ services:
     command:
       - sh
       - -c
-      - pnpm build && node dist/dispatcher.js
+      # 同上：exec 保证 SIGTERM 能到达 node。
+      - pnpm install --frozen-lockfile --filter @learncraft/agent-worker-ts... && pnpm build && exec node dist/dispatcher.js
     restart: unless-stopped
     environment:
+      # 健康端点与版本接口使用的非敏感构建标识。
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      GIT_SHA: ${GIT_SHA:-unknown}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      AGENT_QUEUE_REDIS_URL: redis://:${CELERY_REDIS_PASSWORD}@celery-redis:6379/0
+      AGENT_QUEUE_REDIS_URL: redis://:${QUEUE_REDIS_PASSWORD}@queue-redis:6379/0
       AGENT_QUEUE_PREFIX: ${AGENT_QUEUE_PREFIX:-learncraft:agent-queue}
       AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-agent.run}
       # 多实例必须各自唯一，否则会互相覆盖 Outbox 状态。
@@ -374,12 +248,10 @@ services:
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
       OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-900}
       OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-10}
-      # 灰度路由：只有映射为 ts 的 run_type 由本运行时领取；留空表示不接管任何工作流。
-      AGENT_RUNTIME_ROUTES: ${AGENT_RUNTIME_ROUTES:-}
     depends_on:
       postgres:
         condition: service_healthy
-      celery-redis:
+      queue-redis:
         condition: service_healthy
     stop_grace_period: 30s
     volumes:
@@ -392,6 +264,12 @@ services:
       - type: volume
         source: agent-worker-ts-node-modules
         target: /app/apps/agent-worker-ts/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     networks: [private]
 
 networks:
@@ -404,7 +282,7 @@ networks:
 volumes:
   postgres-data:
   redis-data:
-  celery-redis-data:
+  queue-redis-data:
   minio-data:
   web-dev-node-modules:
   web-dev-next-cache:

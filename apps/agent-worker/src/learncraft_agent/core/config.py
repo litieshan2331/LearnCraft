@@ -263,10 +263,6 @@ class QueueSettings(BaseSettings):
         ge=1,
         validation_alias="CELERY_WORKER_CONCURRENCY",
     )
-    agent_runtime_routes: str = Field(
-        default="",
-        validation_alias="AGENT_RUNTIME_ROUTES",
-    )
     outbox_dispatcher_id: str = Field(
         default="agent-dispatcher",
         min_length=1,

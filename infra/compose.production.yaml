@@ -1,7 +1,7 @@
 # LearnCraft 生产应用编排。
-# 服务：Web、Agent API、PostgreSQL Outbox Dispatcher（Python 与 TypeScript 各一个）与 Agent Worker（Celery 与 BullMQ 各一个）。
-# 灰度方式：AGENT_RUNTIME_ROUTES 声明 run_type 归属哪个运行时，两侧读取同一份映射，互不重叠。
-# 外部依赖：PostgreSQL、认证 Redis、Celery Redis Broker 与对象存储均由环境变量提供，不在此文件创建。
+# 服务：Web、TypeScript Outbox Dispatcher（agent-dispatcher-ts）与 TypeScript Agent Worker（agent-worker-ts）。
+# 只有一套 Agent 运行时：Dispatcher 领取全部 Outbox 事件，未注册的 run_type 会明确失败而不是无人领取。
+# 外部依赖：PostgreSQL、认证 Redis、队列 Redis 与对象存储均由环境变量提供，不在此文件创建。
 
 name: ${COMPOSE_PROJECT_NAME:-learncraft-production}
 
@@ -21,7 +21,6 @@ services:
       REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST in .env.production}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env.production}
-      AGENT_INTERNAL_URL: http://agent-api:8000
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env.production}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set CREDENTIAL_ENCRYPTION_KEY in .env.production}
       CREDENTIAL_ENCRYPTION_KEY_VERSION: ${CREDENTIAL_ENCRYPTION_KEY_VERSION:?set CREDENTIAL_ENCRYPTION_KEY_VERSION in .env.production}
@@ -35,112 +34,6 @@ services:
       start_period: 20s
     networks: [edge, private]
 
-  agent-api:
-    build:
-      context: ..
-      dockerfile: infra/docker/agent-worker.Dockerfile
-    restart: unless-stopped
-    environment:
-      APP_VERSION: ${APP_VERSION:?set APP_VERSION in .env.production}
-      GIT_SHA: ${GIT_SHA:?set GIT_SHA in .env.production}
-      CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
-      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env.production}
-    depends_on:
-      web:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "from urllib.request import urlopen; response = urlopen('http://127.0.0.1:8000/health'); raise SystemExit(0 if response.status == 200 else 1)"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 15s
-    networks: [private]
-
-  agent-dispatcher:
-    build:
-      context: ..
-      dockerfile: infra/docker/agent-worker.Dockerfile
-    command: ["learncraft-agent-dispatcher"]
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?set CELERY_BROKER_URL in .env.production}
-      CELERY_BROKER_MASTER_NAME: ${CELERY_BROKER_MASTER_NAME:-}
-      CELERY_QUEUE_NAME: ${CELERY_QUEUE_NAME:-agent.run}
-      CELERY_REDIS_KEY_PREFIX: ${CELERY_REDIS_KEY_PREFIX:-learncraft:celery:}
-      CELERY_VISIBILITY_TIMEOUT_SECONDS: ${CELERY_VISIBILITY_TIMEOUT_SECONDS:-660}
-      CELERY_TASK_SOFT_TIME_LIMIT_SECONDS: ${CELERY_TASK_SOFT_TIME_LIMIT_SECONDS:-480}
-      CELERY_TASK_TIME_LIMIT_SECONDS: ${CELERY_TASK_TIME_LIMIT_SECONDS:-600}
-      CELERY_TASK_MAX_RETRIES: ${CELERY_TASK_MAX_RETRIES:-3}
-      CELERY_RETRY_BACKOFF_SECONDS: ${CELERY_RETRY_BACKOFF_SECONDS:-10}
-      CELERY_RETRY_BACKOFF_MAX_SECONDS: ${CELERY_RETRY_BACKOFF_MAX_SECONDS:-300}
-      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-1}
-      OUTBOX_DISPATCHER_ID: ${OUTBOX_DISPATCHER_ID:-agent-dispatcher-production}
-      OUTBOX_POLL_INTERVAL_SECONDS: ${OUTBOX_POLL_INTERVAL_SECONDS:-1}
-      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
-      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-900}
-      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-10}
-      # 与 agent-dispatcher-ts 必须使用同一份映射：映射为 ts 的 run_type 由 TS 侧领取，本进程只领取其余部分。
-      AGENT_RUNTIME_ROUTES: ${AGENT_RUNTIME_ROUTES:?set AGENT_RUNTIME_ROUTES in .env.production}
-    stop_grace_period: 30s
-    networks: [private]
-
-  agent-celery-worker:
-    build:
-      context: ..
-      dockerfile: infra/docker/agent-worker.Dockerfile
-    command:
-      - celery
-      - -A
-      - learncraft_agent.core.celery_app:celery_app
-      - worker
-      - --loglevel=INFO
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?set CELERY_BROKER_URL in .env.production}
-      CELERY_BROKER_MASTER_NAME: ${CELERY_BROKER_MASTER_NAME:-}
-      CELERY_QUEUE_NAME: ${CELERY_QUEUE_NAME:-agent.run}
-      CELERY_REDIS_KEY_PREFIX: ${CELERY_REDIS_KEY_PREFIX:-learncraft:celery:}
-      CELERY_VISIBILITY_TIMEOUT_SECONDS: ${CELERY_VISIBILITY_TIMEOUT_SECONDS:-660}
-      CELERY_TASK_SOFT_TIME_LIMIT_SECONDS: ${CELERY_TASK_SOFT_TIME_LIMIT_SECONDS:-480}
-      CELERY_TASK_TIME_LIMIT_SECONDS: ${CELERY_TASK_TIME_LIMIT_SECONDS:-600}
-      CELERY_TASK_MAX_RETRIES: ${CELERY_TASK_MAX_RETRIES:-3}
-      CELERY_RETRY_BACKOFF_SECONDS: ${CELERY_RETRY_BACKOFF_SECONDS:-10}
-      CELERY_RETRY_BACKOFF_MAX_SECONDS: ${CELERY_RETRY_BACKOFF_MAX_SECONDS:-300}
-      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-1}
-      CORE_INTERNAL_BASE_URL: http://web:3000/internal/v1
-      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?set INTERNAL_SERVICE_SECRET in .env.production}
-      TAVILY_API_KEY: ${TAVILY_API_KEY:?set TAVILY_API_KEY in .env.production}
-      MODEL_GATEWAY_REQUEST_MAX_RETRIES: ${MODEL_GATEWAY_REQUEST_MAX_RETRIES:-2}
-      TAVILY_SEARCH_MAX_RESULTS: ${TAVILY_SEARCH_MAX_RESULTS:-5}
-      TAVILY_EXTRACT_TOP_RESULTS: ${TAVILY_EXTRACT_TOP_RESULTS:-2}
-      TAVILY_EXTRACT_CHUNKS_PER_SOURCE: ${TAVILY_EXTRACT_CHUNKS_PER_SOURCE:-3}
-      AGENT_TOOL_MAX_CALLS: ${AGENT_TOOL_MAX_CALLS:-3}
-      TAVILY_DAILY_TOOL_CALL_LIMIT: ${TAVILY_DAILY_TOOL_CALL_LIMIT:-20}
-      TAVILY_QUOTA_REDIS_URL: ${TAVILY_QUOTA_REDIS_URL:?set TAVILY_QUOTA_REDIS_URL in .env.production}
-      TAVILY_QUOTA_KEY_PREFIX: ${TAVILY_QUOTA_KEY_PREFIX:-ratelimit:tavily:daily:}
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:?set EMBEDDING_PROVIDER in .env.production}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:?set EMBEDDING_MODEL in .env.production}
-      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:?set EMBEDDING_DIMENSION in .env.production}
-      EMBEDDING_METRIC: ${EMBEDDING_METRIC:?set EMBEDDING_METRIC in .env.production}
-      EMBEDDING_PROFILE_VERSION: ${EMBEDDING_PROFILE_VERSION:?set EMBEDDING_PROFILE_VERSION in .env.production}
-      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:?set SILICONFLOW_API_KEY in .env.production}
-      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set CREDENTIAL_ENCRYPTION_KEY in .env.production}
-      CREDENTIAL_ENCRYPTION_KEY_VERSION: ${CREDENTIAL_ENCRYPTION_KEY_VERSION:?set CREDENTIAL_ENCRYPTION_KEY_VERSION in .env.production}
-      MODEL_EGRESS_ENABLED: ${MODEL_EGRESS_ENABLED:?set MODEL_EGRESS_ENABLED in .env.production}
-      MODEL_EGRESS_ENVIRONMENT: production
-      MODEL_EGRESS_PROXY_URL: ${MODEL_EGRESS_PROXY_URL:?set MODEL_EGRESS_PROXY_URL in .env.production}
-      MODEL_EGRESS_CONNECT_TIMEOUT_SECONDS: ${MODEL_EGRESS_CONNECT_TIMEOUT_SECONDS:-10}
-      MODEL_EGRESS_READ_TIMEOUT_SECONDS: ${MODEL_EGRESS_READ_TIMEOUT_SECONDS:-120}
-      MODEL_EGRESS_MAX_RESPONSE_BYTES: ${MODEL_EGRESS_MAX_RESPONSE_BYTES:-4194304}
-      MODEL_EGRESS_AUDIT_RETENTION_DAYS: ${MODEL_EGRESS_AUDIT_RETENTION_DAYS:-30}
-    depends_on:
-      web:
-        condition: service_healthy
-    stop_grace_period: 11m
-    networks: [private, egress]
-
   agent-dispatcher-ts:
     build:
       context: ..
@@ -148,13 +41,15 @@ services:
     command: ["node", "dist/dispatcher.js"]
     restart: unless-stopped
     environment:
+      # 健康端点与版本接口使用的非敏感构建标识。
+      APP_VERSION: ${APP_VERSION:?set APP_VERSION in .env.production}
+      GIT_SHA: ${GIT_SHA:?set GIT_SHA in .env.production}
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
       # BullMQ 连接串：必须与 agent-worker-ts 指向同一个 Redis 实例与 db。
       AGENT_QUEUE_REDIS_URL: ${AGENT_QUEUE_REDIS_URL:?set AGENT_QUEUE_REDIS_URL in .env.production}
       AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-agent.run}
       AGENT_QUEUE_PREFIX: ${AGENT_QUEUE_PREFIX:-learncraft:agent-queue}
-      AGENT_RUNTIME_ROUTES: ${AGENT_RUNTIME_ROUTES:?set AGENT_RUNTIME_ROUTES in .env.production}
       OUTBOX_DISPATCHER_ID_TS: ${OUTBOX_DISPATCHER_ID_TS:-agent-dispatcher-ts-production}
       OUTBOX_POLL_INTERVAL_SECONDS: ${OUTBOX_POLL_INTERVAL_SECONDS:-1}
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
@@ -162,6 +57,12 @@ services:
       OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-10}
       OUTBOX_MAX_BACKOFF_SECONDS: ${OUTBOX_MAX_BACKOFF_SECONDS:-300}
     stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     networks: [private]
 
   agent-worker-ts:
@@ -170,6 +71,9 @@ services:
       dockerfile: infra/docker/agent-worker-ts.Dockerfile
     restart: unless-stopped
     environment:
+      # 健康端点与版本接口使用的非敏感构建标识。
+      APP_VERSION: ${APP_VERSION:?set APP_VERSION in .env.production}
+      GIT_SHA: ${GIT_SHA:?set GIT_SHA in .env.production}
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
       AGENT_QUEUE_REDIS_URL: ${AGENT_QUEUE_REDIS_URL:?set AGENT_QUEUE_REDIS_URL in .env.production}
@@ -195,8 +99,14 @@ services:
     depends_on:
       web:
         condition: service_healthy
-    # 与 Celery 侧一致的宽限期：等待在途任务收尾，避免被强制中断后重复执行。
+    # 与 队列 Redis 侧一致的宽限期：等待在途任务收尾，避免被强制中断后重复执行。
     stop_grace_period: 11m
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     networks: [private, egress]
 
 networks:
