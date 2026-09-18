@@ -6,24 +6,20 @@
  *
  * 与 Python 逐项对齐的行为：
  * - 输入契约：三层嵌套对象都是 extra=forbid，weekly_minutes 30-10080，background_summary 可空；
- * - 提示词：system 与 user 文案一致（联网相关两句改写为「不提供工具」，见下），
- *   前测薄弱点摘要按原字段顺序序列化后嵌入；
+ * - 提示词：system 与 user 文案一致，前测薄弱点摘要按原字段顺序序列化后嵌入；
  * - 校验与修复：首轮 + 两次修复（repair_attempts 取 0/1/2），修复消息为
  *   「原文 assistant 消息 + 修复指令 system 消息」，全部失败后进入兜底重建；
- * - 兜底重建：使用 plan-recovery.ts 的宽松规范化后再严格校验，失败时再做一次结构化修复；
+ * - 兜底重建：先强制 Tavily 检索后重建，联网不可用时退回无资料重建；
+ *   两条路径都使用 plan-recovery.ts 的宽松规范化后再严格校验，失败时再做一次结构化修复；
  * - 回写载荷与输出摘要字段与 Python 一致（6 个摘要键，generation_path 取
  *   model_knowledge / tavily_recovery）。
  *
  * **已确认的行为差异：** token 用量写真实值（Python 的 mark_succeeded 恒写 0），
  * 由调用方写入 agent_runs 的 token 列；本工作流累计首轮、修复与兜底所有模型调用的用量。
  *
- * **与 Python 现状的已知差异（Tavily 未接入，阶段 5 待补齐）：**
- * 1. 首轮不提供任何工具，因此 tool_call_count 恒为 0，generation_path 不会是 model_with_tavily；
- * 2. 模型若返回工具调用（本实现无法执行），按「没有可用正文」处理并抛 MODEL_PROVIDER_RESPONSE_INVALID，
- *   而 Python 会执行工具后继续循环；
- * 3. 兜底阶段直接走 Python 的 _rebuild_without_sources（无资料模型重建），
- *    不经过 _rebuild_with_tavily，Tavily 错误类别固定为 TAVILY_TOOL_NOT_AVAILABLE；
- *    因此错误码 PLAN_TAVILY_SOURCE_RECOVERY_INVALID 在本实现中不会出现。
+ * 联网工具（Tavily 远程 MCP）已接入：首轮由模型自主决定是否调用，工具调用数写入
+ * generation_metadata；全部严格校验失败后先执行 _rebuild_with_tavily（强制联网检索后重建），
+ * 联网不可用时再退回 _rebuild_without_sources，两条路径都通过同一份路线合同。
  *
  * 导出：
  * - PlanGenerationInputSchema / PlanGenerationInput
@@ -32,6 +28,8 @@
  * - runPlanGenerate：执行一次学习路线生成。
  * - createPlanGenerateWorkflow：适配为注册表可用的 AgentWorkflow。
  */
+
+import { randomUUID } from 'node:crypto';
 
 import { z } from 'zod';
 
@@ -50,13 +48,18 @@ import type {
   PersistedLearningPlanEnvelope,
 } from '../schemas/core-internal.js';
 import {
+  runToolAwareGeneration,
+  type ToolGatewayPort,
+} from '../application/services/tool-aware-generator.js';
+import { TAVILY_SEARCH_TOOL } from '../infrastructure/mcp/tavily-tool-gateway.js';
+import {
   LearningPlanDocumentSchema,
   planValidationPaths,
   type LearningPlanDocument,
 } from './plan-document.js';
 import { PlanRecoveryNormalizationError, normalizeRecoveryDocument } from './plan-recovery.js';
 
-/** 本实现不接入 Tavily，兜底提示词中的错误类别固定为该值。 */
+/** 联网工具未配置或不可用时的占位错误类别；正常路径会回填工具返回的真实类别。 */
 const TAVILY_UNAVAILABLE_CODE = 'TAVILY_TOOL_NOT_AVAILABLE';
 
 const SYSTEM_PROMPT = [
@@ -64,7 +67,8 @@ const SYSTEM_PROMPT = [
   '最终必须只输出一个严格 JSON 对象，不能输出 Markdown 或额外解释。',
   '路线必须像一本技术书的章节目录：6 到 12 个可独立学习的主题章节，不能使用泛化的“了解概念、练习、复盘”阶段模板。',
   '所有面向学习者的文字必须使用简体中文；技术专有名词、代码和标识符可保留英文。',
-  '本次不提供任何联网检索工具，请仅依据你已掌握的稳定知识生成路线，不要编造时效性强的版本信息。',
+  '当主题涉及近期版本、快速变化 API、兼容性或你对事实没有足够把握时，可以使用 tavily_search。',
+  '对于稳定且有把握的知识可直接生成；不要为调用工具而调用工具。',
   'JSON 顶层只能包含 schema_version、title、summary、nodes。',
   '每个 node 只能包含 node_key、ordinal、title、node_brief、learning_objective、rationale、difficulty、estimated_minutes、prerequisite_node_keys、completion_criteria。',
   'node_key 使用小写英文和下划线，ordinal 必须从 1 连续编号。',
@@ -128,6 +132,10 @@ export interface PlanGenerationDeps {
   internalClient: PlanInternalPort;
   decryptor: ModelCredentialDecryptor;
   gateway: PlanModelGatewayPort;
+  /** 联网工具网关（Tavily）；未配置 Key 时返回受控错误而不是抛异常。 */
+  toolGateway: ToolGatewayPort;
+  /** 单次运行可见的工具调用上限。 */
+  maxToolCalls: number;
 }
 
 export interface PlanGenerationResult {
@@ -267,6 +275,8 @@ async function rebuildWithoutSources(input: {
   runId: string;
   value: PlanGenerationInput;
   connection: ModelProviderConnection;
+  /** 联网工具返回的错误类别，原样回填到提示词中。 */
+  tavilyErrorCode: string;
 }): Promise<LearningPlanDocument> {
   const request: ModelCompletionRequest = {
     agentRunId: input.runId,
@@ -278,7 +288,7 @@ async function rebuildWithoutSources(input: {
         content:
           '学习主题：' + input.value.goal.topic
           + '\n目标：' + input.value.goal.desired_outcome
-          + '\nTavily 错误类别：' + TAVILY_UNAVAILABLE_CODE,
+          + '\nTavily 错误类别：' + input.tavilyErrorCode,
       },
     ],
     responseFormat: 'json_object',
@@ -291,6 +301,68 @@ async function rebuildWithoutSources(input: {
     hasToolCalls: (response.message.toolCalls?.length ?? 0) > 0,
     errorCode: 'PLAN_MODEL_RECOVERY_INVALID',
     failureMessage: '无资料模型恢复结果仍不符合路线合同。',
+  });
+}
+
+/**
+ * 在最终校验失败后强制 Tavily 搜索、阅读并重建路线（对应 Python 的 _rebuild_with_tavily）。
+ * 联网工具不可用时退回无资料重建，两条路径都必须通过同一份路线合同。
+ */
+async function rebuildWithTavily(input: {
+  complete: UsageAwareComplete;
+  toolGateway: ToolGatewayPort;
+  runId: string;
+  value: PlanGenerationInput;
+  connection: ModelProviderConnection;
+}): Promise<LearningPlanDocument> {
+  const query = (
+    input.value.goal.topic + ' 官方文档 教程 目录 ' + input.value.goal.desired_outcome
+  ).slice(0, 500);
+  const toolResult = await input.toolGateway.execute({
+    id: 'forced_tavily_' + randomUUID().replace(/-/g, ''),
+    name: TAVILY_SEARCH_TOOL.name,
+    argumentsJson: JSON.stringify({ query }),
+  });
+  if (!toolResult.ok) {
+    return rebuildWithoutSources({
+      complete: input.complete,
+      runId: input.runId,
+      value: input.value,
+      connection: input.connection,
+      tavilyErrorCode: toolResult.code,
+    });
+  }
+
+  const sourceContext = JSON.stringify(toolResult.data);
+  const request: ModelCompletionRequest = {
+    agentRunId: input.runId,
+    connection: input.connection,
+    messages: [
+      {
+        role: 'system',
+        content:
+          '你正在执行强制联网兜底。请仅基于以下 Tavily 搜索和资源阅读摘要，严格按 schema_version、title、summary、nodes 输出；'
+          + '每个 node 只能包含 node_key、ordinal、title、node_brief、learning_objective、rationale、difficulty、estimated_minutes、prerequisite_node_keys、completion_criteria；'
+          + '禁止 description、topics、goal、dependencies 等旧字段；路线必须有 6-12 个章节、ordinal 连续、依赖存在且无环。',
+      },
+      {
+        role: 'user',
+        content:
+          '学习主题：' + input.value.goal.topic
+          + '\n目标：' + input.value.goal.desired_outcome
+          + '\n参考资料摘要：' + sourceContext,
+      },
+    ],
+    responseFormat: 'json_object',
+  };
+  const response = await input.complete(request);
+  return parseRecoveryResponse({
+    complete: input.complete,
+    request,
+    content: response.message.content ?? null,
+    hasToolCalls: (response.message.toolCalls?.length ?? 0) > 0,
+    errorCode: 'PLAN_TAVILY_SOURCE_RECOVERY_INVALID',
+    failureMessage: '基于 Tavily 资料的路线恢复结果仍不符合路线合同。',
   });
 }
 
@@ -336,30 +408,38 @@ export async function runPlanGenerate(
     responseFormat: 'json_object',
   };
 
-  const initial = await complete(request);
-  // 与 Python 的 ToolAwareGenerator 一致：没有正文即不可用；本实现没有工具循环，工具调用同样按不可用处理。
-  if ((initial.message.toolCalls?.length ?? 0) > 0 || !initial.message.content) {
-    throw new ModelGatewayError('MODEL_PROVIDER_RESPONSE_INVALID', '模型没有返回最终文本内容。', false);
-  }
+  // 与 Python 一致：首轮由模型自主决定是否调用 Tavily，工具循环在 tool-aware-generator 中。
+  const initial = await runToolAwareGeneration({
+    complete,
+    toolGateway: deps.toolGateway,
+    maxToolCalls: deps.maxToolCalls,
+    request: { ...request, tools: [TAVILY_SEARCH_TOOL], toolChoice: 'auto' },
+  });
+  const toolCallCount = initial.toolCallCount;
 
-  const parsed = await parseOrRepair({ complete, request, content: initial.message.content });
+  const parsed = await parseOrRepair({ complete, request, content: initial.content });
   let plan = parsed.document;
   const repairAttempts = parsed.repairAttempts;
-  // tool_call_count 在本实现中恒为 0，保留分支以便接入 Tavily 后自动生效。
-  let generationPath = 'model_knowledge';
+  let generationPath = toolCallCount > 0 ? 'model_with_tavily' : 'model_knowledge';
   let fallbackUsed = false;
 
   if (plan === null) {
     fallbackUsed = true;
     generationPath = 'tavily_recovery';
-    plan = await rebuildWithoutSources({ complete, runId: input.runId, value, connection });
+    plan = await rebuildWithTavily({
+      complete,
+      toolGateway: deps.toolGateway,
+      runId: input.runId,
+      value,
+      connection,
+    });
   }
 
   const persisted = await deps.internalClient.persistLearningPlan(input.runId, {
     ...plan,
     generation_metadata: {
       model_id: connection.modelId,
-      tool_call_count: 0,
+      tool_call_count: toolCallCount,
       repair_attempts: repairAttempts,
       generation_path: generationPath,
       fallback_used: fallbackUsed,
@@ -370,7 +450,7 @@ export async function runPlanGenerate(
     outputSummary: {
       learning_plan_id: persisted.learning_plan_id,
       node_count: persisted.node_count,
-      tool_call_count: 0,
+      tool_call_count: toolCallCount,
       repair_attempts: repairAttempts,
       generation_path: generationPath,
       model_id: connection.modelId,
@@ -383,12 +463,17 @@ export async function runPlanGenerate(
  * 把路线生成工作流适配为注册表可用的 AgentWorkflow：只负责把 AgentRun 执行状态转换为工作流入参，
  * 并把结果原样交给命令层（命令层负责把 usage 写入 token 列）。
  */
-export function createPlanGenerateWorkflow(deps: PlanGenerationDeps): AgentWorkflow {
+export type PlanGenerationWorkflowDeps = Omit<PlanGenerationDeps, 'toolGateway'> & {
+  /** 按运行所属账户构造工具网关：每日配额按账户计数，且 Key 缺失时返回受控错误。 */
+  createToolGateway: (ownerId: string) => ToolGatewayPort;
+};
+
+export function createPlanGenerateWorkflow(deps: PlanGenerationWorkflowDeps): AgentWorkflow {
   return {
     run: async (executionState) => {
       const result = await runPlanGenerate(
         { runId: executionState.runId, inputSummaryJson: executionState.inputSummaryJson },
-        deps,
+        { ...deps, toolGateway: deps.createToolGateway(executionState.ownerId) },
       );
       return { outputSummary: result.outputSummary, usage: result.usage };
     },

@@ -2,10 +2,11 @@
 # 触发：推送到 main、所有拉取请求，以及手动触发。
 # 覆盖内容：
 # - TypeScript 工作区：共享安全原语、Agent Worker（类型检查、单元测试、esbuild 打包）、Web（类型检查、规范、测试）。
-# - Python Agent：ruff 规范与 pytest 单元测试。
+# - Python Agent：ruff 规范与 pytest 单元测试（apps/agent-worker 代码保留，但已不再参与运行）。
 # - 编排文件：compose YAML 解析与生产编排的配置展开。
-# - 容器镜像：三个生产 Dockerfile 的构建验证（只构建，不推送）。
-# 说明：需要真实数据库、Redis 与模型服务的集成用例由环境变量开关控制，CI 中自动跳过。
+# - 容器镜像：两个生产 Dockerfile（Web 与 TypeScript Agent）的构建验证（只构建，不推送）。
+# 说明：需要真实数据库、Redis 与模型服务的集成用例由环境变量开关控制，CI 中自动跳过；
+# 运行时只有 TypeScript 一套（compose 中已无 Python 服务），apps/agent-worker 仅作迁移参照。
 
 name: CI
 
@@ -144,7 +145,6 @@ jobs:
       matrix:
         dockerfile:
           - web.Dockerfile
-          - agent-worker.Dockerfile
           - agent-worker-ts.Dockerfile
     steps:
       - uses: actions/checkout@v4

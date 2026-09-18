@@ -4,7 +4,7 @@
 > 更新日期：2026-09-16
 > 适用范围：P0 前测、学习路线、节点内容与节点后测
 >
-> **Agent 侧技术栈变更（2026-09-16）：**Agent 侧已确认由 Python 迁移到 TypeScript/Node.js（LangGraph.js），不保留 Python 运行时。本文的业务分工、责任边界、上下文交接、契约与可靠性不变量**与实现语言无关，继续有效**；文中描述 Celery、Python 工作流与 Python 目录结构的段落仅代表迁移期现状，目标形态以 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 为准。
+> **Agent 侧技术栈变更（2026-09-16）：**Agent 侧已确认由 Python 迁移到 TypeScript/Node.js（LangGraph.js），不保留 Python 运行时。本文的业务分工、责任边界、上下文交接、契约与可靠性不变量**与实现语言无关，继续有效**；文中描述 Celery、Python 工作流与 Python 目录结构的段落均为**迁移前（历史）记录**；当前实现与剩余待办见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md)。
 
 本文依据现有 DDD 边界、P0 实施约束和 Agent 运行模型，说明 LearnCraft 的 Agent 分工、执行流程、可靠投递和推荐目录结构。本文不新增数据库、模型或安全策略决策；当前行为以实现代码、`packages/contracts` 与 `apps/agent-worker/README.md` 为准，`04-MVP-P0实施需求与开发指南.md` 仅保留历史实施基线。
 
@@ -29,12 +29,12 @@ Web / BFF
           AgentRun + Outbox
                  │
                  ▼
-      Dispatcher → Agent Worker（迁移期 Celery，目标 BullMQ）
+      Dispatcher → Agent Worker（迁移前 Celery，目标 BullMQ）
                  ├─ Learning Architect：前测 + 路线
                  └─ Node Tutor：节点内容 + 后测
 ```
 
-Web/BFF 在同一事务内完成请求校验、创建 `AgentRun` 和写入 Outbox。独立 Dispatcher 领取 Outbox 事件并投递队列（迁移期 Celery，目标 BullMQ）；Agent Worker 按运行类型执行对应工作流。这样可将用户请求、异步任务、执行状态和业务结果关联起来，并避免业务数据已提交但异步任务未投递的情况。
+Web/BFF 在同一事务内完成请求校验、创建 `AgentRun` 和写入 Outbox。独立 Dispatcher 领取 Outbox 事件并投递队列（迁移前 Celery，目标 BullMQ）；Agent Worker 按运行类型执行对应工作流。这样可将用户请求、异步任务、执行状态和业务结果关联起来，并避免业务数据已提交但异步任务未投递的情况。
 
 ## 2. 责任边界
 
@@ -271,7 +271,7 @@ ContentInputNormalizer
 
 节点内容首轮模型可以自主调用 Tavily；当前修复请求不开放工具，主流程最终校验仍不合法时才强制执行 Tavily 搜索和资源阅读，并基于资料重建内容。若 Tavily 本身不可用，当前实现会改用模型已有稳定知识进行一次同合同恢复。任一路径的结果都必须再次通过 `ContentValidator`；用户侧不展示中间修复或恢复路径。
 
-前测和后测题集共享题集生成管线（迁移期实现位于 `apps/agent-worker/src/learncraft_agent/workflows/question_set_generation.py` 的 `QuestionSetGenerationPipeline`，迁移后为 TypeScript 中的同一份共享子图）。共享管线负责题集 JSON 解析、字段合同校验、题量校验、错误路径摘要和有限恢复，不负责业务持久化；三个阶段（首轮、修复、最终恢复）与各自的工具开放策略是行为合同，迁移时必须逐条保留。前测首轮开放 Tavily、修复阶段不开放、最终恢复阶段开放；后测首轮只使用固定 `CardContent` 和 `teaching_memory`，修复和最终恢复阶段开放 Tavily。
+前测和后测题集共享题集生成管线（迁移前实现位于 `apps/agent-worker/src/learncraft_agent/workflows/question_set_generation.py` 的 `QuestionSetGenerationPipeline`，迁移后为 TypeScript 中的同一份共享子图）。共享管线负责题集 JSON 解析、字段合同校验、题量校验、错误路径摘要和有限恢复，不负责业务持久化；三个阶段（首轮、修复、最终恢复）与各自的工具开放策略是行为合同，迁移时必须逐条保留。前测首轮开放 Tavily、修复阶段不开放、最终恢复阶段开放；后测首轮只使用固定 `CardContent` 和 `teaching_memory`，修复和最终恢复阶段开放 Tavily。
 
 ### 4.3 内容合同
 
@@ -423,7 +423,7 @@ apps/
       └─ python/
 ```
 
-Web 端的 `planning`、`content` 和 `agent-run` 分别承载路线、内容和异步运行管理。迁移期 Worker 的 `workflows/` 保存显式 Python 工作流；迁移到 TypeScript 后，四个 `run_type` 将以 LangGraph.js 图实现，并按上方结构拆分（见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 第 8.2 节）。`application/ports/` 声明对 Core API、模型和检索的依赖；`acl/` 负责 Web Core DTO 与 Agent DTO 的防腐转换；第三方具体实现集中在 `infrastructure/`。跨语言接口和事件只通过 `packages/contracts` 共享并进行版本化。
+Web 端的 `planning`、`content` 和 `agent-run` 分别承载路线、内容和异步运行管理。迁移前的 Python Worker 曾以 `workflows/` 保存显式工作流；现为 TypeScript 的显式异步实现（LangGraph.js 图化为可选项），四个 `run_type` 未来可以选择改为图实现，并按上方结构拆分（见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 第 8.2 节）。`application/ports/` 声明对 Core API、模型和检索的依赖；`acl/` 负责 Web Core DTO 与 Agent DTO 的防腐转换；第三方具体实现集中在 `infrastructure/`。跨语言接口和事件只通过 `packages/contracts` 共享并进行版本化。
 
 ## 7. 实施不变量
 

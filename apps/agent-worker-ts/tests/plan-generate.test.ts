@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ModelGatewayError, type ModelCompletionRequest, type ModelCompletionResponse } from '../src/infrastructure/llm/model-gateway.js';
 import { ModelCredentialDecryptor } from '../src/infrastructure/llm/credential-decryptor.js';
+import { FakeToolGateway, fakeToolDeps } from './helpers/fake-tool-gateway.js';
 import type { DefaultModelConnectionEnvelope, PersistedLearningPlanEnvelope } from '../src/schemas/core-internal.js';
 import {
   runPlanGenerate,
@@ -156,6 +157,7 @@ function deps(gateway: FakeGateway, internal = new FakeInternal()) {
       internalClient: internal,
       decryptor: new ModelCredentialDecryptor(KEY_BASE64, 'local-v1'),
       gateway,
+      ...fakeToolDeps(),
     },
     internal,
   };
@@ -213,7 +215,7 @@ describe('输入契约', () => {
     ).rejects.toMatchObject({ code: 'PLAN_INPUT_INVALID' });
   });
 
-  it('user 提示词包含目标、画像与前测摘要，且不含联网工具描述', async () => {
+  it('user 提示词包含目标、画像与前测摘要，system 提示词允许按需联网', async () => {
     const gateway = new FakeGateway([{ content: planJson() }]);
     const { deps: d } = deps(gateway);
 
@@ -222,7 +224,7 @@ describe('输入契约', () => {
     const systemContent = String(gateway.requests[0]?.messages[0]?.content);
     const userContent = String(gateway.requests[0]?.messages[1]?.content);
     expect(systemContent).toContain('你是 LearnCraft 的学习路线规划师。');
-    expect(systemContent).toContain('本次不提供任何联网检索工具');
+    expect(systemContent).toContain('可以使用 tavily_search');
     expect(userContent).toContain('学习主题：Python 函数与类');
     expect(userContent).toContain('学习者水平：beginner');
     expect(userContent).toContain('每周可用分钟：300');
@@ -308,7 +310,34 @@ describe('校验与修复', () => {
 });
 
 describe('兜底重建', () => {
-  it('首轮与两次修复都失败后进入无资料重建，旧字段输出被规范化后成功落库', async () => {
+  it('联网工具失败时退回无资料重建，并把工具错误类别回填到提示词', async () => {
+    const gateway = new FakeGateway([
+      { content: '{}' },
+      { content: '{}' },
+      { content: '{}' },
+      { content: planJson() },
+    ]);
+    const { deps: d } = deps(gateway);
+    const failing = new FakeToolGateway({
+      ok: false,
+      code: 'TAVILY_QUOTA_UNAVAILABLE',
+      message: 'Tavily 配额 Redis 暂时不可用，本次不会绕过配额调用网络工具。',
+      data: {},
+    });
+
+    const result = await runPlanGenerate(
+      { runId: 'run-1', inputSummaryJson: INPUT_SUMMARY },
+      { ...d, toolGateway: failing },
+    );
+
+    expect(result.outputSummary.generation_path).toBe('tavily_recovery');
+    expect(failing.calls).toHaveLength(1);
+    expect(failing.calls[0]?.name).toBe('tavily_search');
+    const recoveryUser = String(gateway.requests[3]?.messages[1]?.content);
+    expect(recoveryUser).toContain('Tavily 错误类别：TAVILY_QUOTA_UNAVAILABLE');
+  });
+
+  it('首轮与两次修复都失败后强制联网重建，旧字段输出被规范化后成功落库', async () => {
     const gateway = new FakeGateway([
       { content: '{}' },
       { content: '{}' },
@@ -329,8 +358,9 @@ describe('兜底重建', () => {
     const recoveryRequest = gateway.requests[3];
     const recoverySystem = String(recoveryRequest?.messages[0]?.content);
     const recoveryUser = String(recoveryRequest?.messages[1]?.content);
-    expect(recoverySystem).toContain('Tavily 联网兜底暂时不可用');
-    expect(recoveryUser).toContain('Tavily 错误类别：TAVILY_TOOL_NOT_AVAILABLE');
+    expect(recoverySystem).toContain('你正在执行强制联网兜底');
+    expect(recoveryUser).toContain('参考资料摘要：');
+    expect(recoveryUser).not.toContain('Tavily 错误类别');
 
     const payload = internal.persisted[0];
     expect(payload?.generation_metadata).toEqual({
@@ -349,7 +379,7 @@ describe('兜底重建', () => {
     expect(nodes[2]?.prerequisite_node_keys).toEqual(['chapter_2']);
   });
 
-  it('兜底结果仍无法规范化时抛 PLAN_MODEL_RECOVERY_INVALID 并附带校验路径', async () => {
+  it('联网兜底结果仍无法规范化时抛 PLAN_TAVILY_SOURCE_RECOVERY_INVALID 并附带校验路径', async () => {
     const gateway = new FakeGateway([
       { content: '{}' },
       { content: '{}' },
@@ -362,8 +392,8 @@ describe('兜底重建', () => {
     await expect(
       runPlanGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
     ).rejects.toMatchObject({
-      code: 'PLAN_MODEL_RECOVERY_INVALID',
-      message: '无资料模型恢复结果仍不符合路线合同。 校验路径: nodes',
+      code: 'PLAN_TAVILY_SOURCE_RECOVERY_INVALID',
+      message: '基于 Tavily 资料的路线恢复结果仍不符合路线合同。 校验路径: nodes',
       retryable: false,
     });
   });
@@ -382,8 +412,8 @@ describe('兜底重建', () => {
     await expect(
       runPlanGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
     ).rejects.toMatchObject({
-      code: 'PLAN_MODEL_RECOVERY_INVALID',
-      message: '无资料模型恢复结果仍不符合路线合同。 校验路径: nodes',
+      code: 'PLAN_TAVILY_SOURCE_RECOVERY_INVALID',
+      message: '基于 Tavily 资料的路线恢复结果仍不符合路线合同。 校验路径: nodes',
     });
   });
 });

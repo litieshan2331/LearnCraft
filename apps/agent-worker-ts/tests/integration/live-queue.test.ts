@@ -17,10 +17,11 @@ import { describe, expect, it } from 'vitest';
 
 import { CoreInternalClient } from '../../src/acl/core-internal-client.js';
 import { AgentWorkflowRegistry } from '../../src/application/services/agent-workflow-registry.js';
-import { parseRedisConnection, type AgentQueueConfig } from '../../src/bootstrap/config.js';
+import { parseRedisConnection, readAgentToolMaxCalls, type AgentQueueConfig } from '../../src/bootstrap/config.js';
 import { PgAgentRunRepository } from '../../src/infrastructure/database/agent-run-repository.js';
 import { PgModelEgressAuditRepository } from '../../src/infrastructure/database/model-egress-audit-repository.js';
 import { ModelCredentialDecryptor } from '../../src/infrastructure/llm/credential-decryptor.js';
+import { createLiveTavilyToolGatewayFactory } from '../helpers/live-tavily-gateway.js';
 import { OpenAiCompatibleModelGateway } from '../../src/infrastructure/llm/model-gateway.js';
 import { SafeModelEgressClient } from '../../src/infrastructure/llm/safe-egress-client.js';
 import {
@@ -235,6 +236,8 @@ describe.skipIf(!enabled)('BullMQ 队列链路（真实 Redis）', () => {
             ),
             2,
           ),
+          maxToolCalls: readAgentToolMaxCalls(),
+          createToolGateway: createLiveTavilyToolGatewayFactory(),
         }),
       );
 

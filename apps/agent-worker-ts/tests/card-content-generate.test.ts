@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ModelGatewayError, type ModelCompletionRequest, type ModelCompletionResponse } from '../src/infrastructure/llm/model-gateway.js';
 import { ModelCredentialDecryptor } from '../src/infrastructure/llm/credential-decryptor.js';
+import { FakeToolGateway, fakeToolDeps } from './helpers/fake-tool-gateway.js';
 import type {
   DefaultModelConnectionEnvelope,
   PersistedCardContentEnvelope,
@@ -125,6 +126,7 @@ function deps(gateway: FakeGateway, internal = new FakeInternal()) {
       internalClient: internal,
       decryptor: new ModelCredentialDecryptor(KEY_BASE64, 'local-v1'),
       gateway,
+      ...fakeToolDeps(),
     },
     internal,
   };
@@ -155,7 +157,7 @@ describe('输入契约', () => {
     expect(gateway.requests).toHaveLength(0);
   });
 
-  it('user 提示词包含主题、水平与章节信息，system 不含联网工具描述', async () => {
+  it('user 提示词包含主题、水平与章节信息，system 提示词允许按需联网', async () => {
     const gateway = new FakeGateway([{ content: LOOSE_DOCUMENT_JSON }]);
     const { deps: d } = deps(gateway);
 
@@ -164,7 +166,7 @@ describe('输入契约', () => {
     const systemContent = String(gateway.requests[0]?.messages[0]?.content);
     const userContent = String(gateway.requests[0]?.messages[1]?.content);
     expect(systemContent).toContain('你是 LearnCraft 的 Node Tutor。');
-    expect(systemContent).toContain('本次不提供任何联网检索工具');
+    expect(systemContent).toContain('可自主调用 tavily_search');
     expect(userContent).toContain('学习主题：Python 函数');
     expect(userContent).toContain('学习者水平：beginner');
     expect(userContent).toContain('章节标题：函数与参数');
@@ -237,7 +239,7 @@ describe('解析与修复', () => {
 });
 
 describe('兜底重建', () => {
-  it('修复失败后进入无资料兜底，并在提示词中携带固定的联网错误类别', async () => {
+  it('修复失败后强制联网兜底，并把 Tavily 资料摘要写进提示词', async () => {
     const gateway = new FakeGateway([
       { content: '不是 JSON' },
       { content: '仍不是 JSON' },
@@ -252,13 +254,13 @@ describe('兜底重建', () => {
 
     const recoverySystem = String(gateway.requests[2]?.messages[0]?.content);
     const recoveryUser = String(gateway.requests[2]?.messages[1]?.content);
-    expect(recoverySystem).toContain('联网资料不可用，请仅使用你已有的稳定知识生成节点内容。');
+    expect(recoverySystem).toContain('你正在执行节点知识内容的最终联网兜底。');
     expect(recoveryUser).toContain('节点：函数与参数');
-    expect(recoveryUser).toContain('联网工具错误类别：TAVILY_TOOL_NOT_AVAILABLE');
+    expect(recoveryUser).toContain('Tavily 资料摘要：');
     expect(internal.persisted).toHaveLength(1);
   });
 
-  it('兜底结果仍不符合合同时抛 CARD_CONTENT_MODEL_RECOVERY_INVALID', async () => {
+  it('联网兜底结果仍不符合合同时抛 CARD_CONTENT_TAVILY_RECOVERY_INVALID', async () => {
     const gateway = new FakeGateway([
       { content: '不是 JSON' },
       { content: '仍不是 JSON' },
@@ -269,10 +271,35 @@ describe('兜底重建', () => {
     await expect(
       runCardContentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
     ).rejects.toMatchObject({
-      code: 'CARD_CONTENT_MODEL_RECOVERY_INVALID',
-      message: '无资料模型恢复结果仍不符合节点内容合同（联网错误类别：TAVILY_TOOL_NOT_AVAILABLE）。',
+      code: 'CARD_CONTENT_TAVILY_RECOVERY_INVALID',
+      message: 'Tavily 兜底生成的节点内容仍不符合内容合同。',
       retryable: false,
     });
+  });
+
+  it('联网工具失败时退回无资料恢复，并把工具错误类别回填到提示词', async () => {
+    const gateway = new FakeGateway([
+      { content: '不是 JSON' },
+      { content: '仍不是 JSON' },
+      { content: LOOSE_DOCUMENT_JSON },
+    ]);
+    const { deps: d } = deps(gateway);
+    const failing = new FakeToolGateway({
+      ok: false,
+      code: 'TAVILY_DAILY_QUOTA_EXCEEDED',
+      message: '当前账户已达到 Tavily 今日工具调用额度。',
+      data: {},
+    });
+
+    const result = await runCardContentGenerate(
+      { runId: 'run-1', inputSummaryJson: INPUT_SUMMARY },
+      { ...d, toolGateway: failing },
+    );
+
+    expect(result.outputSummary.card_content_id).toBe(CARD_CONTENT_ID);
+    expect(failing.calls).toHaveLength(1);
+    const recoveryUser = String(gateway.requests[2]?.messages[1]?.content);
+    expect(recoveryUser).toContain('联网工具错误类别：TAVILY_DAILY_QUOTA_EXCEEDED');
   });
 
   it('兜底阶段模型没有正文时同样映射为恢复失败', async () => {
@@ -285,6 +312,6 @@ describe('兜底重建', () => {
 
     await expect(
       runCardContentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
-    ).rejects.toMatchObject({ code: 'CARD_CONTENT_MODEL_RECOVERY_INVALID' });
+    ).rejects.toMatchObject({ code: 'CARD_CONTENT_TAVILY_RECOVERY_INVALID' });
   });
 });

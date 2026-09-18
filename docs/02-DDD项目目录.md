@@ -1,6 +1,6 @@
 # LearnCraft MVP：DDD 项目目录与边界设计
 
-> **Agent 侧技术栈变更（2026-09-16）：**Agent 侧已确认由 Python 迁移到 TypeScript/Node.js（LangGraph.js），**不保留 Python 运行时**。本文的领域边界、依赖规则与目录组织原则**与实现语言无关，继续有效**；文中描述 Python/FastAPI/SQLAlchemy/Pydantic/Celery 的段落（尤其 §2.3 与目录树）仅代表**迁移期现状**，目标形态以 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 为准。
+> **Agent 侧技术栈变更（2026-09-16）：**Agent 侧已确认由 Python 迁移到 TypeScript/Node.js（LangGraph.js），**不保留 Python 运行时**。本文的领域边界、依赖规则与目录组织原则**与实现语言无关，继续有效**；文中描述 Python/FastAPI/SQLAlchemy/Pydantic/Celery 的段落（尤其 §2.3 与目录树）均为**迁移前（历史）记录**；当前实现以 TypeScript 工程与 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 的待办清单为准。
 
 > **当前范围决策更新（2026-08-23，优先于本文后续所有 P0 描述）：**
 >
@@ -15,7 +15,7 @@
 >
 > 用户只有一份可编辑的 `LearnerProfile`；新目标和尚未生成的内容读取最新画像。前测、学习计划和已生成内容各自保存 `profile_version` 与必要输入快照，确保既有产物可追溯。每个目标只允许一份有效前测；评分后先向本人展示答案与解析，再由用户显式触发学习计划生成。每个计划节点只允许一份成功内容与本地 Demo；节点后测可以生成多份独立题集，保留历史作答和错题解析。学习计划节点允许用户任意进入，不以线性解锁作为访问前提。
 
-> 本文件只描述领域边界、代码目录和依赖规则。采用“Next.js BFF/界面 + 独立 Agent Worker”的模块化单体形态：业务聚合由 `apps/web` 统一持有，Agent 只负责工作流编排和工具调用。Agent 侧目标实现语言为 TypeScript（迁移期仍为 Python），业务领域模型始终只在 `apps/web/src/modules/*` 实现一次。
+> 本文件只描述领域边界、代码目录和依赖规则。采用“Next.js BFF/界面 + 独立 Agent Worker”的模块化单体形态：业务聚合由 `apps/web` 统一持有，Agent 只负责工作流编排和工具调用。Agent 侧目标实现语言为 TypeScript（迁移前仍为 Python），业务领域模型始终只在 `apps/web/src/modules/*` 实现一次。
 >
 > 文档状态：实施中｜更新日期：2026-07-26
 >
@@ -199,9 +199,9 @@ apps/web/src/modules/<bounded-context>/
 
 `app/` 使用 App Router route groups 只划分布局和页面区域，括号名称不出现在 URL 中：`(public)` 对应公开首页，`(auth)` 对应 `/login` 和 `/register`，`(learn)` 对应需要会话的学习页面。业务组件不放在 `app/` 内，而放在所属 BC 的 `presentation/`；本次落地的 `identity/presentation/` 包含表单、注销按钮、会话守卫和同源 BFF client。这样将来为 Planning 增加路线页时，只需新增 `modules/planning/presentation/`，不把业务逻辑散落到路由目录。
 
-### 2.3 Agent Worker 目录与 DDD 的对应关系（迁移期现状）
+### 2.3 Agent Worker 目录与 DDD 的对应关系（迁移前历史记录）
 
-下表描述的是**迁移期的 Python 目录约定**，用于当前实现与代码审查。Agent 侧迁移到 TypeScript 后的目标目录（`bootstrap / dispatcher / queue / application / workflows / schemas / acl / infrastructure / main`）见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 第 6 节；两侧共同遵守的原则不变：Worker 只服务于 **Agent 编排**，用户、学习路线、题目和练习等核心业务仍由 `apps/web/src/modules/*` 持有。
+下表描述的是**迁移前的 Python 目录约定**，用于当前实现与代码审查。Agent 侧迁移到 TypeScript 后的目标目录（`bootstrap / dispatcher / queue / application / workflows / schemas / acl / infrastructure / main`）见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 第 6 节；两侧共同遵守的原则不变：Worker 只服务于 **Agent 编排**，用户、学习路线、题目和练习等核心业务仍由 `apps/web/src/modules/*` 持有。
 
 | 常见 FastAPI 目录 | 本目录中的位置 | 在 LearnCraft 中负责什么 | 不应做什么 |
 | --- | --- | --- | --- |
@@ -212,20 +212,20 @@ apps/web/src/modules/<bounded-context>/
 | `models/` | `infrastructure/persistence/models/` | SQLAlchemy ORM，仅映射 Agent 自有表或只读投影 | 与 Next.js 的 DDD entity/aggregate 混用 |
 | `alembic/` | `apps/agent-worker/alembic/`（当前只有说明文档） | 只有 Python 成为数据库迁移的唯一所有者时才启用 | 与 Drizzle 同时迁移同一数据库/同一批表 |
 
-#### 校验边界：Zod 与（迁移期的）Pydantic
+#### 校验边界：Zod 与（迁移前的）Pydantic
 
-浏览器请求由 Next.js Route Handler 用 **Zod** 校验；Next.js 与 Agent Worker 之间通过 OpenAPI/JSON Schema 传递请求与事件。**迁移期** Worker 侧再用 **Pydantic** 校验入参、队列消息与 LLM 结构化输出；**迁移后统一为 Zod**，同一份 schema 同时服务于内部 API 入站校验、队列载荷与模型输出校验。校验 DTO 与数据库映射对象始终是两类对象，不能相互替代。
+浏览器请求由 Next.js Route Handler 用 **Zod** 校验；Next.js 与 Agent Worker 之间通过 OpenAPI/JSON Schema 传递请求与事件。**迁移前** Worker 侧再用 **Pydantic** 校验入参、队列消息与 LLM 结构化输出；**迁移后统一为 Zod**，同一份 schema 同时服务于内部 API 入站校验、队列载荷与模型输出校验。校验 DTO 与数据库映射对象始终是两类对象，不能相互替代。
 
 ```text
 Browser ──Zod──> Next.js Route Handler / Core API
                          │ OpenAPI / JSON Schema
                          ▼
-                 Agent Worker（迁移期 Pydantic / 目标 Zod）──> LangGraph / Tools
+                 Agent Worker（迁移前 Pydantic / 目标 Zod）──> LangGraph / Tools
 ```
 
 #### 托管模型 API 与 Agent Worker 的边界
 
-所有真实 Provider 请求均固定使用 `stream=true`。`OpenAICompatibleAdapter` 通过安全出网层读取并聚合 SSE，在确认流完成后才把完整文本交给运行时 schema 校验（迁移期 Pydantic、目标 Zod）；不得把未校验的增量 JSON 直接传给 Core API 或浏览器。需要结构化结果的任务在请求载荷中设置 `response_format: {"type": "json_object"}`，以顶层 JSON 提示词、schema 校验与一次受控修复共同保证持久化前的结果质量。Web 的 SSE/轮询只表达 AgentRun 状态和已验证结果，不透传 Provider 原始 token。
+所有真实 Provider 请求均固定使用 `stream=true`。`OpenAICompatibleAdapter` 通过安全出网层读取并聚合 SSE，在确认流完成后才把完整文本交给运行时 schema 校验（迁移前 Pydantic、目标 Zod）；不得把未校验的增量 JSON 直接传给 Core API 或浏览器。需要结构化结果的任务在请求载荷中设置 `response_format: {"type": "json_object"}`，以顶层 JSON 提示词、schema 校验与一次受控修复共同保证持久化前的结果质量。Web 的 SSE/轮询只表达 AgentRun 状态和已验证结果，不透传 Provider 原始 token。
 
 `ModelGateway` 是 `agent-worker` 内部的应用服务，不是独立 Docker 服务。Provider adapter 放在 `infrastructure/llm/`，使用 OpenAI-compatible 协议调用用户选择的 Provider；P0 的 `application/ports/` 与 `application/services/` 只解析账户默认连接。用户只能选择默认模型；开发者通过 Worker 内部版本化 `AgentExecutionProfile` 分别控制学习规划 Agent 和节点教学 Agent 的 System Prompt、输出 Schema、Token/超时、重试、思考模式和工具 allow-list，不提供用户或管理员配置接口。每次 AgentRun 固化实际模型连接、模型名和 Profile 版本；任务级选择和目标覆盖后置到 P1。
 
@@ -267,7 +267,7 @@ agent_runs/agent_checkpoints/outbox_events   -> Agent/平台基础设施
 6. 查询可以使用读模型/SQL 直读，但写模型必须通过聚合。向量检索属于 Content 的 query port；Agent 默认经该 port/Core API 获取结果，不能直连核心写模型；如性能需要直连 pgvector，只能使用独立只读投影和凭据。相似度结果需带 `document_id/chunk_id/source_url`，以便引用溯源。
 7. 日志禁止记录完整 prompt、用户私密资料和密钥；保留 `trace_id`、`agent_run_id`、prompt 版本、模型名、token/cost 和错误类别。
 8. 测试按层分开：domain 纯单测，application 使用 fake ports，repository 做 PostgreSQL 集成测试，Agent graph 做节点/回放测试，关键流程做 Playwright E2E。
-9. 浏览器/Next.js 边界用 Zod；Agent Worker 侧迁移期用 Pydantic、迁移后统一用 Zod 校验队列消息与 LLM 结构化输出。接口与事件只通过 OpenAPI/JSON Schema 共享，禁止直接共享 ORM model 或把校验 DTO 当作前端 DTO。
+9. 浏览器/Next.js 边界用 Zod；Agent Worker 侧迁移前用 Pydantic、迁移后统一用 Zod 校验队列消息与 LLM 结构化输出。接口与事件只通过 OpenAPI/JSON Schema 共享，禁止直接共享 ORM model 或把校验 DTO 当作前端 DTO。
 10. MVP 的数据库迁移只能由 `db/migrations/`（Drizzle）执行；`agent-worker/alembic/` 在未完成“迁移所有权转移”决策前不得创建版本文件或运行。
 11. 用户 Provider API Key 只经模型连接 API 写入，以 AES-256-GCM 密文存储；`CREDENTIAL_ENCRYPTION_KEY` 仅由 Web 与实际模型 Worker 的 Secret 持有。浏览器响应、内容产物、Outbox、队列消息和领域事件均不得持有明文 Key；任务只能传受信任的连接 ID/模型名。Base URL 仅允许公网 HTTPS 域名/443；真实调用只能经 `SafeModelEgressClient` 的 DNS/IP/重定向/审计策略，生产环境还必须配置受控 egress proxy。
 
@@ -286,7 +286,7 @@ agent_runs/agent_checkpoints/outbox_events   -> Agent/平台基础设施
 查看后测历史 -> GET /api/v1/plan-nodes/:nodeId/post-assessments（题集、作答、错题解析）
 ```
 
-MVP 使用 PostgreSQL Outbox + 独立 Dispatcher + Redis 队列。Web 只在同一事务中创建 `AgentRun` 和 Outbox；Dispatcher 负责可靠投递，Agent Worker 负责执行。`AgentRun` 状态机保持异步契约，**Broker 替换不影响领域层**：迁移期使用 Celery，目标为 BullMQ，切换期由 Dispatcher 按 `run_type` 路由（见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 第 7 节）。
+MVP 使用 PostgreSQL Outbox + 独立 Dispatcher + Redis 队列。Web 只在同一事务中创建 `AgentRun` 和 Outbox；Dispatcher 负责可靠投递，Agent Worker 负责执行。`AgentRun` 状态机保持异步契约，**Broker 替换不影响领域层**：迁移前使用 Celery，目标为 BullMQ，切换期由 Dispatcher 按 `run_type` 路由（见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 第 7 节）。
 
 ## 5. 演进路线
 

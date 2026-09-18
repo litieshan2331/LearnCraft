@@ -17,10 +17,8 @@
  * **已确认的行为差异（与 assessment_generate 相同，不是实现遗漏）：**
  * token 用量写真实值，由调用方写入 agent_runs 的 token 列。
  *
- * **与 Python 现状的已知差异（阶段 5 补齐）：**
- * 1. 未接入 Tavily 远程 MCP，工具调用被完全移除：tool_call_count 恒为 0，
- *    共享管线缺少 tavily_recovery 兜底；
- * 2. 因此修复指令删去了「本阶段可以根据需要调用 tavily_search」一句。
+ * 联网工具（Tavily 远程 MCP）已接入：与 Python 一致，修复阶段与最终阶段都开放工具，
+ * 真实 tool_call_count 写入 generation_metadata 与输出摘要。
  *
  * 导出：
  * - PosttestGenerationInputSchema / PosttestGenerationInput
@@ -32,10 +30,14 @@
 
 import { z } from 'zod';
 
+import type { ToolGatewayPort } from '../application/services/tool-aware-generator.js';
+
 import type { AgentWorkflow } from '../application/commands/execute-agent-run.js';
 import type { ModelCredentialDecryptor } from '../infrastructure/llm/credential-decryptor.js';
 import {
   ModelGatewayError,
+  type ModelCompletionRequest,
+  type ModelCompletionResponse,
   type ModelProviderConnection,
 } from '../infrastructure/llm/model-gateway.js';
 import type {
@@ -45,15 +47,24 @@ import type {
 } from '../schemas/core-internal.js';
 import {
   runQuestionSetStages,
-  type QuestionSetModelGatewayPort,
+  type QuestionSetToolGatewayPort,
 } from './question-set-pipeline.js';
 
 const REPAIR_INSTRUCTION = [
   '后测输出校验失败。请基于原节点内容重新输出严格 JSON。',
+  '本阶段可以根据需要调用 tavily_search，但 CardContent 和 teaching_memory 仍必须是主要出题依据。',
   '不要 Markdown、解释文字或额外字段；顶层只能是 schema_version 和 questions。',
   'schema_version 必须精确为 assessment.single_choice.v1，题目数量必须严格匹配请求。',
   '每题只能包含 prompt、options、answer_key、explanation、skill_tags、max_score。',
   'options 必须是 2 至 6 个 {key,text} 对象，key 只能是 A-F，answer_key 必须引用已有选项。',
+].join('');
+
+const FINAL_INSTRUCTION = [
+  '后测最终恢复阶段。请保留 CardContent 和 teaching_memory 作为出题依据；',
+  '必要时可以调用 tavily_search 核对资料。最终只返回严格 JSON，',
+  '顶层只能是 schema_version、questions，schema_version 必须是 assessment.single_choice.v1；',
+  '题目数量必须严格匹配请求，每题的 options 必须是 {key,text} 对象数组，',
+  'answer_key 必须引用已有选项，不要输出解释文字或额外字段。',
 ].join('');
 
 const SYSTEM_PROMPT = [
@@ -87,13 +98,19 @@ export interface PosttestInternalPort {
   persistAssessment(agentRunId: string, payload: Record<string, unknown>): Promise<PersistedAssessmentEnvelope>;
 }
 
-/** 模型网关端口：与共享管线使用同一个最小端口。 */
-export type PosttestModelGatewayPort = QuestionSetModelGatewayPort;
+/** 模型网关端口：工作流只依赖 complete。 */
+export interface PosttestModelGatewayPort {
+  complete(request: ModelCompletionRequest): Promise<ModelCompletionResponse>;
+}
 
 export interface PosttestGenerationDeps {
   internalClient: PosttestInternalPort;
   decryptor: ModelCredentialDecryptor;
   gateway: PosttestModelGatewayPort;
+  /** 联网工具网关（Tavily）；未配置 Key 时返回受控错误而不是抛异常。 */
+  toolGateway: QuestionSetToolGatewayPort;
+  /** 单次运行可见的工具调用上限。 */
+  maxToolCalls: number;
 }
 
 export interface PosttestGenerationResult {
@@ -160,15 +177,28 @@ export async function runPosttestGenerate(
     },
   ];
 
+  // 与 Python 一致：修复阶段与最终 tavily_recovery 阶段都开放工具。
+  const usage = { inputTokens: 0, outputTokens: 0 };
+  const complete = async (request: ModelCompletionRequest): Promise<ModelCompletionResponse> => {
+    const response = await deps.gateway.complete(request);
+    usage.inputTokens += response.usage.inputTokens;
+    usage.outputTokens += response.usage.outputTokens;
+    return response;
+  };
+
   let outcome;
   try {
     outcome = await runQuestionSetStages({
-      gateway: deps.gateway,
+      complete,
+      toolGateway: deps.toolGateway,
+      maxToolCalls: deps.maxToolCalls,
       runId: input.runId,
       connection,
       baseMessages,
       expectedQuestionCount: generationInput.question_count,
       repairInstruction: REPAIR_INSTRUCTION,
+      finalInstruction: FINAL_INSTRUCTION,
+      stageConfig: { repairWithTavily: true, finalWithTavily: true },
     });
   } catch (error) {
     if (error instanceof ModelGatewayError && error.code === 'MODEL_STRUCTURED_OUTPUT_INVALID') {
@@ -225,7 +255,7 @@ export async function runPosttestGenerate(
       recovery_stage: outcome.recoveryStage,
       model_id: connection.modelId,
     },
-    usage: outcome.usage,
+    usage,
   };
 }
 
@@ -233,12 +263,17 @@ export async function runPosttestGenerate(
  * 把节点后测工作流适配为注册表可用的 AgentWorkflow：只负责把 AgentRun 执行状态转换为工作流入参，
  * 并把结果原样交给命令层（命令层负责把 usage 写入 token 列）。
  */
-export function createPosttestGenerateWorkflow(deps: PosttestGenerationDeps): AgentWorkflow {
+export type PosttestGenerationWorkflowDeps = Omit<PosttestGenerationDeps, 'toolGateway'> & {
+  /** 按运行所属账户构造工具网关：每日配额按账户计数，且 Key 缺失时返回受控错误。 */
+  createToolGateway: (ownerId: string) => ToolGatewayPort;
+};
+
+export function createPosttestGenerateWorkflow(deps: PosttestGenerationWorkflowDeps): AgentWorkflow {
   return {
     run: async (executionState) => {
       const result = await runPosttestGenerate(
         { runId: executionState.runId, inputSummaryJson: executionState.inputSummaryJson },
-        deps,
+        { ...deps, toolGateway: deps.createToolGateway(executionState.ownerId) },
       );
       return { outputSummary: result.outputSummary, usage: result.usage };
     },

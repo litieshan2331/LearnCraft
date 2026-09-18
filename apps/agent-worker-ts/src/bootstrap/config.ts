@@ -1,12 +1,12 @@
 /**
  * 进程配置读取（等价于 Python 的 core/config.py 中与队列、Dispatcher 相关的部分）。
  *
- * 职责：把环境变量收敛为受校验的配置对象；所有并发、超时、重试与路由参数都必须来自环境变量，
- * 不允许在代码中硬编码（Plan §3.4）。
+ * 职责：把环境变量收敛为受校验的配置对象；所有并发、超时与重试参数都必须来自环境变量，
+ * 不允许在代码中硬编码。
  *
  * 导出：
  * - AgentQueueConfig / OutboxDispatcherConfig：队列与投递器配置类型。
- * - parseRedisConnection：把 redis:// 连接串解析为 BullMQ 连接参数。
+ * - parseRedisConnection / formatRedisConnection：redis:// 连接串与 BullMQ 连接参数的互相转换。
  * - readAgentQueueConfig / readOutboxDispatcherConfig：从环境变量读取配置。
  */
 
@@ -16,6 +16,16 @@ export interface RedisConnectionOptions {
   username?: string;
   password?: string;
   db: number;
+}
+
+/** 把 BullMQ 连接参数还原为 redis:// 连接串（供就绪探测等需要 URL 的场景使用）。 */
+export function formatRedisConnection(options: RedisConnectionOptions): string {
+  const auth = options.password === undefined || options.password.length === 0
+    ? ''
+    : (options.username === undefined || options.username.length === 0 ? ':' : options.username + ':')
+      + encodeURIComponent(options.password)
+      + '@';
+  return 'redis://' + auth + options.host + ':' + String(options.port) + '/' + String(options.db);
 }
 
 export interface AgentQueueConfig {
@@ -31,8 +41,6 @@ export interface AgentQueueConfig {
   backoffMaxMs: number;
 }
 
-export type AgentRuntime = 'ts' | 'python';
-
 export interface OutboxDispatcherConfig {
   connection: RedisConnectionOptions;
   queuePrefix: string;
@@ -46,7 +54,6 @@ export interface OutboxDispatcherConfig {
   maxAttempts: number;
   maxBackoffSeconds: number;
   /** 本运行时负责的 run_type 集合；空集合表示不领取任何事件（可用于回滚）。 */
-  runTypes: string[];
 }
 
 function requireEnv(name: string): string {
@@ -95,31 +102,6 @@ export function parseRedisConnection(rawUrl: string): RedisConnectionOptions {
   return connection;
 }
 
-/** 读取运行时路由映射：{"assessment_generate":"ts", ...}；未列出的 run_type 不属于任何运行时。 */
-export function readRuntimeRoutes(rawJson: string | undefined): Map<string, AgentRuntime> {
-  const routes = new Map<string, AgentRuntime>();
-  const raw = rawJson?.trim();
-  if (raw === undefined || raw.length === 0) {
-    return routes;
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error('AGENT_RUNTIME_ROUTES 必须是 JSON 对象。');
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error('AGENT_RUNTIME_ROUTES 必须是 JSON 对象。');
-  }
-  for (const [runType, runtime] of Object.entries(parsed as Record<string, unknown>)) {
-    if (runtime !== 'ts' && runtime !== 'python') {
-      throw new Error('AGENT_RUNTIME_ROUTES 的值只能是 ts 或 python。');
-    }
-    routes.set(runType, runtime);
-  }
-  return routes;
-}
-
 /** 模型受控出网配置；生产环境启用出网时必须配置代理（与 Python 的校验一致）。 */
 export function readModelEgressOptions(): {
   enabled: boolean;
@@ -144,6 +126,49 @@ export function readModelEgressOptions(): {
 }
 
 /** 出网审计保留天数（与 Python 的 MODEL_EGRESS_AUDIT_RETENTION_DAYS 同名同默认）。 */
+export interface TavilySettingsFromEnvironment {
+  apiKey: string | null;
+  quotaRedisUrl: string | null;
+  quotaKeyPrefix: string;
+  dailyLimit: number;
+  searchMaxResults: number;
+  extractTopResults: number;
+  extractChunksPerSource: number;
+  proxyUrl: string | null;
+}
+
+/** 读取 Tavily 联网工具配置；Key 或配额 Redis 缺失时不报错，由网关返回受控工具错误。 */
+export function readTavilyToolSettings(): TavilySettingsFromEnvironment {
+  const apiKey = process.env.TAVILY_API_KEY?.trim();
+  const quotaRedisUrl = process.env.TAVILY_QUOTA_REDIS_URL?.trim();
+  const proxyUrl = process.env.MODEL_EGRESS_PROXY_URL?.trim();
+  return {
+    apiKey: apiKey !== undefined && apiKey.length > 0 ? apiKey : null,
+    quotaRedisUrl: quotaRedisUrl !== undefined && quotaRedisUrl.length > 0 ? quotaRedisUrl : null,
+    quotaKeyPrefix: process.env.TAVILY_QUOTA_KEY_PREFIX?.trim() || 'ratelimit:tavily:daily:',
+    dailyLimit: readPositiveInteger('TAVILY_DAILY_TOOL_CALL_LIMIT', 20),
+    searchMaxResults: readPositiveInteger('TAVILY_SEARCH_MAX_RESULTS', 5),
+    extractTopResults: readPositiveInteger('TAVILY_EXTRACT_TOP_RESULTS', 2),
+    extractChunksPerSource: readPositiveInteger('TAVILY_EXTRACT_CHUNKS_PER_SOURCE', 3),
+    proxyUrl: proxyUrl !== undefined && proxyUrl.length > 0 ? proxyUrl : null,
+  };
+}
+
+/** 读取可见工具调用上限（Python 的 AGENT_TOOL_MAX_CALLS）。 */
+export function readAgentToolMaxCalls(): number {
+  return readPositiveInteger('AGENT_TOOL_MAX_CALLS', 3);
+}
+
+/** 读取正整数环境变量；缺失或非法时回退默认值。 */
+function readPositiveInteger(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (raw === undefined || raw.length === 0) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export function readModelEgressAuditRetentionDays(): number {
   return numberEnv('MODEL_EGRESS_AUDIT_RETENTION_DAYS', 30);
 }
@@ -170,12 +195,6 @@ export function readAgentQueueConfig(): AgentQueueConfig {
 }
 
 export function readOutboxDispatcherConfig(): OutboxDispatcherConfig {
-  const routes = readRuntimeRoutes(process.env.AGENT_RUNTIME_ROUTES);
-  const runTypes = [...routes.entries()]
-    .filter(([, runtime]) => runtime === 'ts')
-    .map(([runType]) => runType)
-    .sort();
-
   return {
     connection: parseRedisConnection(requireEnv('AGENT_QUEUE_REDIS_URL')),
     queuePrefix: process.env.AGENT_QUEUE_PREFIX?.trim() || 'learncraft:agent-queue:',
@@ -188,6 +207,5 @@ export function readOutboxDispatcherConfig(): OutboxDispatcherConfig {
     lockTimeoutSeconds: numberEnv('OUTBOX_LOCK_TIMEOUT_SECONDS', 900),
     maxAttempts: numberEnv('OUTBOX_MAX_ATTEMPTS', 10),
     maxBackoffSeconds: numberEnv('OUTBOX_MAX_BACKOFF_SECONDS', 300),
-    runTypes,
   };
 }

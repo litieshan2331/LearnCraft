@@ -21,11 +21,8 @@
  * 阶段控制流（首轮 → 修复、恢复消息顺序、错误取舍）已抽到 question-set-pipeline.ts，
  * 与 posttest_generate 共用同一份实现。
  *
- * **与 Python 现状的已知差异（阶段 5 补齐）：**
- * 1. 未接入 Tavily 远程 MCP，首轮与修复阶段都不提供工具，因此 tool_call_count 恒为 0、
- *    search_extract 恒为 not_used，且共享管线只实现 initial 与 repair，缺少 tavily_recovery；
- * 2. system 提示词用“不提供联网工具”替换了 Python 的两句 Tavily 指令。
- * 上述差异不影响前两阶段的等价性。
+ * 联网工具（Tavily 远程 MCP）已接入：首轮开放工具，修复阶段不开放，最终 tavily_recovery 阶段
+ * 重新开放；真实 tool_call_count 与 search_extract 写入 generation_metadata。
  *
  * 导出：
  * - AssessmentGenerationInputSchema / AssessmentGenerationInput
@@ -36,27 +33,37 @@
 
 import { z } from 'zod';
 
+import type { ToolGatewayPort } from '../application/services/tool-aware-generator.js';
+
 import type { AgentWorkflow } from '../application/commands/execute-agent-run.js';
 import type { ModelCredentialDecryptor } from '../infrastructure/llm/credential-decryptor.js';
 import {
   ModelGatewayError,
+  type ModelCompletionRequest,
+  type ModelCompletionResponse,
   type ModelMessage,
 } from '../infrastructure/llm/model-gateway.js';
 import type { DefaultModelConnectionEnvelope, PersistedAssessmentEnvelope } from '../schemas/core-internal.js';
 import {
   runQuestionSetStages,
-  type QuestionSetModelGatewayPort,
+  searchExtractLabel,
+  type QuestionSetToolGatewayPort,
 } from './question-set-pipeline.js';
 
 const REPAIR_INSTRUCTION =
   '请修复题集 JSON，只返回合法 schema_version 和 questions；每道题必须严格包含 prompt、options、answer_key、explanation、skill_tags、max_score，options 必须是 {key,text} 对象数组，answer_key 必须引用已有选项。';
 
+const FINAL_INSTRUCTION =
+  '请执行题集最终恢复。可以使用 Tavily 获取可靠资料，但最终只返回 assessment.single_choice.v1 合法 JSON；'
+  + '题目数量必须严格匹配，每个 options 必须是 {key,text} 对象数组。';
+
 const SYSTEM_PROMPT = [
   '你是 LearnCraft 程序员学习评估题目设计师。题目必须是单选题，最终只输出一个严格 JSON 对象，不要输出对象外的 Markdown 或解释文字。',
   '所有面向学习者的自然语言，包括题干、选项、解析与能力标签，必须使用简体中文；技术专有名词可保留英文。',
   '题干或解析需要展示代码时，使用标准 Markdown 三反引号代码围栏；语言标签、代码、命令和标识符保持英文。',
-  'JSON 字符串中的结构换行必须使用单层转义，绝不能使用双重转义；代码中原本需要表示换行字符时保留其自身的转义语义。',
-  '本次不提供任何联网检索工具，请仅依据你已掌握的知识生成题目，不要编造时效性强的版本信息。',
+  'JSON 字符串中的结构换行必须使用单层转义 \n，绝不能使用双重转义 \\n；代码中原本需要表示换行字符时保留其自身的转义语义。',
+  '当主题涉及近期版本、快速变化的 API、兼容性、官方规范，或你对事实没有足够把握时，使用 tavily_search 获取可靠资料。',
+  '对于稳定且你有足够把握的基础知识，可直接生成题目；不要为调用工具而调用工具。',
   'JSON 顶层只能包含 schema_version 和 questions：schema_version 固定为 assessment.single_choice.v1；questions 必须是题目数组。',
   '每道题只能包含 prompt、options、answer_key、explanation、skill_tags、max_score。',
   'options 必须是 2 至 6 个对象，每个对象只能包含 key 和 text；answer_key 必须是 options 中存在的 A 至 F 键；max_score 必须为正数。',
@@ -94,13 +101,19 @@ export interface AssessmentInternalPort {
   persistAssessment(agentRunId: string, payload: Record<string, unknown>): Promise<PersistedAssessmentEnvelope>;
 }
 
-/** 模型网关端口：与共享管线使用同一个最小端口，保留原名供调用方与测试使用。 */
-export type AssessmentModelGatewayPort = QuestionSetModelGatewayPort;
+/** 模型网关端口：工作流只依赖 complete。 */
+export interface AssessmentModelGatewayPort {
+  complete(request: ModelCompletionRequest): Promise<ModelCompletionResponse>;
+}
 
 export interface AssessmentGenerationDeps {
   internalClient: AssessmentInternalPort;
   decryptor: ModelCredentialDecryptor;
   gateway: AssessmentModelGatewayPort;
+  /** 联网工具网关（Tavily）；未配置 Key 时返回受控错误而不是抛异常。 */
+  toolGateway: QuestionSetToolGatewayPort;
+  /** 单次运行可见的工具调用上限。 */
+  maxToolCalls: number;
 }
 
 export interface AssessmentGenerationResult {
@@ -151,14 +164,27 @@ export async function runAssessmentGenerate(
     { role: 'user', content: buildUserPrompt(generationInput) },
   ];
 
-  // 阶段顺序、恢复消息与错误取舍都在共享管线里，与 posttest_generate 使用同一份实现。
+  // 阶段顺序、恢复消息、工具开放范围与错误取舍都在共享管线里，与 posttest_generate 使用同一份实现。
+  // 与 Python 一致：首轮开放 Tavily，修复阶段不开放，最终 tavily_recovery 阶段开放。
+  const usage = { inputTokens: 0, outputTokens: 0 };
+  const complete = async (request: ModelCompletionRequest): Promise<ModelCompletionResponse> => {
+    const response = await deps.gateway.complete(request);
+    usage.inputTokens += response.usage.inputTokens;
+    usage.outputTokens += response.usage.outputTokens;
+    return response;
+  };
+
   const outcome = await runQuestionSetStages({
-    gateway: deps.gateway,
+    complete,
+    toolGateway: deps.toolGateway,
+    maxToolCalls: deps.maxToolCalls,
     runId: input.runId,
     connection: modelConnection,
     baseMessages,
     expectedQuestionCount: generationInput.question_count,
     repairInstruction: REPAIR_INSTRUCTION,
+    finalInstruction: FINAL_INSTRUCTION,
+    stageConfig: { repairWithTavily: false, finalWithTavily: true },
   });
   const questionSet = outcome.questionSet;
   const recoveryStage = outcome.recoveryStage;
@@ -180,8 +206,8 @@ export async function runAssessmentGenerate(
     generation_metadata: {
       topic: generationInput.topic,
       model_id: connection.model_id,
-      tool_call_count: 0,
-      search_extract: 'not_used',
+      tool_call_count: outcome.toolCallCount,
+      search_extract: searchExtractLabel(outcome.toolCallCount),
       recovery_stage: recoveryStage,
     },
   });
@@ -191,11 +217,11 @@ export async function runAssessmentGenerate(
       assessment_id: persisted.assessment_id,
       status: persisted.status,
       question_count: persisted.question_count,
-      tool_call_count: 0,
+      tool_call_count: outcome.toolCallCount,
       recovery_stage: recoveryStage,
       model_id: connection.model_id,
     },
-    usage: outcome.usage,
+    usage,
   };
 }
 
@@ -203,12 +229,17 @@ export async function runAssessmentGenerate(
  * 把前测工作流适配为注册表可用的 AgentWorkflow：只负责把 AgentRun 执行状态转换为工作流入参，
  * 并把结果原样交给命令层（命令层负责把 usage 写入 token 列）。
  */
-export function createAssessmentGenerateWorkflow(deps: AssessmentGenerationDeps): AgentWorkflow {
+export type AssessmentGenerationWorkflowDeps = Omit<AssessmentGenerationDeps, 'toolGateway'> & {
+  /** 按运行所属账户构造工具网关：每日配额按账户计数，且 Key 缺失时返回受控错误。 */
+  createToolGateway: (ownerId: string) => ToolGatewayPort;
+};
+
+export function createAssessmentGenerateWorkflow(deps: AssessmentGenerationWorkflowDeps): AgentWorkflow {
   return {
     run: async (executionState) => {
       const result = await runAssessmentGenerate(
         { runId: executionState.runId, inputSummaryJson: executionState.inputSummaryJson },
-        deps,
+        { ...deps, toolGateway: deps.createToolGateway(executionState.ownerId) },
       );
       return { outputSummary: result.outputSummary, usage: result.usage };
     },

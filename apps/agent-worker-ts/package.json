@@ -8,13 +8,15 @@
   },
   "dependencies": {
     "@learncraft/security-primitives": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "bullmq": "^5.71.0",
     "pg": "^8.22.0",
+    "undici": "^8.10.2",
     "zod": "^4.4.3"
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
-    "build": "pnpm clean && esbuild src/main/worker.ts src/main/dispatcher.ts --bundle --platform=node --format=esm --target=node22 --outdir=dist --sourcemap --external:pg --external:bullmq --external:zod",
+    "build": "pnpm clean && esbuild src/main/worker.ts src/main/dispatcher.ts --bundle --platform=node --format=esm --target=node22 --outdir=dist --sourcemap --external:pg --external:bullmq --external:zod --external:undici --external:@modelcontextprotocol/sdk",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

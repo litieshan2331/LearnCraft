@@ -18,6 +18,7 @@ import pg from 'pg';
 import { describe, expect, it } from 'vitest';
 
 import { CoreInternalClient } from '../../src/acl/core-internal-client.js';
+import { readAgentToolMaxCalls } from '../../src/bootstrap/config.js';
 import { executeAgentRun } from '../../src/application/commands/execute-agent-run.js';
 import { AgentWorkflowRegistry } from '../../src/application/services/agent-workflow-registry.js';
 import { PgAgentRunRepository } from '../../src/infrastructure/database/agent-run-repository.js';
@@ -28,6 +29,7 @@ import {
   type ModelEgressAuditEntry,
 } from '../../src/infrastructure/llm/safe-egress-client.js';
 import { createPlanGenerateWorkflow } from '../../src/workflows/plan-generate.js';
+import { createLiveTavilyToolGatewayFactory } from '../helpers/live-tavily-gateway.js';
 
 const { Pool } = pg;
 
@@ -129,7 +131,13 @@ describe.skipIf(!enabled)('真实 plan_generate 端到端（经命令层）', ()
       const gateway = new OpenAiCompatibleModelGateway(egress, 2);
 
       const workflows = new AgentWorkflowRegistry();
-      workflows.register('plan_generate', createPlanGenerateWorkflow({ internalClient, decryptor, gateway }));
+      workflows.register('plan_generate', createPlanGenerateWorkflow({
+        internalClient,
+        decryptor,
+        gateway,
+        maxToolCalls: readAgentToolMaxCalls(),
+        createToolGateway: createLiveTavilyToolGatewayFactory(),
+      }));
       console.log('  · 已注册工作流：' + JSON.stringify(workflows.registeredRunTypes()));
 
       const started = Date.now();

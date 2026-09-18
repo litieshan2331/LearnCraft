@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { parseRedisConnection, readRuntimeRoutes } from '../src/bootstrap/config.js';
+import { parseRedisConnection } from '../src/bootstrap/config.js';
 
 describe('parseRedisConnection', () => {
   it('解析主机、端口、密码与数据库编号', () => {
@@ -25,22 +25,3 @@ describe('parseRedisConnection', () => {
   });
 });
 
-describe('readRuntimeRoutes', () => {
-  it('只保留 ts 与 python 两种取值', () => {
-    const routes = readRuntimeRoutes('{"assessment_generate":"ts","plan_generate":"python"}');
-    expect([...routes.entries()]).toEqual([
-      ['assessment_generate', 'ts'],
-      ['plan_generate', 'python'],
-    ]);
-  });
-
-  it('空值表示不领取任何事件（可用于回滚）', () => {
-    expect(readRuntimeRoutes(undefined).size).toBe(0);
-    expect(readRuntimeRoutes('{}').size).toBe(0);
-  });
-
-  it('非法 JSON 或非法取值直接报错', () => {
-    expect(() => readRuntimeRoutes('[]')).toThrow(/JSON 对象/);
-    expect(() => readRuntimeRoutes('{"a":"rust"}')).toThrow(/只能是 ts 或 python/);
-  });
-});

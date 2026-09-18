@@ -32,27 +32,18 @@
 共享包 `packages/security-primitives` 提供 Web 与 Worker 共用的 AES-256-GCM 实现；Web 侧
 `apps/web/src/lib/security/credential-crypto.ts` 已改为转出该包，对外行为不变。
 
-与 Python 现状的对应关系、以及 Node 侧的关键差异（不能用 `fetch`、`lookup` 必须兼容 `all:true`、
-WHATWG URL 会归一化 `..` 与整数主机名）记录在 `docs/09` 第 8.1 节。
-
 ## 尚未实现
 
-- Tavily 远程 MCP，以及由此缺失的 tavily_recovery 兜底阶段。
-- `plan_generate`、`card_content_generate`、`posttest_generate` 三个工作流。
-- 四个工作流的 LangGraph.js 图化、健康检查入口与 CI。
-- **生产 Compose 与镜像发布流程**：当前只接入本地 `infra/compose.yaml`；`compose.production.yaml` 尚未包含 TypeScript 两个进程。
-- 字段级 HTTP/SSE 超时总预算的压测。
+- 字段级 HTTP/SSE 超时总预算的压测（见 `docs/09` 待办清单第 3 项）。
+- 本工程的 ESLint，以及 `packages/contracts/ts` 的 DTO 生成。
+- 四个工作流的 LangGraph.js 图化（可选演进：Python 侧同样未使用图）。
 
 已知差异（做等价性复核时不要当成缺陷）：
 
-- `assessment-generate.ts` 首轮与修复阶段都不提供 `tavily_search`，因此 `tool_call_count` 恒为 0、
-  `search_extract` 恒为 not_used，且缺少 `tavily_recovery` 阶段（阶段 5 接入 MCP 后消除）。
 - **token 用量写真实值**（2026-09-17 用户确认）：Python 的 `mark_succeeded` 恒定写 0，本实现要求调用方
   把工作流返回的 `usage` 写入 `agent_runs` 的 token 列；`outputSummary` 仍保持 Python 的 6 键。
 
-除此之外，提示词（除 Tavily 两句）、修复指令、校验规则、回写载荷字段、输出摘要键与错误码与 Python 一致。
-
-在完成 `docs/09` 阶段 2 与阶段 3 的全部验收项之前，**不得**给本工程配置真实用户 BYOK 密钥。
+除此之外，提示词、修复指令、校验规则、回写载荷字段、输出摘要键与错误码与 Python 一致。
 
 ## 命令
 
@@ -78,15 +69,15 @@ node --experimental-strip-types src/main/worker.ts
 | `AGENT_WORKER_CONCURRENCY` | 单进程异步并发（默认 1） |
 | `AGENT_JOB_LOCK_DURATION_MS` | 必须大于任务硬超时（默认 660000） |
 | `AGENT_JOB_MAX_ATTEMPTS` / `_BACKOFF_MS` / `_BACKOFF_MAX_MS` | 重试次数与退避（默认 3 / 10000 / 300000） |
-| `AGENT_RUNTIME_ROUTES` | **灰度路由映射**，如 `{"assessment_generate":"ts"}`；置为 `{}` 即可让 TS 侧停止领取任何事件（回滚） |
 | `OUTBOX_DISPATCHER_ID` | 多实例必须各自唯一 |
 | `OUTBOX_BATCH_SIZE` / `_POLL_INTERVAL_SECONDS` / `_LOCK_TIMEOUT_SECONDS` / `_MAX_ATTEMPTS` | 领取参数（默认 20 / 1 / 900 / 10） |
 | `CORE_INTERNAL_BASE_URL` / `INTERNAL_SERVICE_SECRET` | Web 内部接口地址与服务密钥 |
 | `CREDENTIAL_ENCRYPTION_KEY` / `_VERSION` | 凭据解密主密钥与版本 |
 | `MODEL_EGRESS_*` | 受控出网参数；生产启用出网时必须配置代理 |
 
-灰度切换：把一个 `run_type` 加入 `AGENT_RUNTIME_ROUTES` 并重启 Dispatcher 即可让 TS 运行时接管；
-反向操作即可回滚。**同一个 AgentRun 永远只属于一个运行时**（由 Dispatcher 的领取条件保证）。
+Python 运行时已下线（编排中不再有任何 Python 服务），因此 Dispatcher 领取**全部** `agent.run.requested` 事件，
+不再按 `run_type` 过滤；未注册工作流的 `run_type` 会在命令层以 `AGENT_RUN_WORKFLOW_NOT_REGISTERED` 明确失败，
+不会静默滞留。
 
 ### 本机 Compose
 
@@ -95,12 +86,10 @@ node --experimental-strip-types src/main/worker.ts
 | 服务 | 作用 |
 | --- | --- |
 | `agent-worker-ts` | 消费 BullMQ 队列执行 AgentRun；加入 `private + egress` 双网 |
-| `agent-dispatcher-ts` | 按 `run_type` 路由领取 Outbox 并投递 BullMQ；只在内网 |
+| `agent-dispatcher-ts` | 领取全部 Outbox 事件并投递 BullMQ；只在内网 |
 
-灰度互斥由两侧共同保证：TypeScript Dispatcher 只领 `AGENT_RUNTIME_ROUTES` 中映射为 `ts` 的
-`run_type`，而 Python Dispatcher 已同步支持该变量并**跳过**这些 `run_type`
-（`apps/agent-worker/src/learncraft_agent/infrastructure/queue/dispatcher.py`）。
-默认留空表示完全不接管，行为与引入 TypeScript 之前一致。
+`apps/agent-worker` 的 Python 实现（含当时为灰度新增的 `AGENT_RUNTIME_ROUTES` 过滤）已不再被任何编排启动，
+仅作为迁移参照保留，因此仓库里不会再有第二个运行时与它竞争同一条 Outbox 事件。
 
 本地不启动 Compose 时，可直接运行两个入口（需要先 `pnpm build`）：
 

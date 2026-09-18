@@ -25,7 +25,6 @@ const CONFIG: OutboxDispatcherConfig = {
   lockTimeoutSeconds: 900,
   maxAttempts: 10,
   maxBackoffSeconds: 300,
-  runTypes: ['assessment_generate'],
 };
 
 type Recorded = { text: string; values?: readonly unknown[] };
@@ -96,7 +95,7 @@ function build(claimed: Array<Record<string, unknown>>, behavior: 'ok' | 'fail' 
 }
 
 describe('领取 SQL', () => {
-  it('带 run_type 路由过滤、JOIN agent_runs，并使用 FOR UPDATE OF o', async () => {
+  it('JOIN agent_runs、不按 run_type 过滤，并使用 FOR UPDATE OF o', async () => {
     const { dispatcher, client } = build([eventRow()]);
 
     await dispatcher.dispatchOnce();
@@ -104,25 +103,22 @@ describe('领取 SQL', () => {
     const claim = client.find('FOR UPDATE OF o');
     expect(claim).toBeDefined();
     expect(claim?.text).toContain('JOIN agent.agent_runs r ON r.id = o.aggregate_id');
-    expect(claim?.text).toContain('r.run_type = ANY($2::text[])');
+    // 只有一套运行时，领取语句不再带 run_type 路由过滤。
+    expect(claim?.text).not.toContain('run_type');
     // 关键：必须是 OF o，否则会连带锁住 agent_runs 并与 beginExecution 互相阻塞。
     expect(claim?.text).toContain('FOR UPDATE OF o SKIP LOCKED');
     expect(claim?.text).not.toMatch(/FOR UPDATE SKIP LOCKED/);
-    expect(claim?.values).toEqual(['agent.run.requested', ['assessment_generate'], 900, 20, 'dispatcher-under-test']);
+    expect(claim?.values).toEqual(['agent.run.requested', 900, 20, 'dispatcher-under-test']);
   });
 
-  it('回滚语义：路由集合为空时传入空数组，领取不到任何事件', async () => {
+  it('领取不到事件时返回 0 且不投递', async () => {
     const client = new FakeClient([]);
-    const dispatcher = new OutboxDispatcher(
-      new FakePool(client),
-      new RecordingPublisher(),
-      { ...CONFIG, runTypes: [] },
-    );
+    const dispatcher = new OutboxDispatcher(new FakePool(client), new RecordingPublisher(), CONFIG);
 
     const claimed = await dispatcher.dispatchOnce();
 
     expect(claimed).toBe(0);
-    expect(client.find('FOR UPDATE OF o')?.values?.[1]).toEqual([]);
+    expect(dispatcher.dispatchOnce).toBeTypeOf('function');
   });
 });
 

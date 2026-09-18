@@ -15,8 +15,8 @@
 > **Agent 侧技术栈变更（2026-09-16，优先于后文所有 Agent 实现描述）：**
 >
 > - 已确认 Agent 侧由 Python 迁移到 TypeScript/Node.js（LangGraph.js），**不保留任何 Python 运行时**；方案、容量设计与实施阶段以 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md) 为唯一事实源。
-> - 本文后文关于 Python FastAPI、Celery、SQLAlchemy、Pydantic、`uv`、Alembic 占位以及“固定 concurrency=1”的内容，均为**迁移期现状或历史设计记录**，不得作为目标实现依据。
-> - 迁移期不变的事实：数据库 Schema 由 Web 侧 Drizzle 独占；AgentRun、Outbox、内部 API 与事件契约不变；Python 与 TypeScript 运行时按 `run_type` 互斥执行，同一个 AgentRun 只属于一个运行时。
+> - 本文后文关于 Python FastAPI、Celery、SQLAlchemy、Pydantic、`uv`、Alembic 占位以及“固定 concurrency=1”的内容，均为**迁移前（历史）设计记录**，不得作为目标实现依据。
+> - 迁移前后不变的事实：数据库 Schema 由 Web 侧 Drizzle 独占；AgentRun、Outbox、内部 API 与事件契约不变。双运行时按 `run_type` 互斥只存在于迁移期间，现已只剩 TypeScript 一套运行时。
 
 > ## 历史范围决策（2026-08-16，已被上方 2026-08-24 更新取代）
 >
@@ -58,7 +58,7 @@
 
 ### 1.3 P0 已作出的实现决策
 
-1. **架构：**Next.js App Router 负责 UI、BFF、认证与核心学习领域；Agent Worker 在同一进程内实现学习规划 Agent 与节点教学 Agent 两个职责隔离的显式工作流，负责模型调用、检索和受控工具。**迁移期现状为 Python FastAPI + Celery；目标为 TypeScript/Node.js + LangGraph.js + BullMQ**（见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md)）。Checkpoint 是预留演进方向，当前不运行持久化 Checkpoint。Agent 侧不复制学习路线、题目等业务聚合，也不维护无限原始聊天记录。
+1. **架构：**Next.js App Router 负责 UI、BFF、认证与核心学习领域；Agent Worker 在同一进程内实现学习规划 Agent 与节点教学 Agent 两个职责隔离的显式工作流，负责模型调用、检索和受控工具。**迁移前为 Python FastAPI + Celery；现为 TypeScript/Node.js + LangGraph.js + BullMQ**（见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md)）。Checkpoint 是预留演进方向，当前不运行持久化 Checkpoint。Agent 侧不复制学习路线、题目等业务聚合，也不维护无限原始聊天记录。
 2. **认证：**P0 使用“邮箱 + 密码 + 数据库不透明 Session + HttpOnly Cookie”。密码用 Argon2id 哈希；浏览器不接收 JWT。这样本地开发不依赖 OAuth 或邮件供应商，也不会把长期令牌暴露给前端。OAuth、Magic Link、找回密码和移动端 Token 放 P1。
 3. **迁移所有权：**`db/migrations/` 中的 Drizzle 迁移是 P0 唯一建表入口。`apps/agent-worker/alembic/` 保留说明文件，但 **P0 不执行 Alembic**，否则会出现两个迁移工具竞争同一数据库的问题。
 4. **用户模型连接：**`ModelGateway` 是 `agent-worker` 内的应用服务，不是 Docker 容器。用户只可保存公网 OpenAI-compatible Base URL、API Key 和模型名，永久不支持 localhost、局域网、私有 IP 或本地 vLLM；Key 由 Web 以 AES-256-GCM 加密持久化，浏览器只可写入/覆盖，Outbox、日志和 AgentRun 仅记录连接 ID/模型名。`CREDENTIAL_ENCRYPTION_KEY` 只进入 Web 与 Worker 的 Secret/环境变量。
@@ -1762,9 +1762,10 @@ MODEL_RUN_MAX_COST_USD=0.05
 | `celery-redis` | Celery Broker；固定 DB 0 | `127.0.0.1:6380` |
 | `minio` | 本地 S3 兼容对象存储 | `127.0.0.1:9000` / `9001` |
 | `web` | Next.js UI + BFF | `127.0.0.1:3000` |
-| `agent-api` | Python 健康检查和内部调试入口 | `127.0.0.1:8000` |
-| `agent-dispatcher` | PostgreSQL Outbox → Celery 可靠投递 | 不映射端口 |
-| `agent-celery-worker` | 执行 AgentRun（迁移期 Python 运行时）；并发由 `CELERY_WORKER_CONCURRENCY` 控制，提升并发时必须与 Provider 配额、数据库连接数与出网代理容量同时预算 | 不映射端口 |
+| `agent-dispatcher-ts` | PostgreSQL Outbox → BullMQ 可靠投递（领取全部事件） | 不映射端口 |
+| `agent-worker-ts` | 执行 AgentRun（当前唯一 Agent 运行时）；并发由 `AGENT_WORKER_CONCURRENCY` 控制，提升并发时必须与 Provider 配额、数据库连接数与出网代理容量同时预算；容器内 `/health` 与 `/ready` 供健康检查 | 不映射端口 |
+
+迁移已完成：Python 运行时（`agent-api`、`agent-dispatcher`、`agent-celery-worker`）已从编排中移除，`apps/agent-worker` 只保留源码与测试作为参照。
 
 P0 不启动 `code-runner`，不提供在线执行 API；`code_runs` 仅为 P1 物理预留表。
 
@@ -1778,7 +1779,7 @@ Copy-Item .env.example .env
 docker compose config
 docker compose up --build -d
 docker compose ps
-docker compose logs -f web agent-api agent-dispatcher agent-celery-worker
+docker compose logs -f web agent-dispatcher-ts agent-worker-ts
 ```
 
 日常开发可以在 Docker Desktop 的 LearnCraft Compose 应用中启动或重启服务。首次启动，或 Dockerfile、依赖、Compose、环境变量变动后，应重新构建镜像；停止服务不会删除数据库、Redis 或 MinIO 的命名卷。
@@ -1921,7 +1922,7 @@ P0 只有在以下条件同时满足时才算完成：
 | 节点闭环与双 Agent 增量迁移 | 按 3.4.1 为 Assessment、Plan、PlanNode、CardContent 增加画像/输入快照、node_brief、teaching_memory、后测来源内容和唯一成功内容约束；复用 AgentRun Profile/摘要字段。 | 两个逻辑 Agent 的结构化交接、一次前测、唯一内容与多份后测历史的数据库约束。 |
 | 首个部署域名/HTTPS | staging 和 production 使用不同 Secret 与 Cookie 配置。 | Cookie `Secure`、CORS/CSRF、反向代理、回调 URL。 |
 
-其余选择已经在本文固定：Next.js + Agent Worker（迁移期 Python，目标 TypeScript，见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md)）、PostgreSQL + pgvector、Drizzle 单一迁移、邮箱密码 Session、Docker Compose、无本地模型、账户默认的 OpenAI-compatible 生成模型连接、固定平台 Embedding Profile。P1 的在线 Sandbox 必须在实施前重新确认语言、隔离、资源限额、成本与数据保留策略。
+其余选择已经在本文固定：Next.js + Agent Worker（迁移前 Python，目标 TypeScript，见 [09-全栈TypeScript迁移方案](./09-全栈TypeScript迁移方案.md)）、PostgreSQL + pgvector、Drizzle 单一迁移、邮箱密码 Session、Docker Compose、无本地模型、账户默认的 OpenAI-compatible 生成模型连接、固定平台 Embedding Profile。P1 的在线 Sandbox 必须在实施前重新确认语言、隔离、资源限额、成本与数据保留策略。
 
 ## 10. 实施参考
 

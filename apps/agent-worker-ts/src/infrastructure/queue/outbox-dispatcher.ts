@@ -1,11 +1,11 @@
 /**
  * PostgreSQL Outbox 到 BullMQ 的可靠投递器（等价于 Python 的 OutboxDispatcher，并补齐优雅关闭）。
  *
- * 职责：以 FOR UPDATE OF o SKIP LOCKED 领取本运行时负责的 run_type 事件，校验契约后投递到队列，
+ * 职责：以 FOR UPDATE OF o SKIP LOCKED 领取 Outbox 事件，校验契约后投递到队列，
  * 并把结果回写为 published / failed（退避） / dead。锁拥有者条件保证多实例不会互相覆盖状态。
  *
  * 与 Python 的关键差异（有意为之）：
- * - 领取语句带 run_type 路由过滤，实现灰度期两个运行时互斥领取同一张 Outbox；
+ * - Python 运行时下线后只有本进程领取 Outbox，领取语句不再按 run_type 过滤；
  *   FOR UPDATE 必须写 **OF o**，否则会连带锁住 agent.agent_runs，与 beginExecution 的行锁互相阻塞；
  * - 增加优雅关闭：收到停止信号后不再领取，已领取但未发布的事件立即回写为 failed（available_at=now()），
  *   而不是等 900 秒锁租约。
@@ -57,17 +57,16 @@ export const SQL_CLAIM_EVENTS = [
   '  FROM public.outbox_events o',
   '  JOIN agent.agent_runs r ON r.id = o.aggregate_id',
   '  WHERE o.event_type = $1',
-  '    AND r.run_type = ANY($2::text[])',
   '    AND (',
   "      (o.status IN ('pending', 'failed') AND o.available_at <= now())",
-  "      OR (o.status = 'processing' AND o.locked_at < now() - ($3::int * interval '1 second'))",
+  "      OR (o.status = 'processing' AND o.locked_at < now() - ($2::int * interval '1 second'))",
   '    )',
   '  ORDER BY o.created_at',
   '  FOR UPDATE OF o SKIP LOCKED',
-  '  LIMIT $4',
+  '  LIMIT $3',
   ')',
   'UPDATE public.outbox_events AS e',
-  "SET status = 'processing', locked_by = $5, locked_at = now(),",
+  "SET status = 'processing', locked_by = $4, locked_at = now(),",
   '    attempt_count = e.attempt_count + 1, last_error = NULL',
   'FROM candidate',
   'WHERE e.id = candidate.id',
@@ -167,7 +166,6 @@ export class OutboxDispatcher {
       await client.query('BEGIN');
       const result = await client.query(SQL_CLAIM_EVENTS, [
         this.config.eventType,
-        this.config.runTypes,
         this.config.lockTimeoutSeconds,
         this.config.batchSize,
         this.config.dispatcherId,

@@ -2,8 +2,7 @@
 
 本目录实现各 `run_type` 的业务编排。
 
-按 [docs/09](../../docs/09-全栈TypeScript迁移方案.md) 第 8.2 节，四个工作流最终将以 LangGraph.js 图实现；
-当前为**显式异步实现**，用于先打通链路与验证行为等价，函数签名与图状态的设计保持一致，便于后续替换。
+当前为**显式异步实现**，函数签名与状态设计保持可替换性，便于日后改为 LangGraph.js 图（可选项，见 `docs/09` 待办清单第 7 项）。
 
 文件：
 
@@ -31,6 +30,17 @@
 （四个 P0 工作流已全部落地，每个都有单元测试与真实端到端用例）。
 未注册的类型由命令层转为 `AGENT_RUN_WORKFLOW_NOT_REGISTERED` 的不可重试失败，不会伪造成功结果。
 
-已知缺口（阶段 5 补齐）：未接入 Tavily 远程 MCP，因此所有阶段都不提供工具、`tool_call_count` 恒为 0、
-`search_extract` 恒为 `not_used`；题集管线只有 initial 与 repair 两阶段，缺少 `tavily_recovery` 兜底；
-两个工作流传入的修复指令都已删去与联网检索相关的句子。
+## 联网工具（Tavily 远程 MCP）
+
+四个工作流共用 `infrastructure/mcp/tavily-tool-gateway.ts` 与 `application/services/tool-aware-generator.ts`：
+
+- 题集类（`assessment_generate`、`posttest_generate`）：三阶段 initial → repair → tavily_recovery，
+  是否开放工具由 `repairWithTavily` / `finalWithTavily` 决定（与 Python 的两个开关一致）；
+- 路线与节点内容：首轮由模型自主决定是否调用工具，最终校验失败后先执行强制联网重建，
+  联网不可用时退回无资料重建；
+- 可见工具调用数写入 `tool_call_count`，assessment 另写 `search_extract`（0/非 0 决定）；
+  每日配额按账户经 Redis 原子计数，配额不可用时拒绝联网而不是绕过。
+
+**已知差异：** 调用参数按远端 `tools/list` 公布的 schema 过滤。远端 2026-09 起 `tavily_extract`
+不再接受 `chunks_per_source`，Python 的硬编码参数会被远端以 `-32603` 拒绝；过滤后保留 Python 的参数语义，
+同时不会因为远端删参而整体失败。
