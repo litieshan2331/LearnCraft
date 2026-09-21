@@ -14,7 +14,8 @@
  * 实时进度：可选 onProgress 会在「每轮开始 / 思考增量 / 轮次思考结束 / 工具调用 / 工具返回 / 校验失败 /
  * 会话失败」上报事件；其中「思考增量」与「轮次思考结束」携带模型思考原文（本契约中唯一允许携带模型原文的
  * 两类事件，前者合并后流式下发、后者为权威整段），其余只含步骤与工具元数据
- * （见 application/services/agent-progress.ts）。
+ * （见 application/services/agent-progress.ts）。思考增量的缓冲、阈值合并与轮末补发
+ * 由 application/services/agent-thinking-stream.ts 负责，本文件不做缓冲。
  * 未装配时使用空实现，上报本身绝不影响会话执行。
  *
  * 与 Python 的差异：Python 的 ToolAwareGenerator 自己累计并返回 usage；本实现要求调用方传入
@@ -44,6 +45,7 @@ import {
   createNoopAgentProgressReporter,
   type AgentProgressReporter,
 } from './agent-progress.js';
+import { createAgentThinkingStream } from './agent-thinking-stream.js';
 
 export const TOOL_CALL_LIMIT_REACHED = 'TOOL_CALL_LIMIT_REACHED';
 
@@ -51,9 +53,11 @@ export const TOOL_CALL_LIMIT_REACHED = 'TOOL_CALL_LIMIT_REACHED';
 const PROGRESS_QUERY_MAX_LENGTH = 120;
 
 /**
- * 思考增量的合并阈值：累积到这么多字符、或距上次上报超过这么久，就发一条 thinking.delta。
- * 取值在「流畅度」与「消息量」之间权衡：越小越像逐字输出，但每条事件都会走一次
- * Redis PUBLISH → SSE 帧 → 前端重渲染。当前值约合每秒最多 ~12 次刷新、每次约 40 字符。
+ * 思考增量的上报阈值（本工作流的调优点，实现与补发逻辑在 agent-thinking-stream.ts）：
+ * `THINKING_FLUSH_CHARS` 为字符数阈值、`THINKING_FLUSH_MS` 为时间阈值，两者取「或」。
+ * 当前取值（1 / 0）表示不合并：每收到一段增量就立即上报，观感最跟手，
+ * 代价是消息量最大（每条事件都会走 Redis PUBLISH → SSE 帧 → 前端重渲染）。
+ * 想让通道更省，可调大这两个值（例如 40 / 80 约合每秒最多 ~12 次刷新）。
  */
 const THINKING_FLUSH_CHARS = 1;
 const THINKING_FLUSH_MS = 0;
@@ -155,31 +159,13 @@ export async function runReactAgentSession<T>(
   let validationFailures = 0;
   let lastPaths: string[] = ['response.json'];
 
-  // 思考增量缓冲：合并后按块上报（force 用于轮次结束时清空缓冲）。不落库、不写日志。
-  let thinkingBuffer = '';
-  let thinkingFlushAt = 0;
-  let thinkingPublished = 0;
-  const flushThinking = (turn: number, force: boolean): void => {
-    if (thinkingBuffer.length === 0) {
-      return;
-    }
-    if (
-      !force
-      && thinkingBuffer.length < THINKING_FLUSH_CHARS
-      && Date.now() - thinkingFlushAt < THINKING_FLUSH_MS
-    ) {
-      return;
-    }
-    if (thinkingPublished >= THINKING_TOTAL_LIMIT) {
-      thinkingBuffer = '';
-      return;
-    }
-    const chunk = thinkingBuffer.slice(0, THINKING_TOTAL_LIMIT - thinkingPublished);
-    thinkingBuffer = thinkingBuffer.slice(chunk.length);
-    thinkingPublished += chunk.length;
-    thinkingFlushAt = Date.now();
-    progress.report('thinking.delta', { turn, text: chunk });
-  };
+  // 思考增量的缓冲、合并与轮末补发都交给 agent-thinking-stream.ts；本文件只负责喂增量。
+  const thinking = createAgentThinkingStream({
+    report: progress,
+    flushChars: THINKING_FLUSH_CHARS,
+    flushIntervalMs: THINKING_FLUSH_MS,
+    totalLimit: THINKING_TOTAL_LIMIT,
+  });
 
   try {
     for (let turn = 1; turn <= input.maxTurns; turn += 1) {
@@ -191,13 +177,12 @@ export async function runReactAgentSession<T>(
         ...(toolsAvailable
           ? { tools: [TAVILY_SEARCH_TOOL], toolChoice: 'auto' as const }
           : { tools: [], toolChoice: 'none' as const }),
-        // 流式思考增量：合并后即时上报，让前端边生成边显示。
+        // 流式思考增量：交给合并器按阈值即时上报，让前端边生成边显示。
         onReasoningDelta: (text: string) => {
-          thinkingBuffer += text;
-          flushThinking(turn, false);
+          thinking.push(turn, text);
         },
       });
-      flushThinking(turn, true);
+      thinking.flushTurn(turn);
 
       const assistantMessage = response.message;
       // 该轮完整思考原文（网关已在流式聚合时收集）：作为权威整段下发，前端用它覆盖本轮增量。
