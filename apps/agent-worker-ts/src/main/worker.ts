@@ -36,6 +36,7 @@ import { createAgentRunWorker } from '../infrastructure/queue/bullmq-agent-queue
 import { createReadinessChecker, startHealthServer } from '../interfaces/http/health-server.js';
 import { createAgentRunProcessor } from '../interfaces/queue/agent-run-processor.js';
 import { RespRedisClient } from '../infrastructure/redis/resp-client.js';
+import { RedisAgentProgressPublisher } from '../infrastructure/redis/agent-progress-publisher.js';
 import { createAssessmentGenerateWorkflow } from '../workflows/assessment-generate/index.js';
 import { createCardContentGenerateWorkflow } from '../workflows/card-content-generate/index.js';
 import { createPlanGenerateWorkflow } from '../workflows/plan-generate/index.js';
@@ -87,8 +88,18 @@ async function main(): Promise<void> {
       quota,
     });
 
+  // 实时进度（B2）：与队列共用 Redis 实例，发布到 learncraft:agent-progress:{runId}。
+  // 通道不可用时只告警，绝不影响 AgentRun；web 侧未配置订阅时这些事件也不会有人读取。
+  const progressPublisher = new RedisAgentProgressPublisher({
+    url: formatRedisConnection(queueConfig.connection),
+    commandTimeoutMs: 1_000,
+    // 思考原文单条上限（默认 200 会截断）；其余事件字段都很短，放宽不影响其它事件。
+    maxTextLength: 4_000,
+  });
+  const createProgressReporter = (runId: string) => progressPublisher.createReporter(runId);
+
   const workflows = new AgentWorkflowRegistry();
-  const workflowDeps = { internalClient, decryptor, gateway, createToolGateway, maxToolCalls };
+  const workflowDeps = { internalClient, decryptor, gateway, createToolGateway, maxToolCalls, createProgressReporter };
   workflows.register('assessment_generate', createAssessmentGenerateWorkflow({
     ...workflowDeps,
     reactMaxTurns: reactMaxTurns.assessmentGenerate,
@@ -154,6 +165,7 @@ async function main(): Promise<void> {
     await worker.close();
     await pool.end();
     await readinessRedis.close();
+    await progressPublisher.close();
     await redisQuota?.close();
     console.log('[worker] 已关闭');
     process.exit(0);
@@ -170,6 +182,7 @@ async function main(): Promise<void> {
       '，配额 Redis=' + (redisQuota === null ? '未配置' : '已配置') +
       '，工具上限=' + String(maxToolCalls) +
       '，ReAct 轮数=' + JSON.stringify(reactMaxTurns) +
+      '，实时进度=已启用' +
       '，健康端点=:' + String(health.port),
   );
 }

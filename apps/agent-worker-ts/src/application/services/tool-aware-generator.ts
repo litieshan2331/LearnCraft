@@ -11,6 +11,12 @@
  * 轮数语义：maxTurns 是**一次运行内允许的模型调用次数**（含只产生工具调用的轮次），
  * 因此它同时是成本上限；每个工作流通过 deps.reactMaxTurns 注入自己的取值。
  *
+ * 实时进度：可选 onProgress 会在「每轮开始 / 思考增量 / 轮次思考结束 / 工具调用 / 工具返回 / 校验失败 /
+ * 会话失败」上报事件；其中「思考增量」与「轮次思考结束」携带模型思考原文（本契约中唯一允许携带模型原文的
+ * 两类事件，前者合并后流式下发、后者为权威整段），其余只含步骤与工具元数据
+ * （见 application/services/agent-progress.ts）。
+ * 未装配时使用空实现，上报本身绝不影响会话执行。
+ *
  * 与 Python 的差异：Python 的 ToolAwareGenerator 自己累计并返回 usage；本实现要求调用方传入
  * 已经记账的 complete（各工作流用它统一累计真实 token 用量），这里只返回结果与计数。
  * 最终 JSON 不使用 response_format 约束，而是靠工作流提示词 + extractJsonText 解析。
@@ -34,8 +40,25 @@ import {
   TAVILY_SEARCH_TOOL,
   type ToolExecutionResult,
 } from '../../infrastructure/mcp/tavily-tool-gateway.js';
+import {
+  createNoopAgentProgressReporter,
+  type AgentProgressReporter,
+} from './agent-progress.js';
 
 export const TOOL_CALL_LIMIT_REACHED = 'TOOL_CALL_LIMIT_REACHED';
+
+/** 工具调用参数里可上报的检索词最大长度（只上报摘要，不上报完整参数）。 */
+const PROGRESS_QUERY_MAX_LENGTH = 120;
+
+/**
+ * 思考增量的合并阈值：累积到这么多字符、或距上次上报超过这么久，就发一条 thinking.delta。
+ * 取值在「流畅度」与「消息量」之间权衡：越小越像逐字输出，但每条事件都会走一次
+ * Redis PUBLISH → SSE 帧 → 前端重渲染。当前值约合每秒最多 ~12 次刷新、每次约 40 字符。
+ */
+const THINKING_FLUSH_CHARS = 1;
+const THINKING_FLUSH_MS = 0;
+/** 单次运行上报的思考原文总量上限，避免长时间会话无限占用临时通道。 */
+const THINKING_TOTAL_LIMIT = 64_000;
 
 /** 工具网关端口：只依赖 execute。 */
 export interface ToolGatewayPort {
@@ -65,6 +88,8 @@ export interface ReactSessionInput<T> {
   /** 轮数耗尽时抛出的错误码与消息前缀。 */
   exhaustedErrorCode: string;
   exhaustedMessage: string;
+  /** 可选的实时进度上报端口；缺省为空实现。 */
+  onProgress?: AgentProgressReporter;
 }
 
 export interface ReactSessionResult<T> {
@@ -88,89 +113,193 @@ export function serializeToolResult(result: ToolExecutionResult): string {
 }
 
 /**
+ * 从工具调用参数里取出可展示的检索词摘要。
+ * 只上报 query 字段本身（不含完整参数、不含工具返回内容），解析失败时返回 null。
+ */
+function toolQuerySummary(toolCall: ModelToolCall): string | null {
+  try {
+    const parsed: unknown = JSON.parse(toolCall.argumentsJson);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    const query = (parsed as Record<string, unknown>).query;
+    if (typeof query !== 'string' || query.trim().length === 0) {
+      return null;
+    }
+    return query.trim().slice(0, PROGRESS_QUERY_MAX_LENGTH);
+  } catch {
+    return null;
+  }
+}
+
+/** 工具返回里可上报的来源条数；结构不符时返回 null。 */
+function toolSourceCount(result: ToolExecutionResult): number | null {
+  const data = result.data;
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    return null;
+  }
+  const sources = (data as Record<string, unknown>).sources;
+  return Array.isArray(sources) ? sources.length : null;
+}
+
+/**
  * 执行一次单会话 ReAct 循环：工具调用、校验失败与自纠都发生在同一个消息列表里。
  * 只有「轮数耗尽」这一种情况会抛错；工具失败不抛错，而是作为 tool 消息回传模型。
  */
 export async function runReactAgentSession<T>(
   input: ReactSessionInput<T>,
 ): Promise<ReactSessionResult<T>> {
+  const progress: AgentProgressReporter = input.onProgress ?? createNoopAgentProgressReporter();
   let messages: ModelMessage[] = [...input.request.messages];
   let toolCallCount = 0;
   let validationFailures = 0;
   let lastPaths: string[] = ['response.json'];
 
-  for (let turn = 1; turn <= input.maxTurns; turn += 1) {
-    const toolsAvailable = toolCallCount < input.maxToolCalls;
-    const response = await input.complete({
-      ...input.request,
-      messages,
-      ...(toolsAvailable
-        ? { tools: [TAVILY_SEARCH_TOOL], toolChoice: 'auto' as const }
-        : { tools: [], toolChoice: 'none' as const }),
-    });
-    const assistantMessage = response.message;
+  // 思考增量缓冲：合并后按块上报（force 用于轮次结束时清空缓冲）。不落库、不写日志。
+  let thinkingBuffer = '';
+  let thinkingFlushAt = 0;
+  let thinkingPublished = 0;
+  const flushThinking = (turn: number, force: boolean): void => {
+    if (thinkingBuffer.length === 0) {
+      return;
+    }
+    if (
+      !force
+      && thinkingBuffer.length < THINKING_FLUSH_CHARS
+      && Date.now() - thinkingFlushAt < THINKING_FLUSH_MS
+    ) {
+      return;
+    }
+    if (thinkingPublished >= THINKING_TOTAL_LIMIT) {
+      thinkingBuffer = '';
+      return;
+    }
+    const chunk = thinkingBuffer.slice(0, THINKING_TOTAL_LIMIT - thinkingPublished);
+    thinkingBuffer = thinkingBuffer.slice(chunk.length);
+    thinkingPublished += chunk.length;
+    thinkingFlushAt = Date.now();
+    progress.report('thinking.delta', { turn, text: chunk });
+  };
 
-    // 工具调用轮：执行工具并把结果回传同一会话，让模型自己决定下一步。
-    if ((assistantMessage.toolCalls?.length ?? 0) > 0) {
-      messages = [...messages, assistantMessage];
-      const remainingCalls = input.maxToolCalls - toolCallCount;
-      const toolMessages: ModelMessage[] = [];
+  try {
+    for (let turn = 1; turn <= input.maxTurns; turn += 1) {
+      const toolsAvailable = toolCallCount < input.maxToolCalls;
+      progress.report('turn.started', { turn, max_turns: input.maxTurns });
+      const response = await input.complete({
+        ...input.request,
+        messages,
+        ...(toolsAvailable
+          ? { tools: [TAVILY_SEARCH_TOOL], toolChoice: 'auto' as const }
+          : { tools: [], toolChoice: 'none' as const }),
+        // 流式思考增量：合并后即时上报，让前端边生成边显示。
+        onReasoningDelta: (text: string) => {
+          thinkingBuffer += text;
+          flushThinking(turn, false);
+        },
+      });
+      flushThinking(turn, true);
 
-      for (const [index, toolCall] of (assistantMessage.toolCalls ?? []).entries()) {
-        let result: ToolExecutionResult;
-        if (index >= remainingCalls) {
-          result = {
-            ok: false,
-            code: TOOL_CALL_LIMIT_REACHED,
-            message: '本次任务已达到联网工具调用上限，请基于已有资料继续完成回答。',
-            data: {},
-          };
-        } else {
-          result = await input.toolGateway.execute(toolCall);
-          toolCallCount += 1;
-        }
-        toolMessages.push({
-          role: 'tool',
-          content: serializeToolResult(result),
-          toolCallId: toolCall.id,
-          name: toolCall.name,
-        });
+      const assistantMessage = response.message;
+      // 该轮完整思考原文（网关已在流式聚合时收集）：作为权威整段下发，前端用它覆盖本轮增量。
+      const reasoning = assistantMessage.reasoningContent;
+      if (typeof reasoning === 'string' && reasoning.trim().length > 0) {
+        progress.report('thinking.completed', { turn, text: reasoning.trim() });
       }
 
-      messages = [...messages, ...toolMessages];
-      continue;
-    }
+      // 工具调用轮：执行工具并把结果回传同一会话，让模型自己决定下一步。
+      if ((assistantMessage.toolCalls?.length ?? 0) > 0) {
+        messages = [...messages, assistantMessage];
+        const remainingCalls = input.maxToolCalls - toolCallCount;
+        const toolMessages: ModelMessage[] = [];
 
-    // 没有正文也没有工具调用：按一次校验失败处理，给模型一次重新作答的机会。
-    if (!assistantMessage.content) {
+        for (const [index, toolCall] of (assistantMessage.toolCalls ?? []).entries()) {
+          const callIndex = toolCallCount + index + 1;
+          const query = toolQuerySummary(toolCall);
+          progress.report('tool.called', {
+            turn,
+            call_index: callIndex,
+            tool: toolCall.name,
+            ...(query === null ? {} : { query }),
+          });
+
+          let result: ToolExecutionResult;
+          if (index >= remainingCalls) {
+            result = {
+              ok: false,
+              code: TOOL_CALL_LIMIT_REACHED,
+              message: '本次任务已达到联网工具调用上限，请基于已有资料继续完成回答。',
+              data: {},
+            };
+          } else {
+            result = await input.toolGateway.execute(toolCall);
+            toolCallCount += 1;
+          }
+
+          const sourceCount = toolSourceCount(result);
+          progress.report('tool.completed', {
+            turn,
+            call_index: callIndex,
+            tool: toolCall.name,
+            ok: result.ok,
+            code: result.code,
+            ...(sourceCount === null ? {} : { source_count: sourceCount }),
+          });
+
+          toolMessages.push({
+            role: 'tool',
+            content: serializeToolResult(result),
+            toolCallId: toolCall.id,
+            name: toolCall.name,
+          });
+        }
+
+        messages = [...messages, ...toolMessages];
+        continue;
+      }
+
+      // 没有正文也没有工具调用：按一次校验失败处理，给模型一次重新作答的机会。
+      if (!assistantMessage.content) {
+        validationFailures += 1;
+        lastPaths = ['response.content_missing'];
+        progress.report('validation.failed', { turn, paths: lastPaths.join(',') });
+        progress.report('turn.self_correcting', { turn, next_turn: turn + 1 });
+        messages = [
+          ...messages,
+          { role: 'user', content: input.buildFeedback({ turn, paths: lastPaths }) },
+        ];
+        continue;
+      }
+
+      const parsed = input.parse(assistantMessage.content);
+      if (parsed.value !== null) {
+        return { value: parsed.value, toolCallCount, turns: turn, validationFailures };
+      }
+
       validationFailures += 1;
-      lastPaths = ['response.content_missing'];
+      lastPaths = parsed.paths.length > 0 ? parsed.paths : ['response.json'];
+      progress.report('validation.failed', { turn, paths: lastPaths.slice(0, 8).join(',') });
+      progress.report('turn.self_correcting', { turn, next_turn: turn + 1 });
       messages = [
         ...messages,
+        assistantMessage,
         { role: 'user', content: input.buildFeedback({ turn, paths: lastPaths }) },
       ];
-      continue;
     }
 
-    const parsed = input.parse(assistantMessage.content);
-    if (parsed.value !== null) {
-      return { value: parsed.value, toolCallCount, turns: turn, validationFailures };
-    }
-
-    validationFailures += 1;
-    lastPaths = parsed.paths.length > 0 ? parsed.paths : ['response.json'];
-    messages = [
-      ...messages,
-      assistantMessage,
-      { role: 'user', content: input.buildFeedback({ turn, paths: lastPaths }) },
-    ];
+    const finalPaths = lastPaths.slice(0, 8);
+    throw new ModelGatewayError(
+      input.exhaustedErrorCode,
+      input.exhaustedMessage + ' 校验路径: ' + finalPaths.join(', '),
+      false,
+      finalPaths,
+    );
+  } catch (error) {
+    progress.report('run.failed', {
+      code: error instanceof ModelGatewayError ? error.code : 'UNEXPECTED_ERROR',
+      retryable: error instanceof ModelGatewayError ? error.retryable : false,
+      validation_failures: validationFailures,
+      tool_call_count: toolCallCount,
+    });
+    throw error;
   }
-
-  const finalPaths = lastPaths.slice(0, 8);
-  throw new ModelGatewayError(
-    input.exhaustedErrorCode,
-    input.exhaustedMessage + ' 校验路径: ' + finalPaths.join(', '),
-    false,
-    finalPaths,
-  );
 }

@@ -12,6 +12,7 @@
 import { AlertCircle, BookOpenText, LoaderCircle, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { AgentRunProgress } from "@/modules/agent-run/presentation/components/agent-run-progress";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
 
@@ -181,6 +182,7 @@ export function CardContentGenerationAction({
             </div>
           </div>
           <div className="mt-5 h-px overflow-hidden bg-border"><div className="h-full w-2/5 animate-pulse bg-primary" /></div>
+          <AgentRunProgress key={agentRun.id} runId={agentRun.id} />
         </div>
       ) : (
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">

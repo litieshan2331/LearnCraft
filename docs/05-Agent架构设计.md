@@ -46,6 +46,7 @@ Web/BFF 在同一事务内完成请求校验、创建 `AgentRun` 和写入 Outbo
 4. 每个会产生任务或费用的写操作使用 `Idempotency-Key`；每节点只允许一份成功内容。
 5. Web 与 Worker 统一使用 Zod（浏览器边界、HTTP、队列消息与 LLM 结构化输出）；跨语言只共享 OpenAPI/JSON Schema，不共享 ORM Model。
 6. P0 数据库迁移仍以 Drizzle 为唯一入口；不启用 Alembic 与其竞争同一 PostgreSQL Schema 的迁移所有权。
+7. 实时进度是**临时通道**：Worker 只经 Redis Pub/Sub 发布步骤级、工具级事件与**模型思考原文**（2026-09-18 用户确认：仅 `thinking.delta` 流式增量与 `thinking.completed` 权威整段允许携带思考原文，用于生成过程中的前端呈现；前端在该轮整段到达时覆盖增量）。提示词、生成正文与工具返回内容一律不得下发；进度事件不落库、不写日志、不进浏览器存储，生成结束后即消失；订阅不可用时前端回退为状态轮询。
 
 ## 8. 实施前确认
 

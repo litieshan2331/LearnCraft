@@ -72,6 +72,11 @@ export interface ModelCompletionRequest {
   toolChoice?: 'auto' | 'required' | 'none';
   thinkingMode?: 'enabled';
   responseFormat?: 'text' | 'json_object';
+  /**
+   * 可选的思考增量回调：流式过程中按到达顺序回调 `delta.reasoning_content` 片段，
+   * 用于「边生成边展示思考过程」。回调失败会被忽略，不影响本次调用与聚合结果。
+   */
+  onReasoningDelta?: (text: string) => void;
 }
 
 export interface ModelCompletionResponse {
@@ -157,6 +162,7 @@ export class OpenAiCompatibleModelGateway {
 
     for (let attempt = 0; attempt <= this.requestMaxRetries; attempt += 1) {
       try {
+        const onReasoningDelta = request.onReasoningDelta;
         const response = await this.egressClient.postOpenAiCompatibleSse({
           ownerId: request.connection.ownerId,
           modelConnectionId: request.connection.connectionId,
@@ -165,6 +171,9 @@ export class OpenAiCompatibleModelGateway {
           apiKey: request.connection.apiKey,
           endpointSegments: ['chat', 'completions'],
           payload,
+          ...(onReasoningDelta === undefined
+            ? {}
+            : { onEvent: (event: unknown) => forwardReasoningDelta(event, onReasoningDelta) }),
         });
         return parseStreamCompletion(response.events);
       } catch (error) {
@@ -228,6 +237,22 @@ function toGatewayError(error: ModelEgressRequestError, hasTools: boolean): Mode
     );
   }
   return new ModelGatewayError(error.code, error.message, error.retryable);
+}
+
+/** 从单个 SSE 事件中取出思考增量并回调；结构与字段不符时静默跳过。 */
+function forwardReasoningDelta(event: unknown, onDelta: (text: string) => void): void {
+  if (!isRecord(event)) {
+    return;
+  }
+  const choices = event.choices;
+  if (!Array.isArray(choices) || choices.length === 0 || !isRecord(choices[0])) {
+    return;
+  }
+  const delta = choices[0].delta;
+  if (!isRecord(delta) || typeof delta.reasoning_content !== 'string' || delta.reasoning_content.length === 0) {
+    return;
+  }
+  onDelta(delta.reasoning_content);
 }
 
 /** 聚合 SSE 事件为完整响应；只处理 choices[0]，工具调用按 index 合并。 */

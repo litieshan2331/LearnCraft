@@ -30,6 +30,10 @@
 
 import type { ToolGatewayPort } from '../../application/services/tool-aware-generator.js';
 import { runReactAgentSession } from '../../application/services/tool-aware-generator.js';
+import {
+  createNoopAgentProgressReporter,
+  type AgentProgressReporter,
+} from '../../application/services/agent-progress.js';
 
 import type { AgentWorkflow } from '../../application/commands/execute-agent-run.js';
 import type { ModelCredentialDecryptor } from '../../infrastructure/llm/credential-decryptor.js';
@@ -86,6 +90,8 @@ export interface CardContentGenerationDeps {
   maxToolCalls: number;
   /** 本工作流的 ReAct 轮数上限（一次运行内允许的模型调用次数，含工具调用轮）。 */
   reactMaxTurns: number;
+  /** 可选的实时进度上报端口（生成过程中的步骤/工具事件，不落库、不含模型原文）。 */
+  progress?: AgentProgressReporter;
 }
 
 export interface CardContentGenerationResult {
@@ -107,7 +113,9 @@ export async function runCardContentGenerate(
     throw new ModelGatewayError('CARD_CONTENT_INPUT_INVALID', '节点内容生成输入不符合契约。', false);
   }
   const value = parsedInput.data;
+  const progress = deps.progress ?? createNoopAgentProgressReporter();
 
+  progress.report('run.preparing');
   const connectionEnvelope = await deps.internalClient.getDefaultModelConnection(input.runId);
   const apiKey = deps.decryptor.decrypt(connectionEnvelope.owner_id, connectionEnvelope.credential);
   const connection: ModelProviderConnection = {
@@ -141,10 +149,12 @@ export async function runCardContentGenerate(
     buildFeedback: (context) => buildValidationFeedback(context),
     exhaustedErrorCode: 'CARD_CONTENT_OUTPUT_INVALID',
     exhaustedMessage: '节点知识内容经过 ReAct 自纠后仍不符合内容合同。',
+    onProgress: progress,
   });
 
   const document = outcome.value;
   const planNodeId = String(value.plan_node.id);
+  progress.report('result.persisting');
   const persisted = await deps.internalClient.persistCardContent(input.runId, {
     ...document,
     plan_node_id: planNodeId,
@@ -153,6 +163,10 @@ export async function runCardContentGenerate(
       tool_call_count: outcome.toolCallCount,
       logical_session_key: value.logical_session_key,
     },
+  });
+
+  progress.report('run.completed', {
+    tool_call_count: outcome.toolCallCount,
   });
 
   return {
@@ -170,9 +184,11 @@ export async function runCardContentGenerate(
  * 把节点内容工作流适配为注册表可用的 AgentWorkflow：只负责把 AgentRun 执行状态转换为工作流入参，
  * 并把结果原样交给命令层（命令层负责把 usage 写入 token 列）。
  */
-export type CardContentGenerationWorkflowDeps = Omit<CardContentGenerationDeps, 'toolGateway'> & {
+export type CardContentGenerationWorkflowDeps = Omit<CardContentGenerationDeps, 'toolGateway' | 'progress'> & {
   /** 按运行所属账户构造工具网关：每日配额按账户计数，且 Key 缺失时返回受控错误。 */
   createToolGateway: (ownerId: string) => ToolGatewayPort;
+  /** 为一次运行创建进度上报器；缺省时使用空实现（不启用实时进度）。 */
+  createProgressReporter?: (runId: string) => AgentProgressReporter;
 };
 
 export function createCardContentGenerateWorkflow(deps: CardContentGenerationWorkflowDeps): AgentWorkflow {
@@ -180,7 +196,13 @@ export function createCardContentGenerateWorkflow(deps: CardContentGenerationWor
     run: async (executionState) => {
       const result = await runCardContentGenerate(
         { runId: executionState.runId, inputSummaryJson: executionState.inputSummaryJson },
-        { ...deps, toolGateway: deps.createToolGateway(executionState.ownerId) },
+        {
+          ...deps,
+          toolGateway: deps.createToolGateway(executionState.ownerId),
+          ...(deps.createProgressReporter === undefined
+            ? {}
+            : { progress: deps.createProgressReporter(executionState.runId) }),
+        },
       );
       return { outputSummary: result.outputSummary, usage: result.usage };
     },

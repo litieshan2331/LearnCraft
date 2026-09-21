@@ -43,6 +43,10 @@ class FakeEgress implements ModelEgressPort {
     if (result instanceof Error) {
       throw result;
     }
+    // 模拟真实出网客户端的逐事件回调（仅当调用方传了 onEvent）。
+    for (const item of result) {
+      input.onEvent?.(item);
+    }
     return { statusCode: 200, events: result };
   }
 }
@@ -50,6 +54,40 @@ class FakeEgress implements ModelEgressPort {
 function event(delta: Record<string, unknown>, extra: Record<string, unknown> = {}): Record<string, unknown> {
   return { choices: [{ index: 0, delta }], ...extra };
 }
+
+describe('思考增量转发', () => {
+  it('按到达顺序回调 reasoning_content，且聚合结果不受影响', async () => {
+    const gateway = new OpenAiCompatibleModelGateway(
+      new FakeEgress(() => [
+        event({ reasoning_content: '第一步：' }),
+        event({ reasoning_content: '第二步' }),
+        event({ content: '{"ok":true}' }),
+      ]),
+      0,
+    );
+    const chunks: string[] = [];
+
+    const response = await gateway.complete(request({ onReasoningDelta: (text) => chunks.push(text) }));
+
+    expect(chunks).toEqual(['第一步：', '第二步']);
+    expect(response.message.reasoningContent).toBe('第一步：第二步');
+  });
+
+  it('没有 reasoning_content 时不回调，且回调抛错不影响本次调用', async () => {
+    const gateway = new OpenAiCompatibleModelGateway(
+      new FakeEgress(() => [event({ content: '{"ok":true}' })]),
+      0,
+    );
+    let called = 0;
+
+    const response = await gateway.complete(
+      request({ onReasoningDelta: () => { called += 1; } }),
+    );
+
+    expect(called).toBe(0);
+    expect(response.message.content).toBe('{"ok":true}');
+  });
+});
 
 describe('载荷构造', () => {
   const gateway = new OpenAiCompatibleModelGateway(new FakeEgress(() => []), 0);

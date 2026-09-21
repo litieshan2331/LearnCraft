@@ -7,6 +7,10 @@
 - `resp-client.ts`：`RespRedisClient` —— 按 `redis://` 连接串（支持密码、用户名与 db 号）建立连接，
   顺序执行命令并解析简单字符串、错误、整数与批量字符串四种回复；
   `parseRedisUrl` 解析连接串，`RespRedisError` 表示连接、超时或协议错误。
+- `agent-progress-publisher.ts`：`RedisAgentProgressPublisher` —— 把实时进度事件
+  `PUBLISH` 到 `learncraft:agent-progress:{runId}`（B2 临时通道，不落库）；
+  `agentProgressChannel` 给出频道命名，web 侧订阅必须使用同一规则。
+  发布失败只告警，绝不影响 AgentRun。
 
 约定：
 

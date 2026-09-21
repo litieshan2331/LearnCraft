@@ -21,6 +21,7 @@ import {
   type PosttestAssessmentAttemptRecord,
   type PosttestAssessmentSummary,
 } from "../api/assessment-client";
+import { AgentRunProgress } from "@/modules/agent-run/presentation/components/agent-run-progress";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
 
@@ -163,6 +164,7 @@ export function PosttestGenerationAction({
             <p className="mt-1 text-sm text-muted-foreground">Node Tutor 正在基于本章知识内容和教学记忆组织题目。</p>
           </div>
         </div>
+        <AgentRunProgress key={agentRun.id} runId={agentRun.id} />
       </section>
     );
   }

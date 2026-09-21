@@ -32,6 +32,7 @@ import {
   getLearningGoal,
   type LearningGoal,
 } from "@/modules/profile/presentation/api/profile-client";
+import { AgentRunProgress } from "@/modules/agent-run/presentation/components/agent-run-progress";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
 import { Field, FieldDescription, FieldLabel } from "@/shared/ui/primitives/field";
@@ -312,6 +313,7 @@ function TaskProgress({
       <div className="mt-5 h-px overflow-hidden bg-border">
         <div className="h-full w-2/5 animate-pulse bg-primary" />
       </div>
+      <AgentRunProgress key={agentRun.id} runId={agentRun.id} />
       <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-5 text-muted-foreground">页面会自动刷新任务状态，生成完成后将打开题集。</p>
         <Button className="rounded-xl" disabled={isCancelling} onClick={onCancel} type="button" variant="outline">
