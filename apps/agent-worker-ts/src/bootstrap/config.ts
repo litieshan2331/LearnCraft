@@ -159,6 +159,27 @@ export function readAgentToolMaxCalls(): number {
   return readPositiveInteger('AGENT_TOOL_MAX_CALLS', 3);
 }
 
+/** 各工作流的 ReAct 轮数上限：一次运行内允许的模型调用次数（含只产生工具调用的轮次）。 */
+export interface AgentReactTurnsConfig {
+  assessmentGenerate: number;
+  posttestGenerate: number;
+  planGenerate: number;
+  cardContentGenerate: number;
+}
+
+/**
+ * 读取四个工作流各自的 ReAct 轮数上限；四个工作流的复杂度差异较大，因此分别注入，
+ * 由 `AGENT_REACT_MAX_TURNS_*` 环境变量覆盖，默认值见下（plan 需要更多轮次完成 6-12 章路线）。
+ */
+export function readAgentReactMaxTurns(): AgentReactTurnsConfig {
+  return {
+    assessmentGenerate: readPositiveInteger('AGENT_REACT_MAX_TURNS_ASSESSMENT', 5),
+    posttestGenerate: readPositiveInteger('AGENT_REACT_MAX_TURNS_POSTTEST', 5),
+    planGenerate: readPositiveInteger('AGENT_REACT_MAX_TURNS_PLAN', 10),
+    cardContentGenerate: readPositiveInteger('AGENT_REACT_MAX_TURNS_CARD_CONTENT', 5),
+  };
+}
+
 /** 读取正整数环境变量；缺失或非法时回退默认值。 */
 function readPositiveInteger(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();

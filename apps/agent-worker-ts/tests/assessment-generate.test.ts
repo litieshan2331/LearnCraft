@@ -1,9 +1,9 @@
 /**
  * assessment_generate 工作流的等价性测试（使用假内部接口与假网关，不发真实请求）。
  *
- * 重点固化与 Python（question_set_generation.py / assessment_generate.py）逐项对齐的行为：
- * 输入默认值与题量校验、修复请求的消息顺序、任何网关错误都继续下一阶段、
- * 全部失败时的错误取舍、输出摘要键集合，以及回写载荷中的 plan_id 与元数据。
+ * 重点固化改造后的单会话 ReAct 行为与保持不变的对外契约：
+ * 输入默认值与题量校验、校验失败在同一会话内自纠、联网工具自由调用、
+ * 轮数耗尽时的错误码、输出摘要键集合，以及回写载荷中的 plan_id 与元数据取值。
  */
 import { encryptCredential } from '@learncraft/security-primitives';
 import { describe, expect, it } from 'vitest';
@@ -16,7 +16,7 @@ import {
   runAssessmentGenerate,
   type AssessmentInternalPort,
   type AssessmentModelGatewayPort,
-} from '../src/workflows/assessment-generate.js';
+} from '../src/workflows/assessment-generate/index.js';
 
 const KEY_BASE64 = Buffer.alloc(32, 7).toString('base64');
 const OWNER_ID = '11111111-2222-4333-8444-555555555555';
@@ -123,13 +123,14 @@ class FakeGateway implements AssessmentModelGatewayPort {
   }
 }
 
-function deps(gateway: FakeGateway, internal = new FakeInternal()) {
+function deps(gateway: FakeGateway, internal = new FakeInternal(), reactMaxTurns = 5) {
   return {
     deps: {
       internalClient: internal,
       decryptor: new ModelCredentialDecryptor(KEY_BASE64, 'local-v1'),
       gateway,
       ...fakeToolDeps(),
+      reactMaxTurns,
     },
     internal,
   };
@@ -158,8 +159,8 @@ describe('输入契约', () => {
   });
 });
 
-describe('阶段控制流', () => {
-  it('首轮成功：输出摘要恰好 6 键，回写载荷含 plan_id 与元数据', async () => {
+describe('单会话 ReAct 行为', () => {
+  it('首轮成功：只调用一次模型，输出摘要恰好 6 键，回写载荷含 plan_id 与元数据', async () => {
     const gateway = new FakeGateway([{ content: questionSetJson() }]);
     const { deps: d, internal } = deps(gateway);
 
@@ -176,6 +177,9 @@ describe('阶段控制流', () => {
     expect(result.outputSummary.recovery_stage).toBe('initial');
     expect(result.usage).toEqual({ inputTokens: 11, outputTokens: 22 });
     expect(gateway.requests).toHaveLength(1);
+    // 单会话：system 人格 + user 任务，没有 response_format 约束。
+    expect(gateway.requests[0]?.messages).toHaveLength(2);
+    expect(gateway.requests[0]?.responseFormat).toBeUndefined();
 
     const payload = internal.persisted[0];
     expect(payload?.plan_id).toBeNull();
@@ -189,90 +193,64 @@ describe('阶段控制流', () => {
     expect((payload?.questions as unknown[]).length).toBe(10);
   });
 
-  it('首轮结构失败后，修复请求依次追加上一轮原文与修复指令', async () => {
+  it('校验失败时在同一会话追加字段路径反馈后自纠，消息列表不重建', async () => {
     const firstOutput = '不是 JSON';
     const gateway = new FakeGateway([{ content: firstOutput }, { content: questionSetJson() }]);
-    const { deps: d } = deps(gateway);
+    const { deps: d, internal } = deps(gateway);
 
     const result = await runAssessmentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
 
     expect(result.outputSummary.recovery_stage).toBe('repair');
-    const repairMessages = gateway.requests[1]?.messages ?? [];
-    expect(repairMessages).toHaveLength(4);
-    expect(repairMessages[2]).toMatchObject({ role: 'assistant', content: firstOutput });
-    expect(repairMessages[3]?.role).toBe('system');
-    expect(String(repairMessages[3]?.content)).toContain('请修复题集 JSON');
+    const messages = gateway.requests[1]?.messages ?? [];
+    expect(messages).toHaveLength(4);
+    // 前两条消息与首轮完全一致：没有重建消息列表。
+    expect(messages[0]).toEqual(gateway.requests[0]?.messages[0]);
+    expect(messages[1]).toEqual(gateway.requests[0]?.messages[1]);
+    expect(messages[2]).toMatchObject({ role: 'assistant', content: firstOutput });
+    expect(messages[3]?.role).toBe('user');
+    expect(String(messages[3]?.content)).toContain('校验失败的字段路径：response.json');
+    expect(internal.persisted[0]?.generation_metadata).toMatchObject({
+      tool_call_count: 0,
+      recovery_stage: 'repair',
+    });
   });
 
-  it('跨阶段的 token 用量按真实值累加（与 Python 恒写 0 的差异）', async () => {
+  it('跨轮次的 token 用量按真实值累加（与 Python 恒写 0 的差异）', async () => {
     const gateway = new FakeGateway([{ content: '不是 JSON' }, { content: questionSetJson() }]);
     const { deps: d } = deps(gateway);
 
     const result = await runAssessmentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
 
-    // 假网关每次返回 11/22，两个阶段共 22/44。
+    // 假网关每次返回 11/22，两轮共 22/44。
     expect(result.usage).toEqual({ inputTokens: 22, outputTokens: 44 });
     // 摘要仍是 Python 的 6 键，用量不污染 output_summary_json。
     expect(Object.keys(result.outputSummary)).not.toContain('input_tokens');
   });
 
-  it('非结构类网关错误同样继续进入修复阶段', async () => {
+  it('网关错误直接上抛，不再由工作流吞掉（交由任务级重试）', async () => {
     const gateway = new FakeGateway([
       { error: new ModelGatewayError('MODEL_PROVIDER_HTTP_500', 'provider 内部错误', true) },
-      { content: questionSetJson() },
     ]);
     const { deps: d } = deps(gateway);
 
-    const result = await runAssessmentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
-
-    expect(gateway.requests).toHaveLength(2);
-    expect(result.outputSummary.recovery_stage).toBe('repair');
+    await expect(
+      runAssessmentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
+    ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_HTTP_500', retryable: true });
+    expect(gateway.requests).toHaveLength(1);
   });
 
-  it('三个阶段都结构失败时汇总校验路径抛出 MODEL_STRUCTURED_OUTPUT_INVALID', async () => {
+  it('轮数耗尽（reactMaxTurns）时抛 MODEL_STRUCTURED_OUTPUT_INVALID 并附带校验路径', async () => {
     const gateway = new FakeGateway([{ content: '{}' }, { content: '{}' }, { content: '{}' }]);
-    const { deps: d } = deps(gateway);
+    const { deps: d } = deps(gateway, new FakeInternal(), 3);
 
     await expect(
       runAssessmentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
     ).rejects.toMatchObject({ code: 'MODEL_STRUCTURED_OUTPUT_INVALID', retryable: false });
+    // 轮数上限即模型调用次数上限。
+    expect(gateway.requests).toHaveLength(3);
   });
 
-  it('最后一个阶段是非结构错误时原样上抛该错误', async () => {
-    const gateway = new FakeGateway([
-      { content: '{}' },
-      { error: new ModelGatewayError('MODEL_PROVIDER_HTTP_429', '限流', true) },
-      { error: new ModelGatewayError('MODEL_PROVIDER_HTTP_429', '限流', true) },
-    ]);
-    const { deps: d } = deps(gateway);
-
-    await expect(
-      runAssessmentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
-    ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_HTTP_429', retryable: true });
-  });
-
-  it('首轮与修复都失败后，第三阶段重新开放 Tavily 并写入真实 tool_call_count', async () => {
-    const usagePattern = questionSetJson();
-    const gateway = new FakeGateway([{ content: '{}' }, { content: '{}' }, { content: usagePattern }]);
-    const { deps: d, internal } = deps(gateway);
-
-    const result = await runAssessmentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
-
-    expect(result.outputSummary.recovery_stage).toBe('tavily_recovery');
-    // 与 Python 的 repair_with_tavily=False / final_with_tavily=True 一致：修复阶段不开放工具。
-    expect(gateway.requests[0]?.tools?.map((tool) => tool.name)).toEqual(['tavily_search']);
-    expect(gateway.requests[1]?.tools).toBeUndefined();
-    expect(gateway.requests[2]?.tools?.map((tool) => tool.name)).toEqual(['tavily_search']);
-    const finalMessages = gateway.requests[2]?.messages ?? [];
-    expect(String(finalMessages[3]?.content)).toContain('请执行题集最终恢复');
-    expect(internal.persisted[0]?.generation_metadata).toMatchObject({
-      tool_call_count: 0,
-      search_extract: 'not_used',
-      recovery_stage: 'tavily_recovery',
-    });
-  });
-
-  it('首轮请求工具时执行工具循环，工具结果以 tool 消息回传后继续生成', async () => {
+  it('模型自主调用 Tavily：工具结果以 tool 消息回传，真实 tool_call_count 写入摘要与元数据', async () => {
     const gateway = new FakeGateway([
       { content: null, toolCalls: [{ id: 'c1', name: 'tavily_search', argumentsJson: '{"query":"TypeScript 5 新特性"}' }] },
       { content: questionSetJson() },
@@ -289,11 +267,23 @@ describe('阶段控制流', () => {
     expect(toolMessage?.name).toBe('tavily_search');
     expect(String(toolMessage?.content)).toContain('TAVILY_SEARCH_EXTRACT_OK');
 
-    // 工具调用数写入摘要与元数据：search_extract 由 0/非 0 决定。
     expect(result.outputSummary.tool_call_count).toBe(1);
+    expect(result.outputSummary.recovery_stage).toBe('tavily_recovery');
     expect(internal.persisted[0]?.generation_metadata).toMatchObject({
       tool_call_count: 1,
       search_extract: 'tavily_search_then_extract',
+      recovery_stage: 'tavily_recovery',
     });
+  });
+
+  it('题量与请求不一致时判为校验失败并进入自纠（questions 路径）', async () => {
+    const gateway = new FakeGateway([{ content: questionSetJson(9) }, { content: questionSetJson(10) }]);
+    const { deps: d } = deps(gateway);
+
+    const result = await runAssessmentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
+
+    expect(result.outputSummary.question_count).toBe(10);
+    const messages = gateway.requests[1]?.messages ?? [];
+    expect(String(messages[3]?.content)).toContain('questions');
   });
 });

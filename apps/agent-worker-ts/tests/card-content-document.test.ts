@@ -11,7 +11,7 @@ import {
   CardContentParseError,
   normalizeCardContent,
   parseCardContentDocument,
-} from '../src/workflows/card-content-document.js';
+} from '../src/workflows/card-content-generate/schema/index.js';
 
 function documentRaw(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {

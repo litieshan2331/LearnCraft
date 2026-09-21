@@ -15,6 +15,7 @@ import { AgentWorkflowRegistry } from '../application/services/agent-workflow-re
 import {
   formatRedisConnection,
   readAgentQueueConfig,
+  readAgentReactMaxTurns,
   readAgentToolMaxCalls,
   readCoreInternalClientOptions,
   readModelEgressAuditRetentionDays,
@@ -35,10 +36,10 @@ import { createAgentRunWorker } from '../infrastructure/queue/bullmq-agent-queue
 import { createReadinessChecker, startHealthServer } from '../interfaces/http/health-server.js';
 import { createAgentRunProcessor } from '../interfaces/queue/agent-run-processor.js';
 import { RespRedisClient } from '../infrastructure/redis/resp-client.js';
-import { createAssessmentGenerateWorkflow } from '../workflows/assessment-generate.js';
-import { createCardContentGenerateWorkflow } from '../workflows/card-content-generate.js';
-import { createPlanGenerateWorkflow } from '../workflows/plan-generate.js';
-import { createPosttestGenerateWorkflow } from '../workflows/posttest-generate.js';
+import { createAssessmentGenerateWorkflow } from '../workflows/assessment-generate/index.js';
+import { createCardContentGenerateWorkflow } from '../workflows/card-content-generate/index.js';
+import { createPlanGenerateWorkflow } from '../workflows/plan-generate/index.js';
+import { createPosttestGenerateWorkflow } from '../workflows/posttest-generate/index.js';
 
 function requireDatabaseUrl(): string {
   const url = process.env.DATABASE_URL?.trim();
@@ -69,6 +70,8 @@ async function main(): Promise<void> {
     decrement: async () => undefined,
   };
   const maxToolCalls = readAgentToolMaxCalls();
+  // ReAct 轮数按工作流分别注入（一次运行内允许的模型调用次数，含工具调用轮）。
+  const reactMaxTurns = readAgentReactMaxTurns();
   const createToolGateway = (ownerId: string) =>
     new TavilyToolGateway({
       settings: {
@@ -86,10 +89,22 @@ async function main(): Promise<void> {
 
   const workflows = new AgentWorkflowRegistry();
   const workflowDeps = { internalClient, decryptor, gateway, createToolGateway, maxToolCalls };
-  workflows.register('assessment_generate', createAssessmentGenerateWorkflow(workflowDeps));
-  workflows.register('posttest_generate', createPosttestGenerateWorkflow(workflowDeps));
-  workflows.register('plan_generate', createPlanGenerateWorkflow(workflowDeps));
-  workflows.register('card_content_generate', createCardContentGenerateWorkflow(workflowDeps));
+  workflows.register('assessment_generate', createAssessmentGenerateWorkflow({
+    ...workflowDeps,
+    reactMaxTurns: reactMaxTurns.assessmentGenerate,
+  }));
+  workflows.register('posttest_generate', createPosttestGenerateWorkflow({
+    ...workflowDeps,
+    reactMaxTurns: reactMaxTurns.posttestGenerate,
+  }));
+  workflows.register('plan_generate', createPlanGenerateWorkflow({
+    ...workflowDeps,
+    reactMaxTurns: reactMaxTurns.planGenerate,
+  }));
+  workflows.register('card_content_generate', createCardContentGenerateWorkflow({
+    ...workflowDeps,
+    reactMaxTurns: reactMaxTurns.cardContentGenerate,
+  }));
 
   const worker = createAgentRunWorker(
     queueConfig,
@@ -110,6 +125,7 @@ async function main(): Promise<void> {
       tavily_configured: tavilySettings.apiKey !== null,
       tavily_quota_configured: redisQuota !== null,
       tool_max_calls: maxToolCalls,
+      react_max_turns: reactMaxTurns,
     }),
     readiness: createReadinessChecker({
       database: async () => {
@@ -153,6 +169,7 @@ async function main(): Promise<void> {
       '，联网工具=' + (tavilySettings.apiKey === null ? '未配置' : '已配置') +
       '，配额 Redis=' + (redisQuota === null ? '未配置' : '已配置') +
       '，工具上限=' + String(maxToolCalls) +
+      '，ReAct 轮数=' + JSON.stringify(reactMaxTurns) +
       '，健康端点=:' + String(health.port),
   );
 }

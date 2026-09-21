@@ -1,16 +1,16 @@
 /**
  * card_content_generate 工作流的等价性测试（使用假内部接口与假网关，不发真实请求）。
  *
- * 重点固化与 Python（card_content_generate.py）逐项对齐的行为：输入契约（agent_role、session key、
- * plan_node.id）、首轮宽松输出的规范化、一次无工具修复的消息顺序与文案、修复失败后进入无资料兜底、
- * 4 键输出摘要与 3 键元数据，以及跨阶段真实 token 用量的累加。
+ * 重点固化改造后的单会话 ReAct 行为与保持不变的对外契约：输入契约（agent_role、session key、
+ * plan_node.id）、首轮宽松输出的规范化、自纠反馈携带字段路径、4 键输出摘要与 3 键元数据，
+ * 以及跨轮次真实 token 用量的累加。
  */
 import { encryptCredential } from '@learncraft/security-primitives';
 import { describe, expect, it } from 'vitest';
 
 import { ModelGatewayError, type ModelCompletionRequest, type ModelCompletionResponse } from '../src/infrastructure/llm/model-gateway.js';
 import { ModelCredentialDecryptor } from '../src/infrastructure/llm/credential-decryptor.js';
-import { FakeToolGateway, fakeToolDeps } from './helpers/fake-tool-gateway.js';
+import { fakeToolDeps } from './helpers/fake-tool-gateway.js';
 import type {
   DefaultModelConnectionEnvelope,
   PersistedCardContentEnvelope,
@@ -19,7 +19,7 @@ import {
   runCardContentGenerate,
   type CardContentInternalPort,
   type CardContentModelGatewayPort,
-} from '../src/workflows/card-content-generate.js';
+} from '../src/workflows/card-content-generate/index.js';
 
 const KEY_BASE64 = Buffer.alloc(32, 7).toString('base64');
 const OWNER_ID = '11111111-2222-4333-8444-555555555555';
@@ -56,6 +56,35 @@ const LOOSE_DOCUMENT_JSON = JSON.stringify({
   common_mistakes: [{ title: '误区', cause: '原因', fix: '修复' }],
   references: [{ url: 'https://example.com', title: '资料' }],
   teaching_memory: { concepts: ['概念'], mistakes: ['错误'], targets: ['目标'] },
+});
+
+/** 结构合同可解析但内层字段非法的输出（pitfalls_debug 字段名错误），用于验证字段路径回灌。 */
+const INVALID_PITFALLS_JSON = JSON.stringify({
+  schema_version: 'card_content.v1',
+  foundation: '基础内容。',
+  worked_example: {
+    explanation: '说明',
+    code: 'print(1)',
+    call_sequence: ['准备'],
+    expected_output: '1',
+  },
+  pitfalls_debug: [{ title: '误区', reason: '原因写错字段名', fix: '修复' }],
+  source_refs: [],
+  teaching_memory: { key_concepts: ['概念'], common_mistakes: [], assessment_targets: ['目标'] },
+});
+
+const VALID_DOCUMENT_JSON = JSON.stringify({
+  schema_version: 'card_content.v1',
+  foundation: '基础内容。',
+  worked_example: {
+    explanation: '说明',
+    code: 'print(1)',
+    call_sequence: ['准备'],
+    expected_output: '1',
+  },
+  pitfalls_debug: [{ title: '误区', cause: '原因', fix: '修复' }],
+  source_refs: [],
+  teaching_memory: { key_concepts: ['概念'], common_mistakes: [], assessment_targets: ['目标'] },
 });
 
 const INPUT_SUMMARY = {
@@ -120,15 +149,18 @@ class FakeGateway implements CardContentModelGatewayPort {
   }
 }
 
-function deps(gateway: FakeGateway, internal = new FakeInternal()) {
+function deps(gateway: FakeGateway, internal = new FakeInternal(), reactMaxTurns = 5) {
+  const tools = fakeToolDeps();
   return {
     deps: {
       internalClient: internal,
       decryptor: new ModelCredentialDecryptor(KEY_BASE64, 'local-v1'),
       gateway,
-      ...fakeToolDeps(),
+      ...tools,
+      reactMaxTurns,
     },
     internal,
+    toolGateway: tools.toolGateway,
   };
 }
 
@@ -166,7 +198,7 @@ describe('输入契约', () => {
     const systemContent = String(gateway.requests[0]?.messages[0]?.content);
     const userContent = String(gateway.requests[0]?.messages[1]?.content);
     expect(systemContent).toContain('你是 LearnCraft 的 Node Tutor。');
-    expect(systemContent).toContain('可自主调用 tavily_search');
+    expect(systemContent).toContain('可以调用 tavily_search');
     expect(userContent).toContain('学习主题：Python 函数');
     expect(userContent).toContain('学习者水平：beginner');
     expect(userContent).toContain('章节标题：函数与参数');
@@ -174,7 +206,7 @@ describe('输入契约', () => {
   });
 });
 
-describe('解析与修复', () => {
+describe('单会话 ReAct 行为', () => {
   it('首轮宽松输出被规范化后落库：摘要 4 键、元数据 3 键', async () => {
     const gateway = new FakeGateway([{ content: LOOSE_DOCUMENT_JSON }]);
     const { deps: d, internal } = deps(gateway);
@@ -187,131 +219,94 @@ describe('解析与修复', () => {
       'plan_node_id',
       'tool_call_count',
     ]);
-    expect(result.outputSummary).toMatchObject({
-      card_content_id: CARD_CONTENT_ID,
-      plan_node_id: PLAN_NODE_ID,
-      tool_call_count: 0,
-      model_id: 'deepseek-flash',
-    });
     expect(result.usage).toEqual({ inputTokens: 11, outputTokens: 22 });
     expect(gateway.requests).toHaveLength(1);
 
     const payload = internal.persisted[0];
+    expect(Object.keys(payload?.generation_metadata as Record<string, unknown>).sort()).toEqual([
+      'logical_session_key',
+      'model_id',
+      'tool_call_count',
+    ]);
     expect(payload?.plan_node_id).toBe(PLAN_NODE_ID);
     expect(payload?.schema_version).toBe('card_content.v1');
-    expect(payload?.foundation).toBe('由旧字段构成的基础内容。');
-    expect(payload?.teaching_memory).toEqual({
-      key_concepts: ['概念'],
-      common_mistakes: ['错误'],
-      assessment_targets: ['目标'],
-    });
-    expect(payload?.generation_metadata).toEqual({
-      model_id: 'deepseek-flash',
-      tool_call_count: 0,
-      logical_session_key: 'node:' + PLAN_NODE_ID,
-    });
   });
 
-  it('首轮不可解析时执行一次无工具修复，消息顺序与文案与 Python 一致', async () => {
-    const firstOutput = '不是 JSON';
-    const gateway = new FakeGateway([{ content: firstOutput }, { content: LOOSE_DOCUMENT_JSON }]);
+  it('首轮不可解析时在同一会话追加反馈后自纠，消息列表不重建', async () => {
+    const gateway = new FakeGateway([{ content: INVALID_PITFALLS_JSON }, { content: VALID_DOCUMENT_JSON }]);
+    const { deps: d } = deps(gateway);
+
+    await runCardContentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
+
+    expect(gateway.requests).toHaveLength(2);
+    const messages = gateway.requests[1]?.messages ?? [];
+    expect(messages).toHaveLength(4);
+    expect(messages[0]).toEqual(gateway.requests[0]?.messages[0]);
+    expect(messages[1]).toEqual(gateway.requests[0]?.messages[1]);
+    expect(messages[2]).toMatchObject({ role: 'assistant', content: INVALID_PITFALLS_JSON });
+    expect(messages[3]?.role).toBe('user');
+    const feedback = String(messages[3]?.content);
+    // pitfalls_debug 的字段名错误会被规范化器指出具体路径。
+    expect(feedback).toContain('pitfalls_debug');
+  });
+
+  it('模型没有正文时按一次校验失败处理，并给出 response.content_missing 路径', async () => {
+    const gateway = new FakeGateway([{ content: null }, { content: VALID_DOCUMENT_JSON }]);
+    const { deps: d } = deps(gateway);
+
+    await runCardContentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
+
+    const messages = gateway.requests[1]?.messages ?? [];
+    expect(String(messages[messages.length - 1]?.content)).toContain('response.content_missing');
+  });
+
+  it('模型自主调用 Tavily：工具全程开放，真实 tool_call_count 写入元数据', async () => {
+    const gateway = new FakeGateway([
+      { content: null, toolCalls: [{ id: 'c1', name: 'tavily_search', argumentsJson: '{"query":"Python 装饰器"}' }] },
+      { content: VALID_DOCUMENT_JSON },
+    ]);
+    const { deps: d, internal, toolGateway } = deps(gateway);
+
+    const result = await runCardContentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
+
+    expect(toolGateway.calls).toHaveLength(1);
+    for (const request of gateway.requests) {
+      expect(request.tools?.map((tool) => tool.name)).toEqual(['tavily_search']);
+    }
+    expect(result.outputSummary.tool_call_count).toBe(1);
+    expect(internal.persisted[0]?.generation_metadata).toMatchObject({ tool_call_count: 1 });
+  });
+
+  it('跨轮次的 token 用量按真实值累加', async () => {
+    const gateway = new FakeGateway([{ content: '不是 JSON' }, { content: VALID_DOCUMENT_JSON }]);
     const { deps: d } = deps(gateway);
 
     const result = await runCardContentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
 
     expect(result.usage).toEqual({ inputTokens: 22, outputTokens: 44 });
-    const repairMessages = gateway.requests[1]?.messages ?? [];
-    expect(repairMessages).toHaveLength(4);
-    expect(repairMessages[2]).toMatchObject({ role: 'assistant', content: firstOutput });
-    expect(repairMessages[3]?.role).toBe('system');
-    expect(String(repairMessages[3]?.content)).toContain('上一轮节点内容不符合 card_content.v1');
   });
 
-  it('首轮无正文时抛 MODEL_PROVIDER_RESPONSE_INVALID，不进入修复', async () => {
-    const gateway = new FakeGateway([{ content: null }]);
-    const { deps: d } = deps(gateway);
+  it('轮数耗尽时抛 CARD_CONTENT_OUTPUT_INVALID 并附带校验路径', async () => {
+    const gateway = new FakeGateway([
+      { content: INVALID_PITFALLS_JSON },
+      { content: INVALID_PITFALLS_JSON },
+    ]);
+    const { deps: d } = deps(gateway, new FakeInternal(), 2);
 
     await expect(
       runCardContentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
-    ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_RESPONSE_INVALID', retryable: false });
-    expect(gateway.requests).toHaveLength(1);
-  });
-});
-
-describe('兜底重建', () => {
-  it('修复失败后强制联网兜底，并把 Tavily 资料摘要写进提示词', async () => {
-    const gateway = new FakeGateway([
-      { content: '不是 JSON' },
-      { content: '仍不是 JSON' },
-      { content: LOOSE_DOCUMENT_JSON },
-    ]);
-    const { deps: d, internal } = deps(gateway);
-
-    const result = await runCardContentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
-
-    expect(result.outputSummary.card_content_id).toBe(CARD_CONTENT_ID);
-    expect(gateway.requests).toHaveLength(3);
-
-    const recoverySystem = String(gateway.requests[2]?.messages[0]?.content);
-    const recoveryUser = String(gateway.requests[2]?.messages[1]?.content);
-    expect(recoverySystem).toContain('你正在执行节点知识内容的最终联网兜底。');
-    expect(recoveryUser).toContain('节点：函数与参数');
-    expect(recoveryUser).toContain('Tavily 资料摘要：');
-    expect(internal.persisted).toHaveLength(1);
+    ).rejects.toMatchObject({ code: 'CARD_CONTENT_OUTPUT_INVALID', retryable: false });
+    expect(gateway.requests).toHaveLength(2);
   });
 
-  it('联网兜底结果仍不符合合同时抛 CARD_CONTENT_TAVILY_RECOVERY_INVALID', async () => {
+  it('网关错误直接上抛（交由任务级重试）', async () => {
     const gateway = new FakeGateway([
-      { content: '不是 JSON' },
-      { content: '仍不是 JSON' },
-      { content: '{"pitfalls_debug": []}' },
+      { error: new ModelGatewayError('MODEL_PROVIDER_HTTP_500', 'provider 内部错误', true) },
     ]);
     const { deps: d } = deps(gateway);
 
     await expect(
       runCardContentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
-    ).rejects.toMatchObject({
-      code: 'CARD_CONTENT_TAVILY_RECOVERY_INVALID',
-      message: 'Tavily 兜底生成的节点内容仍不符合内容合同。',
-      retryable: false,
-    });
-  });
-
-  it('联网工具失败时退回无资料恢复，并把工具错误类别回填到提示词', async () => {
-    const gateway = new FakeGateway([
-      { content: '不是 JSON' },
-      { content: '仍不是 JSON' },
-      { content: LOOSE_DOCUMENT_JSON },
-    ]);
-    const { deps: d } = deps(gateway);
-    const failing = new FakeToolGateway({
-      ok: false,
-      code: 'TAVILY_DAILY_QUOTA_EXCEEDED',
-      message: '当前账户已达到 Tavily 今日工具调用额度。',
-      data: {},
-    });
-
-    const result = await runCardContentGenerate(
-      { runId: 'run-1', inputSummaryJson: INPUT_SUMMARY },
-      { ...d, toolGateway: failing },
-    );
-
-    expect(result.outputSummary.card_content_id).toBe(CARD_CONTENT_ID);
-    expect(failing.calls).toHaveLength(1);
-    const recoveryUser = String(gateway.requests[2]?.messages[1]?.content);
-    expect(recoveryUser).toContain('联网工具错误类别：TAVILY_DAILY_QUOTA_EXCEEDED');
-  });
-
-  it('兜底阶段模型没有正文时同样映射为恢复失败', async () => {
-    const gateway = new FakeGateway([
-      { content: '不是 JSON' },
-      { content: '仍不是 JSON' },
-      { content: null },
-    ]);
-    const { deps: d } = deps(gateway);
-
-    await expect(
-      runCardContentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
-    ).rejects.toMatchObject({ code: 'CARD_CONTENT_TAVILY_RECOVERY_INVALID' });
+    ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_HTTP_500', retryable: true });
   });
 });

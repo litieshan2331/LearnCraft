@@ -20,7 +20,8 @@
 | `src/infrastructure/llm/model-gateway.ts` | OpenAI-compatible 网关：载荷构造、SSE 聚合（含工具调用分片合并）、错误分类与退避重试 |
 | `src/acl/core-internal-client.ts` | Web 内部接口防腐层：5 个端点、统一超时与鉴权、错误分类、响应契约校验 |
 | `src/schemas/*.ts` | zod 运行时契约：内部接口响应与题集业务合同 |
-| `src/workflows/assessment-generate.ts` | `assessment_generate` 工作流（显式实现，后续替换为 LangGraph.js 图） |
+| `src/application/services/tool-aware-generator.ts` | ReAct 会话循环：一次运行一个会话，工具成功/失败都回传同一会话，校验失败把字段路径回灌自纠，轮数与工具调用数双上限 |
+| `src/workflows/` | 四个 P0 业务工作流（每个工作流一个子目录：`assessment-generate/`、`posttest-generate/`、`plan-generate/`、`card-content-generate/`，目录内按 `schema/`、`prompts/`、`recovery/` 职责分文件夹；`shared/` 放跨工作流复用模块）。**每个工作流是单一 persona 的 ReAct 会话**；后续替换为 LangGraph.js 图为可选项 |
 | `src/application/commands/execute-agent-run.ts` | 命令层：领取 → 取消检查 → 路由 → 执行 → 回写（含真实 token 用量）；错误归类与重试策略 |
 | `src/application/services/agent-workflow-registry.ts` | `run_type` → 工作流注册表 |
 | `src/infrastructure/queue/outbox-dispatcher.ts` | Outbox 投递器：`FOR UPDATE OF o SKIP LOCKED` + `run_type` 路由 + 优雅关闭 |
@@ -43,7 +44,25 @@
 - **token 用量写真实值**（2026-09-17 用户确认）：Python 的 `mark_succeeded` 恒定写 0，本实现要求调用方
   把工作流返回的 `usage` 写入 `agent_runs` 的 token 列；`outputSummary` 仍保持 Python 的 6 键。
 
-除此之外，提示词、修复指令、校验规则、回写载荷字段、输出摘要键与错误码与 Python 一致。
+### ReAct 会话改造（2026-09-18 用户确认）
+
+四个工作流由「按阶段重建消息列表 + 追加上一轮原文与修复指令」改为**单一 persona 的 ReAct 会话**：
+
+- 一次运行只有一个会话与一个人格；工具成功与失败都以 tool 消息回传同一会话，校验失败以 user 观察消息
+  回灌字段路径，模型在同一上下文内自纠；不再有阶段切换与断网降级人格；
+- 轮数上限按工作流注入（`AGENT_REACT_MAX_TURNS_*`，默认 5 / 5 / 10 / 5），语义是**一次运行内允许的
+  模型调用次数（含只产生工具调用的轮次）**，因此它同时是成本上限；
+- 最终 JSON 不再用 `response_format` 约束，改为提示词约定 + `extractJsonText` 剥离围栏后严格校验；
+- **产品边界变更（后测）**：`posttest_generate` 全程开放 `tavily_search`，节点内容与 `teaching_memory`
+  仍是主要出题依据，不再禁止外部核对；
+- **元数据键不变、取值按语义映射**：`recovery_stage`（用过工具 → `tavily_recovery`；未用工具首答即通过
+  → `initial`；同一会话内自纠后通过 → `repair`）；`generation_path`（未用工具 → `model_knowledge`；
+  用工具首答即通过 → `model_with_tavily`；用工具且自纠 → `tavily_recovery`）；`repair_attempts` =
+  首次通过前的校验失败次数；`fallback_used` = 是否发生过自纠；Web 侧无需改动；
+- **模型网关错误直接上抛**：不再由工作流吞掉后进入下一阶段，改由 BullMQ 任务级重试处理（网关自身仍按
+  `MODEL_GATEWAY_REQUEST_MAX_RETRIES` 做退避重试）。
+
+除此之外，提示词核心文案、校验规则、回写载荷字段、输出摘要键与错误码保持与 Python 一致。
 
 ## 命令
 
@@ -74,6 +93,8 @@ node --experimental-strip-types src/main/worker.ts
 | `CORE_INTERNAL_BASE_URL` / `INTERNAL_SERVICE_SECRET` | Web 内部接口地址与服务密钥 |
 | `CREDENTIAL_ENCRYPTION_KEY` / `_VERSION` | 凭据解密主密钥与版本 |
 | `MODEL_EGRESS_*` | 受控出网参数；生产启用出网时必须配置代理 |
+| `AGENT_TOOL_MAX_CALLS` | 单次运行可见的联网工具调用上限（默认 6） |
+| `AGENT_REACT_MAX_TURNS_ASSESSMENT` / `_POSTTEST` / `_PLAN` / `_CARD_CONTENT` | 四个工作流各自的 ReAct 轮数上限（默认 5 / 5 / 10 / 5） |
 
 Python 运行时已下线（编排中不再有任何 Python 服务），因此 Dispatcher 领取**全部** `agent.run.requested` 事件，
 不再按 `run_type` 过滤；未注册工作流的 `run_type` 会在命令层以 `AGENT_RUN_WORKFLOW_NOT_REGISTERED` 明确失败，

@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 
 import { CoreInternalClient } from '../../src/acl/core-internal-client.js';
 import { AgentWorkflowRegistry } from '../../src/application/services/agent-workflow-registry.js';
-import { parseRedisConnection, readAgentToolMaxCalls, type AgentQueueConfig } from '../../src/bootstrap/config.js';
+import { parseRedisConnection, readAgentReactMaxTurns, readAgentToolMaxCalls, type AgentQueueConfig } from '../../src/bootstrap/config.js';
 import { PgAgentRunRepository } from '../../src/infrastructure/database/agent-run-repository.js';
 import { PgModelEgressAuditRepository } from '../../src/infrastructure/database/model-egress-audit-repository.js';
 import { ModelCredentialDecryptor } from '../../src/infrastructure/llm/credential-decryptor.js';
@@ -31,7 +31,7 @@ import {
 } from '../../src/infrastructure/queue/bullmq-agent-queue.js';
 import { SQL_CLAIM_EVENTS } from '../../src/infrastructure/queue/outbox-dispatcher.js';
 import { createAgentRunProcessor } from '../../src/interfaces/queue/agent-run-processor.js';
-import { createAssessmentGenerateWorkflow } from '../../src/workflows/assessment-generate.js';
+import { createAssessmentGenerateWorkflow } from '../../src/workflows/assessment-generate/index.js';
 
 const { Pool } = pg;
 
@@ -237,6 +237,7 @@ describe.skipIf(!enabled)('BullMQ 队列链路（真实 Redis）', () => {
             2,
           ),
           maxToolCalls: readAgentToolMaxCalls(),
+          reactMaxTurns: readAgentReactMaxTurns().assessmentGenerate,
           createToolGateway: createLiveTavilyToolGatewayFactory(),
         }),
       );

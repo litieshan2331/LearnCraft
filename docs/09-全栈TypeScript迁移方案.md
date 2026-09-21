@@ -88,6 +88,7 @@ PostgreSQL 连接数与使用率、Redis 内存、egress proxy 并发与带宽�
 | Token 用量写真实值 | Python 恒定写 `0/0`；TS 写入跨阶段累计的真实用量，`output_summary_json` 仍保持原有键集合 |
 | 校验更严 | zod 的 UUID 校验含 RFC 版本与变体位、`skill_tags` 元素长度受限，与 Web 路由（最终裁判）一致 |
 | 时间源统一 | TS 统一使用数据库 `now()`，避免 `available_at` 与 `finished_at` 矛盾 |
+| 单会话 ReAct（2026-09-18 用户确认） | 四个工作流由「按阶段重建消息列表 + 追加上一轮原文与修复指令 + 分阶段工具开关」改为**单一 persona 的持续累积会话**：工具成功/失败都回传同一会话，校验失败回灌字段路径自纠；轮数上限按工作流注入（`AGENT_REACT_MAX_TURNS_*`，默认 5/5/10/5）；最终 JSON 不再用 `response_format` 而是提示词 + `extractJsonText`；后测全程开放联网（产品边界变更）；模型网关错误直接上抛交给任务级重试。元数据键不变、取值语义映射，Web 无需改动 |
 
 ### 5. 工程化零碎项
 
@@ -102,6 +103,9 @@ PostgreSQL 连接数与使用率、Redis 内存、egress proxy 并发与带宽�
 
 Python 源码从未引用 `langchain`/`langgraph`（仅在 `pyproject.toml` 声明），因此这不是既有行为的迁移欠账，
 而是可选的架构演进。若实施：先把四个工作流的显式实现替换为图，并按 D8 决定是否引入持久化 Checkpointer。
+
+2026-09-18 起四个工作流已是**单会话 ReAct**（`runReactAgentSession`：消息累积 + 工具循环 + 校验反馈），
+图化的收益主要是可视化与可选 Checkpointer，不再是动态行为上的缺口。
 
 ### 8. P1 功能（非迁移欠账）
 

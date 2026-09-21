@@ -1,5 +1,6 @@
 /**
- * 学习路线恢复输出的宽松规范化（等价于 Python plan_generate.py 底部的 _normalize_recovery_document 及其辅助函数）。
+ * 学习路线恢复输出的宽松规范化（自原 workflows/plan-recovery.ts 移入 plan-generate/recovery/；
+ * 等价于 Python plan_generate.py 底部的 _normalize_recovery_document 及其辅助函数）。
  *
  * 职责：仅在路线「多轮严格校验都失败」后的兜底恢复阶段使用。把模型可能给出的旧字段名、
  * 字符串难度、非连续 ordinal、非法或重复 node_key、以标题书写的依赖等松散结构，
@@ -15,7 +16,7 @@
  * - recoveryText / recoveryStringList：供本模块与测试复用的收敛函数。
  */
 
-import { pyOr, pythonRound } from './python-compat.js';
+import { pyOr, pythonRound } from '../../shared/python-compat.js';
 
 /** 规范化失败时携带稳定路径，调用方把它当作校验路径的一部分。 */
 export class PlanRecoveryNormalizationError extends Error {

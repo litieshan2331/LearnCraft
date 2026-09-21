@@ -128,6 +128,7 @@ Python 运行时已不再出现在任何编排中：`agent-api`、`agent-dispatc
 - `AGENT_WORKER_CONCURRENCY` / `AGENT_JOB_*`：BullMQ Worker 并发、任务锁与重试，按 `docs/09-全栈TypeScript迁移方案.md` 的容量分级设置。
 - `TAVILY_API_KEY` / `TAVILY_QUOTA_REDIS_URL` / `TAVILY_QUOTA_KEY_PREFIX` / `TAVILY_DAILY_TOOL_CALL_LIMIT`：联网工具配置。配额按账户在 Redis 原子计数；配额 Redis 不可用时工具调用返回受控错误而不是绕过配额。Tavily 流量同样走 `MODEL_EGRESS_PROXY_URL`。
 - `AGENT_TOOL_MAX_CALLS`：单次运行可见的联网工具调用上限。
+- `AGENT_REACT_MAX_TURNS_ASSESSMENT` / `_POSTTEST` / `_PLAN` / `_CARD_CONTENT`：四个工作流各自的 ReAct 轮数上限（一次运行内允许的模型调用次数，含只产生工具调用的轮次），默认 5 / 5 / 10 / 5。轮数是成本上限，四个工作流可独立调整。
 
 部署服务器时复制统一模板 `.env.example` 为被 Git 忽略的 `.env.production`，删除或替换其中的本地默认值，填写外部 PostgreSQL、认证 Redis、队列 Redis、Provider Secret 与 `MODEL_EGRESS_PROXY_URL`，再执行：
 

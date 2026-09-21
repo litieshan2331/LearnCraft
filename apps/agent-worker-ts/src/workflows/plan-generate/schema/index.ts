@@ -1,15 +1,21 @@
 /**
- * 学习路线输出合同（等价于 Python plan_generate.py 中的 LearningPlanNode / LearningPlanDocument）。
+ * plan_generate 输入合同与学习路线输出合同
+ * （输入部分自原 plan-generate.ts 拆分；路线合同来自原 plan-document.ts，
+ * 等价于 Python plan_generate.py 中的 LearningPlanNode / LearningPlanDocument）。
  *
- * 职责：定义章节式学习路线的运行时校验，包含节点字段约束与整条路线的结构约束
- * （node_key 唯一、ordinal 从 1 连续编号、前置依赖存在且不自依赖、依赖图无环）。
- * 与 Web 内部接口 /plan-result 的 schema 保持一致；Web 才是最终写入方，这里提前失败以省掉一次往返。
+ * 职责：
+ * - 输入：定义学习路线生成任务快照的契约（三层嵌套对象都是 extra=forbid、
+ *   weekly_minutes 30-10080、background_summary 可空）；
+ * - 输出：定义章节式学习路线的运行时校验，包含节点字段约束与整条路线的结构约束
+ *   （node_key 唯一、ordinal 从 1 连续编号、前置依赖存在且不自依赖、依赖图无环）。
+ *   与 Web 内部接口 /plan-result 的 schema 保持一致；Web 才是最终写入方，这里提前失败以省掉一次往返。
  *
  * 与 Python 的差异：Python 的结构校验写在 model_validator 里，pydantic 的 loc 为空，
- * 因此 {`_validation_paths`} 最终只会得到 response.json；本实现用 zod 的问题路径给出更细的定位
+ * 因此 \`{\_validation_paths}\` 最终只会得到 response.json；本实现用 zod 的问题路径给出更细的定位
  * （例如 nodes.0.node_key）。错误码与错误语义完全一致，仅诊断信息更细。
  *
  * 导出：
+ * - PlanGenerationInputSchema / PlanGenerationInput：输入合同。
  * - PLAN_NODE_KEY_PATTERN：node_key 与前置依赖键共用的格式。
  * - LearningPlanNodeSchema / LearningPlanDocumentSchema：节点与整条路线的合同。
  * - LearningPlanNode / LearningPlanDocument：对应类型。
@@ -18,6 +24,37 @@
  */
 
 import { z } from 'zod';
+
+export const PlanGenerationInputSchema = z
+  .object({
+    goal: z
+      .object({
+        id: z.string().min(1).max(64),
+        topic: z.string().min(1).max(300),
+        title: z.string().min(1).max(300),
+        description: z.string().min(1).max(2_000),
+        desired_outcome: z.string().min(1).max(2_000),
+      })
+      .strict(),
+    learner_profile: z
+      .object({
+        profile_version: z.number().int().min(1),
+        current_level: z.enum(['beginner', 'intermediate', 'advanced']),
+        weekly_minutes: z.number().int().min(30).max(10_080),
+        background_summary: z.string().max(4_000).nullish(),
+      })
+      .strict(),
+    diagnostic_assessment: z
+      .object({
+        assessment_id: z.string().min(1).max(64),
+        score_percent: z.number().min(0).max(100),
+        mastery_summary: z.record(z.string(), z.unknown()).default({}),
+      })
+      .strict(),
+  })
+  .strict();
+
+export type PlanGenerationInput = z.infer<typeof PlanGenerationInputSchema>;
 
 export const PLAN_NODE_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
 

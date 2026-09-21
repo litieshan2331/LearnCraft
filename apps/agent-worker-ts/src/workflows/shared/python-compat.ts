@@ -1,8 +1,8 @@
 /**
- * 从 Python 迁移过来的宽松规范化所需的语义兼容层。
+ * 从 Python 迁移过来的宽松规范化所需的语义兼容层（自原 workflows/python-compat.ts 移入 shared/）。
  *
- * 职责：复刻 Python 中与 JS 语义不同的三处行为，供 plan-recovery.ts 与 card-content-document.ts
- * 共用，避免两份实现出现偏差：
+ * 职责：复刻 Python 中与 JS 语义不同的三处行为，供 plan-generate/recovery 与
+ * card-content-generate/schema 的规范化器共用，避免两份实现出现偏差：
  * - 真值判断：Python 中空字符串、空数组、空对象、0 都是假，JS 中空数组与空对象为真；
  *   模型经常返回 `worked_example: {}` 这类空对象，直接用 `||` 会取错字段。
  * - 短路取值：`a or b or c` 返回第一个真值。

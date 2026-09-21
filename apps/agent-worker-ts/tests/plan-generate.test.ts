@@ -1,22 +1,23 @@
 /**
  * plan_generate 工作流的等价性测试（使用假内部接口与假网关，不发真实请求）。
  *
- * 重点固化与 Python（plan_generate.py）逐项对齐的行为：三层输入契约、首轮 + 两次修复的
- * repair_attempts 取值、修复消息顺序、全部失败后进入无资料兜底重建、generation_path 与
- * fallback_used 的取值、6 键输出摘要与 5 键元数据，以及跨阶段真实 token 用量的累加。
+ * 重点固化改造后的单会话 ReAct 行为与保持不变的对外契约：三层输入契约、会话内自纠的
+ * repair_attempts 取值、宽松规范化仍在会话内生效、generation_path 与 fallback_used 的语义映射、
+ * 6 键输出摘要与 5 键元数据，以及跨轮次真实 token 用量的累加。
  */
 import { encryptCredential } from '@learncraft/security-primitives';
 import { describe, expect, it } from 'vitest';
 
 import { ModelGatewayError, type ModelCompletionRequest, type ModelCompletionResponse } from '../src/infrastructure/llm/model-gateway.js';
 import { ModelCredentialDecryptor } from '../src/infrastructure/llm/credential-decryptor.js';
-import { FakeToolGateway, fakeToolDeps } from './helpers/fake-tool-gateway.js';
+import { fakeToolDeps, SUCCESSFUL_TOOL_RESULT } from './helpers/fake-tool-gateway.js';
 import type { DefaultModelConnectionEnvelope, PersistedLearningPlanEnvelope } from '../src/schemas/core-internal.js';
 import {
+  planGenerationPath,
   runPlanGenerate,
   type PlanInternalPort,
   type PlanModelGatewayPort,
-} from '../src/workflows/plan-generate.js';
+} from '../src/workflows/plan-generate/index.js';
 
 const KEY_BASE64 = Buffer.alloc(32, 7).toString('base64');
 const OWNER_ID = '11111111-2222-4333-8444-555555555555';
@@ -70,7 +71,20 @@ function planJson(count = 6, overrides: (index: number) => Record<string, unknow
   });
 }
 
-/** 旧字段 + 脏值的宽松输出，用于验证兜底阶段的规范化。 */
+/** 依赖成环的非法路线（严格校验与宽松规范化都无法通过）。 */
+function cyclicPlanJson(): string {
+  return planJson(6, (index) => {
+    if (index === 2) {
+      return { prerequisite_node_keys: ['chapter_3'] };
+    }
+    if (index === 3) {
+      return { prerequisite_node_keys: ['chapter_2'] };
+    }
+    return {};
+  });
+}
+
+/** 旧字段 + 脏值的宽松输出，用于验证会话内宽松规范化仍然生效。 */
 const LOOSE_PLAN_JSON = JSON.stringify({
   plan_title: '旧字段路线',
   description: '由旧版字段构成的摘要。',
@@ -151,15 +165,18 @@ class FakeGateway implements PlanModelGatewayPort {
   }
 }
 
-function deps(gateway: FakeGateway, internal = new FakeInternal()) {
+function deps(gateway: FakeGateway, internal = new FakeInternal(), reactMaxTurns = 10) {
+  const tools = fakeToolDeps();
   return {
     deps: {
       internalClient: internal,
       decryptor: new ModelCredentialDecryptor(KEY_BASE64, 'local-v1'),
       gateway,
-      ...fakeToolDeps(),
+      ...tools,
+      reactMaxTurns,
     },
     internal,
+    toolGateway: tools.toolGateway,
   };
 }
 
@@ -224,7 +241,7 @@ describe('输入契约', () => {
     const systemContent = String(gateway.requests[0]?.messages[0]?.content);
     const userContent = String(gateway.requests[0]?.messages[1]?.content);
     expect(systemContent).toContain('你是 LearnCraft 的学习路线规划师。');
-    expect(systemContent).toContain('可以使用 tavily_search');
+    expect(systemContent).toContain('可以调用 tavily_search');
     expect(userContent).toContain('学习主题：Python 函数与类');
     expect(userContent).toContain('学习者水平：beginner');
     expect(userContent).toContain('每周可用分钟：300');
@@ -233,8 +250,8 @@ describe('输入契约', () => {
   });
 });
 
-describe('校验与修复', () => {
-  it('首轮合法：repair_attempts=0，摘要 6 键，元数据 5 键', async () => {
+describe('会话内校验与自纠', () => {
+  it('首轮合法：repair_attempts=0、generation_path=model_knowledge、fallback_used=false，摘要 6 键、元数据 5 键', async () => {
     const gateway = new FakeGateway([{ content: planJson() }]);
     const { deps: d, internal } = deps(gateway);
 
@@ -248,172 +265,136 @@ describe('校验与修复', () => {
       'repair_attempts',
       'tool_call_count',
     ]);
-    expect(result.outputSummary).toMatchObject({
-      repair_attempts: 0,
-      generation_path: 'model_knowledge',
-      tool_call_count: 0,
-      learning_plan_id: PLAN_ID,
-      node_count: 6,
-      model_id: 'deepseek-flash',
-    });
+    expect(result.outputSummary.repair_attempts).toBe(0);
+    expect(result.outputSummary.generation_path).toBe('model_knowledge');
     expect(result.usage).toEqual({ inputTokens: 11, outputTokens: 22 });
     expect(gateway.requests).toHaveLength(1);
 
-    const payload = internal.persisted[0];
-    expect(payload?.schema_version).toBe('learning_plan.v1');
-    expect(payload?.generation_metadata).toEqual({
+    const metadata = internal.persisted[0]?.generation_metadata as Record<string, unknown>;
+    expect(Object.keys(metadata).sort()).toEqual([
+      'fallback_used',
+      'generation_path',
+      'model_id',
+      'repair_attempts',
+      'tool_call_count',
+    ]);
+    expect(metadata).toMatchObject({
       model_id: 'deepseek-flash',
       tool_call_count: 0,
       repair_attempts: 0,
       generation_path: 'model_knowledge',
       fallback_used: false,
     });
-    expect((payload?.nodes as unknown[]).length).toBe(6);
   });
 
-  it('首轮结构非法（依赖成环）后一次修复成功，repair_attempts=1', async () => {
-    const cyclic = JSON.stringify({
-      schema_version: 'learning_plan.v1',
-      title: '环状路线',
-      summary: '依赖成环。',
-      nodes: [
-        planNode(1, { prerequisite_node_keys: ['chapter_2'] }),
-        planNode(2, { prerequisite_node_keys: ['chapter_1'] }),
-        planNode(3), planNode(4), planNode(5), planNode(6),
-      ],
-    });
-    const gateway = new FakeGateway([{ content: cyclic }, { content: planJson() }]);
-    const { deps: d } = deps(gateway);
+  it('首轮结构非法（依赖成环）后在同一会话自纠成功：repair_attempts=1、fallback_used=true', async () => {
+    const gateway = new FakeGateway([{ content: cyclicPlanJson() }, { content: planJson() }]);
+    const { deps: d, internal } = deps(gateway);
 
     const result = await runPlanGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
 
     expect(result.outputSummary.repair_attempts).toBe(1);
     expect(result.outputSummary.generation_path).toBe('model_knowledge');
-    expect(result.usage).toEqual({ inputTokens: 22, outputTokens: 44 });
+    expect(gateway.requests).toHaveLength(2);
 
-    const repairMessages = gateway.requests[1]?.messages ?? [];
-    expect(repairMessages).toHaveLength(4);
-    expect(repairMessages[2]).toMatchObject({ role: 'assistant', content: cyclic });
-    expect(repairMessages[3]?.role).toBe('system');
-    expect(String(repairMessages[3]?.content)).toContain('上一轮路线不符合输出 Schema 或章节依赖规则');
+    const messages = gateway.requests[1]?.messages ?? [];
+    expect(messages).toHaveLength(4);
+    expect(messages[0]).toEqual(gateway.requests[0]?.messages[0]);
+    expect(messages[1]).toEqual(gateway.requests[0]?.messages[1]);
+    expect(messages[2]).toMatchObject({ role: 'assistant', content: cyclicPlanJson() });
+    expect(messages[3]?.role).toBe('user');
+    expect(String(messages[3]?.content)).toContain('校验失败的字段路径');
+    expect((internal.persisted[0]?.generation_metadata as Record<string, unknown>).fallback_used).toBe(true);
   });
 
-  it('首轮无正文时抛 MODEL_PROVIDER_RESPONSE_INVALID，不进入修复', async () => {
-    const gateway = new FakeGateway([{ content: null }]);
+  it('会话内宽松规范化仍然生效：旧字段与脏值可在首轮直接通过', async () => {
+    const gateway = new FakeGateway([{ content: LOOSE_PLAN_JSON }]);
+    const { deps: d, internal } = deps(gateway);
+
+    const result = await runPlanGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
+
+    expect(result.outputSummary.repair_attempts).toBe(0);
+    expect(result.outputSummary.generation_path).toBe('model_knowledge');
+    expect(gateway.requests).toHaveLength(1);
+    const nodes = internal.persisted[0]?.nodes as Array<Record<string, unknown>>;
+    expect(nodes).toHaveLength(6);
+    expect(nodes[0]?.node_key).toBe('chapter_1');
+  });
+
+  it('模型没有正文时按一次校验失败处理，并给出 response.content_missing 路径', async () => {
+    const gateway = new FakeGateway([{ content: null }, { content: planJson() }]);
+    const { deps: d } = deps(gateway);
+
+    const result = await runPlanGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
+
+    expect(result.outputSummary.repair_attempts).toBe(1);
+    const messages = gateway.requests[1]?.messages ?? [];
+    expect(String(messages[messages.length - 1]?.content)).toContain('response.content_missing');
+  });
+
+  it('节点数不足 6 章时判为校验失败，轮数耗尽后抛 PLAN_MODEL_RECOVERY_INVALID', async () => {
+    const gateway = new FakeGateway([{ content: planJson(5) }, { content: planJson(5) }]);
+    const { deps: d } = deps(gateway, new FakeInternal(), 2);
+
+    await expect(
+      runPlanGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
+    ).rejects.toMatchObject({ code: 'PLAN_MODEL_RECOVERY_INVALID', retryable: false });
+    expect(gateway.requests).toHaveLength(2);
+  });
+
+  it('网关错误直接上抛（交由任务级重试）', async () => {
+    const gateway = new FakeGateway([
+      { error: new ModelGatewayError('MODEL_PROVIDER_HTTP_503', 'provider 不可用', true) },
+    ]);
     const { deps: d } = deps(gateway);
 
     await expect(
       runPlanGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
-    ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_RESPONSE_INVALID', retryable: false });
-    expect(gateway.requests).toHaveLength(1);
+    ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_HTTP_503', retryable: true });
   });
 });
 
-describe('兜底重建', () => {
-  it('联网工具失败时退回无资料重建，并把工具错误类别回填到提示词', async () => {
+describe('联网工具与元数据映射', () => {
+  it('模型自主调用 Tavily 且首答即通过：generation_path=model_with_tavily', async () => {
     const gateway = new FakeGateway([
-      { content: '{}' },
-      { content: '{}' },
-      { content: '{}' },
+      { content: null, toolCalls: [{ id: 'c1', name: 'tavily_search', argumentsJson: '{"query":"Python 3.13 新特性"}' }] },
       { content: planJson() },
     ]);
-    const { deps: d } = deps(gateway);
-    const failing = new FakeToolGateway({
-      ok: false,
-      code: 'TAVILY_QUOTA_UNAVAILABLE',
-      message: 'Tavily 配额 Redis 暂时不可用，本次不会绕过配额调用网络工具。',
-      data: {},
-    });
+    const { deps: d, internal, toolGateway } = deps(gateway);
 
-    const result = await runPlanGenerate(
-      { runId: 'run-1', inputSummaryJson: INPUT_SUMMARY },
-      { ...d, toolGateway: failing },
-    );
+    const result = await runPlanGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
 
-    expect(result.outputSummary.generation_path).toBe('tavily_recovery');
-    expect(failing.calls).toHaveLength(1);
-    expect(failing.calls[0]?.name).toBe('tavily_search');
-    const recoveryUser = String(gateway.requests[3]?.messages[1]?.content);
-    expect(recoveryUser).toContain('Tavily 错误类别：TAVILY_QUOTA_UNAVAILABLE');
+    expect(toolGateway.calls).toHaveLength(1);
+    const messages = gateway.requests[1]?.messages ?? [];
+    const toolMessage = messages[messages.length - 1];
+    expect(toolMessage?.role).toBe('tool');
+    expect(String(toolMessage?.content)).toContain('"ok":true');
+    expect(String(toolMessage?.content)).toContain('TAVILY_SEARCH_EXTRACT_OK');
+
+    expect(result.outputSummary.tool_call_count).toBe(1);
+    expect(result.outputSummary.generation_path).toBe('model_with_tavily');
+    expect((internal.persisted[0]?.generation_metadata as Record<string, unknown>).fallback_used).toBe(false);
   });
 
-  it('首轮与两次修复都失败后强制联网重建，旧字段输出被规范化后成功落库', async () => {
+  it('用过联网工具且经过自纠：generation_path=tavily_recovery', async () => {
     const gateway = new FakeGateway([
-      { content: '{}' },
-      { content: '{}' },
-      { content: '{}' },
-      { content: LOOSE_PLAN_JSON },
+      { content: null, toolCalls: [{ id: 'c1', name: 'tavily_search', argumentsJson: '{}' }] },
+      { content: cyclicPlanJson() },
+      { content: planJson() },
     ]);
     const { deps: d, internal } = deps(gateway);
 
     const result = await runPlanGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
 
-    expect(result.outputSummary).toMatchObject({
-      repair_attempts: 2,
-      generation_path: 'tavily_recovery',
-      node_count: 6,
-    });
-    expect(gateway.requests).toHaveLength(4);
-
-    const recoveryRequest = gateway.requests[3];
-    const recoverySystem = String(recoveryRequest?.messages[0]?.content);
-    const recoveryUser = String(recoveryRequest?.messages[1]?.content);
-    expect(recoverySystem).toContain('你正在执行强制联网兜底');
-    expect(recoveryUser).toContain('参考资料摘要：');
-    expect(recoveryUser).not.toContain('Tavily 错误类别');
-
-    const payload = internal.persisted[0];
-    expect(payload?.generation_metadata).toEqual({
-      model_id: 'deepseek-flash',
-      tool_call_count: 0,
-      repair_attempts: 2,
-      generation_path: 'tavily_recovery',
-      fallback_used: true,
-    });
-    const nodes = payload?.nodes as Array<Record<string, unknown>>;
-    expect(nodes.map((node) => node.node_key)).toEqual([
-      'chapter_1', 'chapter_2', 'chapter_3', 'chapter_4', 'chapter_5', 'chapter_6',
-    ]);
-    expect(nodes[0]).toMatchObject({ difficulty: 1, estimated_minutes: 30, prerequisite_node_keys: [] });
-    // 第三节以标题声明依赖，被解析为第二节的 node_key。
-    expect(nodes[2]?.prerequisite_node_keys).toEqual(['chapter_2']);
+    expect(result.outputSummary.repair_attempts).toBe(1);
+    expect(result.outputSummary.generation_path).toBe('tavily_recovery');
+    expect((internal.persisted[0]?.generation_metadata as Record<string, unknown>).fallback_used).toBe(true);
   });
 
-  it('联网兜底结果仍无法规范化时抛 PLAN_TAVILY_SOURCE_RECOVERY_INVALID 并附带校验路径', async () => {
-    const gateway = new FakeGateway([
-      { content: '{}' },
-      { content: '{}' },
-      { content: '{}' },
-      { content: '{"nodes": {}}' },
-      { content: '{"nodes": {}}' },
-    ]);
-    const { deps: d } = deps(gateway);
-
-    await expect(
-      runPlanGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
-    ).rejects.toMatchObject({
-      code: 'PLAN_TAVILY_SOURCE_RECOVERY_INVALID',
-      message: '基于 Tavily 资料的路线恢复结果仍不符合路线合同。 校验路径: nodes',
-      retryable: false,
-    });
-  });
-
-  it('兜底结果节点数不足 6 章时最终失败', async () => {
-    const tooFew = planJson(3);
-    const gateway = new FakeGateway([
-      { content: '{}' },
-      { content: '{}' },
-      { content: '{}' },
-      { content: tooFew },
-      { content: tooFew },
-    ]);
-    const { deps: d } = deps(gateway);
-
-    await expect(
-      runPlanGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d),
-    ).rejects.toMatchObject({
-      code: 'PLAN_TAVILY_SOURCE_RECOVERY_INVALID',
-      message: '基于 Tavily 资料的路线恢复结果仍不符合路线合同。 校验路径: nodes',
-    });
+  it('planGenerationPath 的取值集合与语义映射保持稳定', () => {
+    expect(planGenerationPath({ toolCallCount: 0, validationFailures: 0 })).toBe('model_knowledge');
+    expect(planGenerationPath({ toolCallCount: 0, validationFailures: 2 })).toBe('model_knowledge');
+    expect(planGenerationPath({ toolCallCount: 1, validationFailures: 0 })).toBe('model_with_tavily');
+    expect(planGenerationPath({ toolCallCount: 1, validationFailures: 1 })).toBe('tavily_recovery');
   });
 });

@@ -71,7 +71,7 @@
 | `agent_role` | `learning_architect` 或 `node_tutor` |
 | `run_type` | `assessment_generate`、`plan_generate`、`card_content_generate` 或 `posttest_generate` |
 | `logical_session_key` | `goal:{goal_id}` 或 `node:{plan_node_id}` |
-| `attempt` | 首轮为 0，修复轮次从 1 开始 |
+| `attempt` | ReAct 会话内的轮次：首轮为 0，同一会话内的自纠轮次从 1 开始 |
 | `generation_path` | `model_knowledge`、`model_with_tavily` 或 `tavily_recovery` |
 | `step` | 工作流节点，如 `input_normalizer`、`generator`、`validator` |
 | `duration_ms` | 当前步骤耗时 |
@@ -333,9 +333,9 @@ Dispatcher → Celery → node_tutor
 
 | 内部情况 | AgentRun 内部记录 | 用户侧表现 |
 | --- | --- | --- |
-| 模型直接生成并通过校验 | `generation_path=model_knowledge` | 正常显示结果 |
-| 模型在开放工具的阶段主动调用 Tavily 后通过校验 | `generation_path=model_with_tavily` | 正常显示结果 |
-| 最终恢复阶段调用 Tavily 并通过校验 | `generation_path=tavily_recovery`、`fallback_used=true` | 正常显示结果 |
+| 模型未用工具、直接生成并通过校验 | `generation_path=model_knowledge`、`fallback_used=false` | 正常显示结果 |
+| 模型在同一会话内主动调用 Tavily、首答即通过校验 | `generation_path=model_with_tavily` | 正常显示结果 |
+| 模型调用 Tavily 且经过同一会话内自纠后通过校验 | `generation_path=tavily_recovery`、`fallback_used=true` | 正常显示结果 |
 | 某次模型或工具调用异常 | `model_call_failed` 或 `tool_call_failed`，包含错误类别 | 不显示原始错误或模型输出 |
 | 最终结果未通过校验 | `validation_failed`，禁止持久化无效结果 | 不返回无效结果，等待基础设施重试或进入内部告警 |
 

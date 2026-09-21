@@ -11,7 +11,7 @@ import {
   normalizeRecoveryDocument,
   recoveryStringList,
   recoveryText,
-} from '../src/workflows/plan-recovery.js';
+} from '../src/workflows/plan-generate/recovery/index.js';
 
 function nodesOf(document: Record<string, unknown>): Array<Record<string, unknown>> {
   return document.nodes as Array<Record<string, unknown>>;

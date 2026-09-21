@@ -41,8 +41,8 @@ Web/BFF 在同一事务内完成请求校验、创建 `AgentRun` 和写入 Outbo
 | 层级 | 负责内容 | 不负责内容 |
 | --- | --- | --- |
 | Web/Core | 用户、目标、画像、学习计划、节点、内容、评测等业务聚合；鉴权、幂等和业务不变量 | 直接编排 LLM 调用或保存原始模型响应 |
-| Route Planner Agent | 前测生成、路线生成、结构化校验、有限修复与 Tavily 兜底 | 知识正文生成、直接写入 Core 业务表 |
-| Node Tutor Agent | 节点内容生成、引用校验、节点后测生成、有限修复与 Tavily 兜底 | 路线调整、直接写入 Core 业务表 |
+| Route Planner Agent | 前测生成、路线生成、结构化校验、ReAct 会话内自纠与自主联网 | 知识正文生成、直接写入 Core 业务表 |
+| Node Tutor Agent | 节点内容生成、引用校验、节点后测生成、ReAct 会话内自纠与自主联网 | 路线调整、直接写入 Core 业务表 |
 | 共享 Agent 基础设施 | 运行管理、队列、重试、模型连接、安全出网和最小运行审计；细粒度 Trace、成本汇总、Checkpoint 为后续能力 | 路线合格性或教学内容质量等业务定义 |
 
 Worker 只能经 `CoreApiPort`、`RetrieverPort` 等端口或 ACL 与 Core 通信，不能导入 Web 的领域对象、共享 ORM Model，或绕过应用服务写入 `learning_plans`、`plan_nodes`、`card_contents` 等核心业务表。
@@ -165,7 +165,7 @@ Route Planner 读取：
    └─ 生成 6–12 章书籍式学习目录
 ```
 
-前测和路线首轮会向模型提供 Tavily MCP，由模型自主决定是否调用；当前前测共享题集管线的修复阶段不开放 Tavily，最终恢复阶段才开放 Tavily 并由模型决定是否调用。路线工作流的修复阶段同样不开放工具，主流程最终校验失败后才强制执行 Tavily 恢复；所有恢复结果都必须重新校验。
+前测和路线都是**单一 persona 的 ReAct 会话**：整个会话内持续向模型提供 Tavily MCP，由模型自主决定是否调用（不强制、不按阶段开关）。模型输出未通过结构化校验时，校验失败只把字段路径回灌同一会话，由模型在同一人格与同一上下文内自纠，直到通过校验或耗尽该工作流的 ReAct 轮数上限（`AGENT_REACT_MAX_TURNS_*`）。任何未通过校验的结果都不会持久化。
 
 ### 3.3 路线生成工作流
 
@@ -269,9 +269,9 @@ ContentInputNormalizer
                                                  Persist
 ```
 
-节点内容首轮模型可以自主调用 Tavily；当前修复请求不开放工具，主流程最终校验仍不合法时才强制执行 Tavily 搜索和资源阅读，并基于资料重建内容。若 Tavily 本身不可用，当前实现会改用模型已有稳定知识进行一次同合同恢复。任一路径的结果都必须再次通过 `ContentValidator`；用户侧不展示中间修复或恢复路径。
+节点内容同样是**单一 persona 的 ReAct 会话**：全程允许模型自主调用 Tavily（不强制）；工具结果与校验失败都以消息形式回传同一会话，由模型自行判断是继续检索还是修正输出。若 Tavily 不可用或未配置 Key，工具网关返回受控错误并作为 tool 消息回传，模型改用已有稳定知识继续。任何输出都必须通过 `ContentValidator`；用户侧不展示中间自纠路径。
 
-前测和后测题集共享题集生成管线（迁移前实现位于 `apps/agent-worker/src/learncraft_agent/workflows/question_set_generation.py` 的 `QuestionSetGenerationPipeline`，迁移后为 TypeScript 中的同一份共享子图）。共享管线负责题集 JSON 解析、字段合同校验、题量校验、错误路径摘要和有限恢复，不负责业务持久化；三个阶段（首轮、修复、最终恢复）与各自的工具开放策略是行为合同，迁移时必须逐条保留。前测首轮开放 Tavily、修复阶段不开放、最终恢复阶段开放；后测首轮只使用固定 `CardContent` 和 `teaching_memory`，修复和最终恢复阶段开放 Tavily。
+前测和后测共用题集校验与元数据映射（`apps/agent-worker-ts/src/workflows/shared/question-set-validation.ts`）：负责题集 JSON 解析、字段合同校验、题量校验、错误路径摘要与 `recovery_stage` / `search_extract` 映射，不负责业务持久化。二者的 ReAct 会话循环共用 `application/services/tool-aware-generator.ts` 的 `runReactAgentSession`。前测与后测全程允许模型自主调用 Tavily；**后测的产品边界于 2026-09-18 变更**：不再禁止外部核对，但固定 `CardContent` 与 `teaching_memory` 仍是主要出题依据。
 
 ### 4.3 内容合同
 
@@ -304,7 +304,7 @@ ContentInputNormalizer
 - Outbox 事务消息、Dispatcher 可靠领取和队列投递；
 - 幂等、超时、有限重试和安全的用户失败文案；
 - 当前由各 Workflow 固化 Prompt、输出 Schema、超时、工具白名单与重试策略；版本化 `AgentExecutionProfile` 是后续可抽取的配置能力；
-- Tavily MCP 适配：同一个 MCP 提供搜索和资源阅读；是否开放以及是否强制调用由具体工作流阶段决定；
+- Tavily MCP 适配：同一个 MCP 提供搜索和资源阅读；会话内全程开放、由模型自主决定是否调用，仅受 `AGENT_TOOL_MAX_CALLS` 硬上限约束；
 - 账户默认模型连接的安全读取，及经过 `SafeModelEgressClient` 的模型调用；
 - 当前已持久化的 `trace_id`、`agent_run_id`、运行状态、重试次数、模型标识和安全错误摘要；
 - 后续可增加 Token/费用汇总、细粒度工具 Trace、LangGraph Checkpoint 和可重放运行事件。
@@ -318,7 +318,7 @@ Tavily MCP 的连接配置、认证方式、超时、预算、调用次数和安
 3. **资源阅读**：读取最终选定的来源，提取可用于章节目录、知识内容或校验修复的结构化资料；
 4. **结果重建**：将资料交给当前 Agent 重建章节目录、内容或题目，再执行原有 Schema 和业务校验。
 
-首轮、修复和最终恢复阶段的 Tavily 策略由具体工作流决定。开放 Tavily 的阶段由模型自主决定是否调用；只有明确配置为强制恢复的工作流才在最终校验失败后强制执行 Tavily。
+Tavily 在会话内全程开放，是否调用由模型自主决定（不强制）；可见调用次数达到 `AGENT_TOOL_MAX_CALLS` 后不再向模型提供工具，强制其基于已有资料作答。
 
 `AgentRun` 记录“如何执行”，不定义“什么是合格的学习计划或学习内容”。Outbox、队列消息、日志和 API 响应不得携带用户 API Key、完整 Prompt、未脱敏模型响应或用户私密资料。
 
@@ -431,7 +431,7 @@ Web 端的 `planning`、`content` 和 `agent-run` 分别承载路线、内容和
 
 1. 所有模型长任务创建 `AgentRun` 并返回可查询的 `agent_run_id`；确定性评分不创建 `AgentRun`。
 2. LLM 输出先经 Pydantic/JSON Schema、业务校验和安全策略，再调用持久化接口；未经校验的 JSON 不得写入 Core。
-3. 各工作流按阶段决定 Tavily 是否开放：前测首轮和最终恢复、后测修复和最终恢复由模型自主决定；路线和内容在最终恢复阶段强制执行 Tavily；所有修复阶段均不开放工具。只有再次通过校验的结果才能持久化，用户侧不展示内部恢复路径。
+3. 每个工作流是单一 persona 的 ReAct 会话：Tavily 全程开放、由模型自主决定是否调用，只受 `AGENT_TOOL_MAX_CALLS` 与 `AGENT_REACT_MAX_TURNS_*` 双上限约束；校验失败只回灌脱敏字段路径，模型在同一会话内自纠。只有通过校验的结果才能持久化，用户侧不展示内部自纠路径。
 4. 每个会产生任务或费用的写操作使用 `Idempotency-Key`；每节点只允许一份成功内容。
 5. Web 的浏览器边界使用 Zod，Worker 的 HTTP、队列和模型输出使用 Pydantic；跨语言只共享 OpenAPI/JSON Schema，不共享 ORM Model。
 6. P0 数据库迁移仍以 Drizzle 为唯一入口；不启用 Alembic 与其竞争同一 PostgreSQL Schema 的迁移所有权。
