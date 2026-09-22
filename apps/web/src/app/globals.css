@@ -205,3 +205,12 @@ body {
     animation: none;
   }
 }
+
+/*
+ * 节点内容（content-text.tsx）里的有序列表：用中文习惯的「1、2、3、」编号。
+ * counter(list-item) 会自动跟随 <ol start> 的属性值，嵌套列表各自独立计数。
+ */
+.content-ordered-list > li::marker {
+  content: counter(list-item) "、";
+  color: var(--muted-foreground);
+}
