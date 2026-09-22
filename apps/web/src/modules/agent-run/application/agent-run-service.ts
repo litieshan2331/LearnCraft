@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   AgentRunApplicationError,
+  type AgentRunInFlightQuery,
   type AgentRunProductionInput,
   type AgentRunProductionResult,
   type AgentRunRepository,
@@ -23,6 +24,11 @@ export class AgentRunService {
       ...input,
       traceId: input.traceId ?? randomUUID(),
     });
+  }
+
+  /** 读取某目标上仍在执行（queued/running）的任务快照；业务用例据此做目标级幂等。 */
+  async findInFlightRun(query: AgentRunInFlightQuery): Promise<AgentRunSnapshot | null> {
+    return this.agentRunRepository.findInFlightRun(query);
   }
 
   async getOwnedRun(ownerId: string, agentRunId: string): Promise<AgentRunSnapshot> {

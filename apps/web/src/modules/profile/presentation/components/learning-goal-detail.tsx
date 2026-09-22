@@ -87,7 +87,7 @@ export function LearningGoalDetail({ goalId }: Readonly<{ goalId: string }>) {
         </div>
         {planGenerationAvailable ? (
           <>
-            <PlanGenerationAction activePlanId={goal.active_learning_plan_id} goalId={goal.id} />
+            <PlanGenerationAction activePlanId={goal.active_learning_plan_id} goalId={goal.id} inFlightRunId={goal.latest_plan_run_id} />
             {latestAssessment ? (
               <Button asChild className="mt-3 rounded-xl" variant="outline">
                 <Link href={"/assessments/" + latestAssessment.id}>查看前测<ArrowRight aria-hidden className="size-4" /></Link>
@@ -110,11 +110,15 @@ function getPrimaryAction(
   goal: LearningGoal,
   latestAssessment: LatestAssessmentSummary | null,
 ): { label: string; href: string | null } {
+  // 在途生成任务优先：这是从 AgentRun 派生的状态，不依赖 learning_goals.status（该列目前只写入创建时的默认值）。
+  if (goal.latest_assessment_run_id) {
+    return { label: "前测生成中", href: null };
+  }
+  if (goal.latest_plan_run_id) {
+    return { label: "生成路线中", href: null };
+  }
   if (latestAssessment && ["ready", "in_progress", "submitted", "grading", "graded"].includes(latestAssessment.status)) {
     return { label: "查看前测", href: `/assessments/${latestAssessment.id}` };
-  }
-  if (goal.status === "assessment_in_progress" || goal.status === "planning" || latestAssessment?.status === "generating") {
-    return { label: "前测生成中", href: null };
   }
   if (goal.status === "assessment_pending" || goal.status === "draft" || goal.status === "failed" || latestAssessment?.status === "failed") {
     return { label: "开始前测", href: `/goals/${goal.id}/assessment` };

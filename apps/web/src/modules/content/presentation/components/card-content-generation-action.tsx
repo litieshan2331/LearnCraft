@@ -2,7 +2,8 @@
  * 节点知识内容生成操作组件。
  *
  * 组件与函数：
- * - CardContentGenerationAction：创建 card_content_generate 任务并轮询其状态。
+ * - CardContentGenerationAction：创建 card_content_generate 任务并轮询其状态；
+ *   刷新页面后本地没有 run 对象，改用节点返回的「在途 run id」接上同一个任务，继续展示真实进度。
  * - isInFlight：判断节点内容任务是否仍在执行。
  * - toDisplayError：将安全接口错误转换为用户可读文案。
  */
@@ -28,10 +29,13 @@ const POLL_INTERVAL_MS = 2_000;
 export function CardContentGenerationAction({
   planNodeId,
   contentStatus,
+  inFlightRunId,
   onCompleted,
 }: Readonly<{
   planNodeId: string;
   contentStatus: string;
+  /** 节点在读接口里带出的在途 run id；刷新页面后靠它恢复进度展示，没有在途任务时为 null。 */
+  inFlightRunId: string | null;
   onCompleted: () => void | Promise<void>;
 }>) {
   const [agentRun, setAgentRun] = useState<CardContentGenerationRun | null>(null);
@@ -129,6 +133,47 @@ export function CardContentGenerationAction({
       }
     };
   }, [agentRun, contentStatus, onCompleted]);
+
+  // 刷新后本地没有 run 对象：用节点带来的在途 run id 取回同一个任务，
+  // 之后上面的轮询与进度面板照常工作；失败时退回静态「正在生成」面板 + 节点轮询。
+  useEffect(() => {
+    if (agentRun || !inFlightRunId || contentStatus !== "generating") {
+      return;
+    }
+
+    let active = true;
+    void getCardContentGenerationRun(inFlightRunId)
+      .then(async (latestRun) => {
+        if (!active) {
+          return;
+        }
+        if (latestRun.status === "succeeded") {
+          await onCompleted();
+          if (active) {
+            setAgentRun(latestRun);
+          }
+          return;
+        }
+        if (latestRun.status === "failed") {
+          setAgentRun(latestRun);
+          setErrorMessage(latestRun.error?.message ?? "节点知识内容生成失败，请重新发起。");
+          return;
+        }
+        if (latestRun.status === "cancelled" || latestRun.status === "expired") {
+          setAgentRun(latestRun);
+          setErrorMessage("节点知识内容生成任务已结束，请重新发起。");
+          return;
+        }
+        setAgentRun(latestRun);
+      })
+      .catch(() => {
+        // 读不到就退回静态面板，不打断页面。
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [agentRun, contentStatus, inFlightRunId, onCompleted]);
 
   async function handleGenerate(): Promise<void> {
     setErrorMessage(null);

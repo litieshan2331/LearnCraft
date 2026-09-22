@@ -53,6 +53,10 @@ export interface LearningGoal {
   profile_version: number;
   status: LearningGoalStatus;
   active_learning_plan_id: string | null;
+  /** 该目标正在执行的 plan_generate 任务 id（刷新后据此接回进度流）；无在途任务时为 null。 */
+  latest_plan_run_id: string | null;
+  /** 该目标正在执行的 assessment_generate 任务 id（刷新后据此接回进度流）；无在途任务时为 null。 */
+  latest_assessment_run_id: string | null;
   created_at: string;
   updated_at: string;
 }

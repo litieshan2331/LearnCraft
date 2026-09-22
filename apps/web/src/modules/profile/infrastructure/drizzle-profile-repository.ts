@@ -189,7 +189,13 @@ export class DrizzleProfileRepository implements ProfileRepository {
       ))
       .limit(1);
 
-    return toLearningGoalSnapshot(goal, activePlan?.id ?? null);
+    const inFlightByGoalId = await findInFlightGenerationsByGoal(database, ownerId, [goal.id]);
+
+    return toLearningGoalSnapshot(
+      goal,
+      activePlan?.id ?? null,
+      inFlightByGoalId.get(goal.id) ?? NO_IN_FLIGHT_GENERATIONS,
+    );
   }
 
   async findOwnedGoals(ownerId: string): Promise<LearningGoalListItemSnapshot[]> {
@@ -231,8 +237,18 @@ export class DrizzleProfileRepository implements ProfileRepository {
       ));
     const activePlanIdByGoalId = new Map(activePlans.map((plan) => [plan.goalId, plan.id]));
 
+    const inFlightByGoalId = await findInFlightGenerationsByGoal(
+      database,
+      ownerId,
+      goals.map((goal) => goal.id),
+    );
+
     return goals.map((goal) => ({
-      ...toLearningGoalSnapshot(goal, activePlanIdByGoalId.get(goal.id) ?? null),
+      ...toLearningGoalSnapshot(
+        goal,
+        activePlanIdByGoalId.get(goal.id) ?? null,
+        inFlightByGoalId.get(goal.id) ?? NO_IN_FLIGHT_GENERATIONS,
+      ),
       latestDiagnosticAssessment: toLatestDiagnosticAssessmentSnapshot(
         latestDiagnosticByGoalId.get(goal.id) ?? null,
       ),
@@ -367,9 +383,56 @@ function toLearnerProfileSnapshot(record: LearnerProfileRecord): LearnerProfileS
   };
 }
 
+interface GoalInFlightGenerations {
+  planRunId: string | null;
+  assessmentRunId: string | null;
+}
+
+const NO_IN_FLIGHT_GENERATIONS: GoalInFlightGenerations = { planRunId: null, assessmentRunId: null };
+
+/**
+ * 读取这些目标上仍在执行的生成任务 id（queued/running），按 run_type 归类为最新的一条。
+ * 页面刷新后据此继续展示生成进度；每类同时最多一条在途。
+ */
+async function findInFlightGenerationsByGoal(
+  database: ReturnType<typeof getDatabase>,
+  ownerId: string,
+  goalIds: string[],
+): Promise<Map<string, GoalInFlightGenerations>> {
+  const result = new Map<string, GoalInFlightGenerations>();
+  if (goalIds.length === 0) {
+    return result;
+  }
+
+  const runs = await database
+    .select({ id: agentRuns.id, goalId: agentRuns.goalId, runType: agentRuns.runType })
+    .from(agentRuns)
+    .where(and(
+      eq(agentRuns.ownerId, ownerId),
+      inArray(agentRuns.goalId, goalIds),
+      inArray(agentRuns.runType, ["plan_generate", "assessment_generate"]),
+      inArray(agentRuns.status, ACTIVE_AGENT_RUN_STATUSES),
+    ))
+    .orderBy(desc(agentRuns.createdAt), desc(agentRuns.id));
+
+  for (const run of runs) {
+    const current = result.get(run.goalId) ?? { ...NO_IN_FLIGHT_GENERATIONS };
+    if (run.runType === "plan_generate" && current.planRunId === null) {
+      current.planRunId = run.id;
+    }
+    if (run.runType === "assessment_generate" && current.assessmentRunId === null) {
+      current.assessmentRunId = run.id;
+    }
+    result.set(run.goalId, current);
+  }
+
+  return result;
+}
+
 function toLearningGoalSnapshot(
   record: LearningGoalRecord,
   activeLearningPlanId: string | null = null,
+  inFlight: GoalInFlightGenerations = NO_IN_FLIGHT_GENERATIONS,
 ): LearningGoalSnapshot {
   if (!record.topic.trim() || !isLearningGoalStatus(record.status)) {
     throw new Error("学习目标包含不支持的主题或状态。");
@@ -388,6 +451,8 @@ function toLearningGoalSnapshot(
     profileVersion: record.profileVersion,
     status: record.status,
     activeLearningPlanId,
+    latestPlanRunId: inFlight.planRunId,
+    latestAssessmentRunId: inFlight.assessmentRunId,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };

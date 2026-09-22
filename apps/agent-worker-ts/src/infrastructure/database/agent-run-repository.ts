@@ -1,7 +1,9 @@
 /**
  * AgentRun 生命周期的 PostgreSQL Repository（等价于 Python 的 SqlAlchemyAgentRunRepository）。
  *
- * 职责：只维护 agent schema 中的运行状态与有序事件，绝不写入 Web 核心业务表。
+ * 职责：只维护 agent schema 中的运行状态与有序事件。
+ * 唯一例外：card_content_generate 最终失败时，在同一事务里把 public.plan_nodes.content_status 置回 'failed'
+ * （成功路径由 Web 的 card-content-result 置 'ready'）——否则页面会永远停在"生成中"。除此之外不写 Web 业务表。
  * 关键不变量：
  * - 每次变更都在同一事务内先对 agent_runs 取 FOR UPDATE 行锁；
  * - 事件序号在行锁内以 MAX(sequence_no)+1 生成，由 uq_agent_run_events_sequence 兜底；
@@ -62,6 +64,12 @@ const SQL_MARK_FAILED = [
   'UPDATE agent.agent_runs',
   "SET status = 'failed', error_code = $2, error_summary = $3, finished_at = now()",
   'WHERE id = $1',
+].join(' ');
+
+const SQL_MARK_PLAN_NODE_CONTENT_FAILED = [
+  "UPDATE public.plan_nodes",
+  "SET content_status = 'failed'",
+  "WHERE id = $1 AND content_status = 'generating'",
 ].join(' ');
 
 const SQL_LAST_SEQUENCE = [
@@ -249,6 +257,11 @@ export class PgAgentRunRepository {
       const errorCode = input.errorCode.slice(0, 100);
       await client.query(SQL_MARK_FAILED, [row.id, errorCode, input.errorSummary.slice(0, 1_000)]);
       await this.appendEvent(client, row.id, 'run.failed', { error_code: errorCode });
+
+      // 节点内容生成失败要同步把节点状态从 generating 置回 failed，避免页面永久显示"生成中"。
+      if (row.run_type === 'card_content_generate' && row.target_type === 'plan_node') {
+        await client.query(SQL_MARK_PLAN_NODE_CONTENT_FAILED, [row.target_id]);
+      }
     });
   }
 

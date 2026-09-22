@@ -162,6 +162,7 @@ export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: stri
             attempts={attempts}
             activePlanId={goal?.active_learning_plan_id ?? null}
             goalId={assessment.goal_id}
+            inFlightRunId={goal?.latest_plan_run_id ?? null}
             showPlanGeneration={assessment.kind === "diagnostic" && goal !== null}
             showOnlyWrong={showOnlyWrong}
             onToggleWrong={() => setShowOnlyWrong((current) => !current)}
@@ -239,6 +240,7 @@ function AssessmentResult({
   attempts,
   activePlanId,
   goalId,
+  inFlightRunId,
   showPlanGeneration,
   showOnlyWrong,
   onToggleWrong,
@@ -247,6 +249,8 @@ function AssessmentResult({
   attempts: AssessmentAttemptSummary[];
   activePlanId: string | null;
   goalId: string;
+  /** 目标上在途的 plan_generate 任务 id；刷新后据此继续展示路线生成进度。 */
+  inFlightRunId: string | null;
   showPlanGeneration: boolean;
   showOnlyWrong: boolean;
   onToggleWrong: () => void;
@@ -262,7 +266,13 @@ function AssessmentResult({
         <ResultMetric label="错题数" value={String(wrongCount)} />
       </div>
 
-      {showPlanGeneration ? <PlanGenerationAction activePlanId={activePlanId} goalId={goalId} /> : null}
+      {showPlanGeneration ? (
+        <PlanGenerationAction
+          activePlanId={activePlanId}
+          goalId={goalId}
+          inFlightRunId={inFlightRunId}
+        />
+      ) : null}
       <div className="mt-7 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs tracking-[0.16em] text-primary">ANSWER REVIEW</p>

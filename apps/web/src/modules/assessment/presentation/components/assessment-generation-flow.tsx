@@ -79,6 +79,46 @@ export function AssessmentGenerationFlow({ goalId }: Readonly<{ goalId: string }
     };
   }, [goalId]);
 
+  // 刷新后本地没有 run 对象：用目标上带来的在途 run id 取回同一个任务，进度展示与轮询接着走。
+  useEffect(() => {
+    const inFlightRunId = goal?.latest_assessment_run_id ?? null;
+    if (agentRun || !inFlightRunId) {
+      return;
+    }
+
+    let isActive = true;
+    void getAgentRun(inFlightRunId)
+      .then((latestRun) => {
+        if (!isActive) {
+          return;
+        }
+        setAgentRun(latestRun);
+        if (latestRun.status === "succeeded") {
+          const assessmentId = latestRun.assessment_result?.assessment_id;
+          if (assessmentId) {
+            router.replace(`/assessments/${assessmentId}`);
+            return;
+          }
+          setErrorMessage("任务已完成，但未读取到题集编号。请重新发起前测。");
+          return;
+        }
+        if (latestRun.status === "failed") {
+          setErrorMessage(latestRun.error?.message ?? "前测生成失败，请重新发起。");
+          return;
+        }
+        if (latestRun.status === "cancelled" || latestRun.status === "expired") {
+          setErrorMessage("前测生成任务已结束，请重新发起。");
+        }
+      })
+      .catch(() => {
+        // 读不到就退回静态状态，不打断页面。
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [agentRun, goal?.latest_assessment_run_id, router]);
+
   useEffect(() => {
     if (!activeRunId || !activeRunStatus || !isInFlight(activeRunStatus)) {
       return;

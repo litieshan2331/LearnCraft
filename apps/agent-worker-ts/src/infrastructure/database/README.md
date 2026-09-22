@@ -3,6 +3,10 @@
 本目录只访问 `agent.agent_runs` 与 `agent.agent_run_events`；学习目标、路线、题集与卡片内容等核心业务表
 一律经 Web 内部 API 写入，不得直连，也不得在 Worker 内复制 Web 的领域模型。
 
+唯一例外：`card_content_generate` 且目标为 `plan_node` 的任务**最终失败**时，`markFailed` 会在同一事务里
+把 `public.plan_nodes.content_status` 从 `generating` 置回 `failed`（成功路径由 Web 的 `card-content-result` 置 `ready`），
+否则页面会永远停在“生成中”。这是唯一一处跨 schema 写入，不要扩大范围。
+
 文件：
 
 - `agent-run-repository.ts`：`PgAgentRunRepository`，提供 `beginExecution`（行锁 + 状态机）、`isCancelled`、

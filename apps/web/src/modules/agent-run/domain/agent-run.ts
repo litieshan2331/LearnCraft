@@ -93,9 +93,18 @@ export interface AgentRunCancellationResult {
   agentRun: AgentRunSnapshot | null;
 }
 
+/** 按目标（业务对象）查找在途任务：同一目标只允许一个 queued/running 任务。 */
+export interface AgentRunInFlightQuery {
+  ownerId: string;
+  runType: AgentRunType;
+  targetType: string;
+  targetId: string;
+}
+
 export interface AgentRunRepository {
   create(input: AgentRunProductionInput): Promise<AgentRunProductionResult>;
   findOwnedRun(ownerId: string, agentRunId: string): Promise<AgentRunSnapshot | null>;
+  findInFlightRun(query: AgentRunInFlightQuery): Promise<AgentRunSnapshot | null>;
   cancelOwnedRun(ownerId: string, agentRunId: string): Promise<AgentRunCancellationResult>;
 }
 

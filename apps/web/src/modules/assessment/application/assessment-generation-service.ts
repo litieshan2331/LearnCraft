@@ -36,6 +36,17 @@ export class AssessmentGenerationService {
       throw new AssessmentGenerationApplicationError("DEFAULT_MODEL_CONNECTION_REQUIRED");
     }
 
+    // 目标级幂等：该目标已有在途的前测生成任务时直接返回它，避免重复生成两份题集。
+    const inFlight = await this.agentRunRequester.findInFlightRun({
+      ownerId: input.ownerId,
+      runType: "assessment_generate",
+      targetType: "learning_goal",
+      targetId: input.goalId,
+    });
+    if (inFlight) {
+      return { agentRun: inFlight, created: false };
+    }
+
     return this.agentRunRequester.request({
       ownerId: input.ownerId,
       goalId: input.goalId,

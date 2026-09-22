@@ -43,6 +43,8 @@ export function presentPlanNode(node: PlanNodeSnapshot) {
     status: node.status,
     content_status: node.contentStatus,
     card_content_id: node.cardContentId,
+    latest_content_run_id: node.latestContentRunId,
+    latest_posttest_run_id: node.latestPosttestRunId,
     prerequisite_node_ids: node.prerequisiteNodeIds,
   };
 }

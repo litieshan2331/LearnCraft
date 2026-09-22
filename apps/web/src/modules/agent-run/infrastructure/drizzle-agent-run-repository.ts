@@ -5,7 +5,7 @@
  * - DrizzleAgentRunRepository：在同一 PostgreSQL 事务中创建 AgentRun、审计事件与 Outbox，并以行锁实现状态读取和协作式取消。
  */
 
-import { and, eq, max } from "drizzle-orm";
+import { and, desc, eq, inArray, max } from "drizzle-orm";
 
 import { getDatabase } from "@/lib/db/client";
 import { agentRunEvents, agentRuns, outboxEvents } from "@/lib/db/schema";
@@ -16,6 +16,7 @@ import {
   isAgentRunStatus,
   isAgentRunType,
   type AgentRunCancellationResult,
+  type AgentRunInFlightQuery,
   type AgentRunProductionInput,
   type AgentRunProductionResult,
   type AgentRunRepository,
@@ -104,6 +105,24 @@ export class DrizzleAgentRunRepository implements AgentRunRepository {
       .select()
       .from(agentRuns)
       .where(and(eq(agentRuns.id, agentRunId), eq(agentRuns.ownerId, ownerId)))
+      .limit(1);
+
+    return agentRun ? toAgentRunSnapshot(agentRun) : null;
+  }
+
+  async findInFlightRun(query: AgentRunInFlightQuery): Promise<AgentRunSnapshot | null> {
+    const database = getDatabase();
+    const [agentRun] = await database
+      .select()
+      .from(agentRuns)
+      .where(and(
+        eq(agentRuns.ownerId, query.ownerId),
+        eq(agentRuns.runType, query.runType),
+        eq(agentRuns.targetType, query.targetType),
+        eq(agentRuns.targetId, query.targetId),
+        inArray(agentRuns.status, ["queued", "running"]),
+      ))
+      .orderBy(desc(agentRuns.createdAt))
       .limit(1);
 
     return agentRun ? toAgentRunSnapshot(agentRun) : null;

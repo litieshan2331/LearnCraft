@@ -37,14 +37,22 @@ export class CardContentGenerationService {
     if (context.contentStatus === "ready") {
       throw new CardContentGenerationApplicationError("CARD_CONTENT_ALREADY_AVAILABLE");
     }
-    if (context.contentStatus === "generating") {
-      throw new CardContentGenerationApplicationError("CARD_CONTENT_GENERATION_IN_PROGRESS");
+    // 目标级幂等：该节点已有在途任务时直接返回它（不再新建、也不报错），
+    // 这样刷新页面后再点一次同样安全，前端还能拿到 run id 继续展示真实进度。
+    const inFlight = await this.agentRunRequester.findInFlightRun({
+      ownerId: input.ownerId,
+      runType: "card_content_generate",
+      targetType: "plan_node",
+      targetId: context.planNodeId,
+    });
+    if (inFlight) {
+      return { agentRun: inFlight, created: false };
     }
     if (!await this.contextRepository.hasDefaultModelConnection(input.ownerId)) {
       throw new CardContentGenerationApplicationError("DEFAULT_MODEL_CONNECTION_REQUIRED");
     }
 
-    return this.agentRunRequester.request({
+    const result = await this.agentRunRequester.request({
       ownerId: input.ownerId,
       goalId: context.goalId,
       runType: "card_content_generate",
@@ -87,5 +95,13 @@ export class CardContentGenerationService {
         },
       },
     });
+
+    if (result.created) {
+      // 节点进入"生成中"：刷新页面后据此继续展示进度并禁止重复发起。
+      // 成功由 card-content-result 置 ready；最终失败由 Worker 在 markFailed 里置 failed。
+      await this.contextRepository.markContentStatus(input.ownerId, context.planNodeId, "generating");
+    }
+
+    return result;
   }
 }

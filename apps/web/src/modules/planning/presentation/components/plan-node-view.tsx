@@ -175,11 +175,12 @@ export function PlanNodeView({ nodeId }: Readonly<{ nodeId: string }>) {
 
       <CardContentGenerationAction
         contentStatus={node.content_status}
+        inFlightRunId={node.latest_content_run_id}
         onCompleted={refreshNode}
         planNodeId={node.id}
       />
       <NodeCompletionAction node={node} onCompleted={(nextNode) => setNode(nextNode)} />
-      <PosttestGenerationAction contentReady={Boolean(node.card_content_id)} existingAssessment={posttests[0] ?? null} planNodeId={node.id} posttestAttempts={posttestAttempts} />
+      <PosttestGenerationAction contentReady={Boolean(node.card_content_id)} existingAssessment={posttests[0] ?? null} inFlightRunId={node.latest_posttest_run_id} planNodeId={node.id} posttestAttempts={posttestAttempts} />
       {content ? <CardContentView content={content} /> : null}
 
     </main>

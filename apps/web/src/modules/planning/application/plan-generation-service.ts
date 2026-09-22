@@ -39,6 +39,18 @@ export class PlanGenerationService {
       throw new PlanGenerationApplicationError("DEFAULT_MODEL_CONNECTION_REQUIRED");
     }
 
+    // 目标级幂等：该目标已有在途的 plan_generate 任务时直接返回它，
+    // 避免连点两次生成两份路线（后一份会把前一份置为 superseded）。
+    const inFlight = await this.agentRunRequester.findInFlightRun({
+      ownerId: input.ownerId,
+      runType: "plan_generate",
+      targetType: "learning_goal",
+      targetId: context.goalId,
+    });
+    if (inFlight) {
+      return { agentRun: inFlight, created: false };
+    }
+
     const inputSnapshot = {
       goal: {
         id: context.goalId,

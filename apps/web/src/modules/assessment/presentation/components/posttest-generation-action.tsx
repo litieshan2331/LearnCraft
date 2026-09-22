@@ -30,11 +30,14 @@ const POLL_INTERVAL_MS = 2_000;
 export function PosttestGenerationAction({
   planNodeId,
   contentReady,
+  inFlightRunId,
   existingAssessment,
   posttestAttempts,
 }: Readonly<{
   planNodeId: string;
   contentReady: boolean;
+  /** 节点在读接口里带出的在途后测任务 id；刷新后据此恢复进度展示，没有在途任务时为 null。 */
+  inFlightRunId: string | null;
   existingAssessment: PosttestAssessmentSummary | null;
   posttestAttempts: PosttestAssessmentAttemptRecord[];
 }>) {
@@ -86,6 +89,45 @@ export function PosttestGenerationAction({
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [runId, runStatus, router]);
+
+  // 刷新后本地没有 run 对象：用节点带来的在途 run id 取回同一个任务。
+  useEffect(() => {
+    if (agentRun || !inFlightRunId) {
+      return;
+    }
+
+    let active = true;
+    void getAgentRun(inFlightRunId)
+      .then((latest) => {
+        if (!active) {
+          return;
+        }
+        setAgentRun(latest);
+        if (latest.status === "succeeded") {
+          const assessmentId = latest.assessment_result?.assessment_id;
+          if (assessmentId) {
+            router.replace("/assessments/" + assessmentId);
+            return;
+          }
+          setErrorMessage("后测已生成，但未返回题集编号。请重新发起。");
+          return;
+        }
+        if (latest.status === "failed") {
+          setErrorMessage(latest.error?.message ?? "后测生成失败，请重新发起。");
+          return;
+        }
+        if (latest.status === "cancelled" || latest.status === "expired") {
+          setErrorMessage("后测生成任务已结束，请重新发起。");
+        }
+      })
+      .catch(() => {
+        // 读不到就退回静态状态，不打断页面。
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [agentRun, inFlightRunId, router]);
 
   async function handleGenerate(): Promise<void> {
     setErrorMessage(null);

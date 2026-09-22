@@ -50,6 +50,8 @@ const learningGoal: LearningGoalSnapshot = {
   profileVersion: learnerProfile.profileVersion,
   status: "assessment_pending",
   activeLearningPlanId: null,
+  latestPlanRunId: null,
+  latestAssessmentRunId: null,
   createdAt: new Date("2026-08-01T00:00:00.000Z"),
   updatedAt: new Date("2026-08-01T00:00:00.000Z"),
 };

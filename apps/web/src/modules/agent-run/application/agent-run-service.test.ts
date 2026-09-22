@@ -50,6 +50,10 @@ class FakeAgentRunRepository implements AgentRunRepository {
     return this.foundRun;
   }
 
+  async findInFlightRun(): Promise<AgentRunSnapshot | null> {
+    return this.foundRun;
+  }
+
   async cancelOwnedRun(): Promise<AgentRunCancellationResult> {
     return this.cancellationResult;
   }

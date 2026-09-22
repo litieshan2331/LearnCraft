@@ -94,6 +94,21 @@ export class DrizzleCardContentGenerationContextRepository implements CardConten
     };
   }
 
+  async markContentStatus(
+    ownerId: string,
+    planNodeId: string,
+    status: "generating" | "failed",
+  ): Promise<void> {
+    const database = getDatabase();
+    await database
+      .update(planNodes)
+      .set({ contentStatus: status, updatedAt: new Date() })
+      .where(and(
+        eq(planNodes.id, planNodeId),
+        eq(planNodes.ownerId, ownerId),
+      ));
+  }
+
   async hasDefaultModelConnection(ownerId: string): Promise<boolean> {
     const database = getDatabase();
     const [record] = await database

@@ -63,9 +63,15 @@ class FakeContextRepository implements PosttestGenerationContextRepository {
 class FakeAgentRunRequester implements PosttestGenerationAgentRunRequester {
   input: Parameters<PosttestGenerationAgentRunRequester["request"]>[0] | null = null;
 
+  inFlightRun: AgentRunSnapshot | null = null;
+
   async request(input: Parameters<PosttestGenerationAgentRunRequester["request"]>[0]): Promise<AgentRunProductionResult> {
     this.input = input;
     return { agentRun, created: true };
+  }
+
+  async findInFlightRun(): Promise<AgentRunSnapshot | null> {
+    return this.inFlightRun;
   }
 }
 
@@ -127,7 +133,25 @@ describe("PosttestGenerationService", () => {
     })).rejects.toMatchObject({ code: "POSTTEST_ATTEMPT_REQUIRED" });
   });
 
-  it("后测生成任务进行中时禁止重复创建", async () => {
+  it("后测生成任务进行中时返回既有任务而不重复创建", async () => {
+    const contextRepository = new FakeContextRepository();
+    contextRepository.availability = "active";
+    const requester = new FakeAgentRunRequester();
+    requester.inFlightRun = agentRun;
+    const service = new PosttestGenerationService(contextRepository, requester);
+
+    await expect(service.request({
+      ownerId,
+      planNodeId,
+      questionCount: 6,
+      difficulty: "normal",
+      idempotencyKey: "e9a3bbb1-0b6d-476d-9038-c50b192df519",
+    })).resolves.toEqual({ agentRun, created: false });
+
+    expect(requester.input).toBeNull();
+  });
+
+  it("可用性为 active 但查不到在途任务时仍报冲突", async () => {
     const contextRepository = new FakeContextRepository();
     contextRepository.availability = "active";
     const service = new PosttestGenerationService(contextRepository, new FakeAgentRunRequester());
@@ -137,7 +161,7 @@ describe("PosttestGenerationService", () => {
       planNodeId,
       questionCount: 6,
       difficulty: "normal",
-      idempotencyKey: "e9a3bbb1-0b6d-476d-9038-c50b192df519",
+      idempotencyKey: "f9a3bbb1-0b6d-476d-9038-c50b192df519",
     })).rejects.toMatchObject({ code: "POSTTEST_GENERATION_IN_PROGRESS" });
   });
 

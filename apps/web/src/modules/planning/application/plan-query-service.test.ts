@@ -38,6 +38,8 @@ const node: PlanNodeSnapshot = {
   status: "available",
   contentStatus: "not_started",
   cardContentId: null,
+  latestContentRunId: null,
+  latestPosttestRunId: null,
   prerequisiteNodeIds: [],
 };
 

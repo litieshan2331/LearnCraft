@@ -92,6 +92,62 @@ function buildRepository(options: {
   return { repository: new PgAgentRunRepository(new FakePool(client)), client };
 }
 
+describe('PgAgentRunRepository.markFailed', () => {
+  it('card_content_generate 最终失败时把节点内容状态置回 failed（同一事务）', async () => {
+    const { repository, client } = buildRepository({
+      row: runRow({
+        run_type: 'card_content_generate',
+        target_type: 'plan_node',
+        target_id: 'node-1',
+        status: 'running',
+      }),
+    });
+
+    await repository.markFailed({
+      runId: RUN_ID,
+      errorCode: 'CARD_CONTENT_OUTPUT_INVALID',
+      errorSummary: '模型输出不符合 card_content.v2',
+    });
+
+    const update = client.find('UPDATE public.plan_nodes');
+    expect(update?.values).toEqual(['node-1']);
+    expect(client.count('UPDATE public.plan_nodes')).toBe(1);
+    expect(client.queries.at(-1)?.text).toBe('COMMIT');
+  });
+
+  it('其它类型的失败不改动节点内容状态', async () => {
+    const { repository, client } = buildRepository({
+      row: runRow({ run_type: 'plan_generate', status: 'running' }),
+    });
+
+    await repository.markFailed({
+      runId: RUN_ID,
+      errorCode: 'MODEL_TIMEOUT',
+      errorSummary: '模型超时',
+    });
+
+    expect(client.count('UPDATE public.plan_nodes')).toBe(0);
+  });
+
+  it('终态运行的重复投递不再写节点状态', async () => {
+    const { repository, client } = buildRepository({
+      row: runRow({
+        run_type: 'card_content_generate',
+        target_type: 'plan_node',
+        status: 'failed',
+      }),
+    });
+
+    await repository.markFailed({
+      runId: RUN_ID,
+      errorCode: 'CARD_CONTENT_OUTPUT_INVALID',
+      errorSummary: '重复投递',
+    });
+
+    expect(client.count('UPDATE public.plan_nodes')).toBe(0);
+  });
+});
+
 describe('PgAgentRunRepository.beginExecution', () => {
   it('以行锁领取 queued 运行并追加 run.started', async () => {
     const { repository, client } = buildRepository({ lastSequenceNo: 3 });

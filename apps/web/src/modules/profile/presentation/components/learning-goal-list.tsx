@@ -175,7 +175,7 @@ function GoalCard({
           <p className="truncate text-xs font-medium tracking-[0.14em] text-primary">{goal.topic}</p>
           <h2 className="mt-3 font-heading text-2xl font-medium tracking-tight">{goal.title}</h2>
         </div>
-        <GoalStatusBadge status={goal.status} />
+        <GoalStatusBadge status={getDisplayStatus(goal)} />
       </div>
 
       <p className="mt-4 line-clamp-2 text-sm leading-7 text-muted-foreground">{goal.description}</p>
@@ -238,18 +238,36 @@ function getGoalStatusPresentation(status: LearningGoalListItem["status"]): { la
   return presentations[status];
 }
 
+/**
+ * 展示用状态：有在途生成任务时优先显示「前测中 / 生成路线中」。
+ * 这是从 AgentRun 派生的状态，不依赖 learning_goals.status（该列目前只写入创建时的默认值）。
+ */
+function getDisplayStatus(goal: LearningGoalListItem): LearningGoalListItem["status"] {
+  if (goal.latest_assessment_run_id) {
+    return "assessment_in_progress";
+  }
+  if (goal.latest_plan_run_id) {
+    return "planning";
+  }
+  return goal.status;
+}
+
 function getPrimaryAction(goal: LearningGoalListItem): { label: string; href: string | null } {
   if (goal.active_learning_plan_id) {
     return { label: "查看学习路线", href: "/learning-plans/" + goal.active_learning_plan_id };
+  }
+  const status = getDisplayStatus(goal);
+  if (status === "assessment_in_progress") {
+    return { label: "前测生成中", href: null };
+  }
+  if (status === "planning") {
+    return { label: "生成路线中", href: null };
   }
   const assessment = goal.latest_assessment;
   if (assessment && ["ready", "in_progress", "submitted", "grading", "graded"].includes(assessment.status)) {
     return { label: "查看前测", href: `/assessments/${assessment.id}` };
   }
-  if (goal.status === "assessment_in_progress" || goal.status === "planning" || assessment?.status === "generating") {
-    return { label: "前测生成中", href: null };
-  }
-  if (goal.status === "assessment_pending" || goal.status === "draft" || goal.status === "failed" || assessment?.status === "failed") {
+  if (status === "assessment_pending" || status === "draft" || status === "failed" || assessment?.status === "failed") {
     return { label: "开始前测", href: `/goals/${goal.id}/assessment` };
   }
   return { label: "查看详情", href: `/goals/${goal.id}` };

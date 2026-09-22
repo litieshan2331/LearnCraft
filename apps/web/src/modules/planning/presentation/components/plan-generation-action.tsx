@@ -29,8 +29,17 @@ const POLL_INTERVAL_MS = 2_000;
 
 export function PlanGenerationAction({
   goalId,
-  activePlanId = null,
-}: Readonly<{ goalId: string; activePlanId?: string | null }>) {
+  activePlanId,
+  inFlightRunId,
+}: Readonly<{
+  goalId: string;
+  activePlanId: string | null;
+  /**
+   * 目标上在途的 plan_generate 任务 id：刷新后据此接回同一个任务的进度流。
+   * 刻意设为必填——漏传会让「刷新后仍在生成中」静默失效，因此由类型检查兜住。
+   */
+  inFlightRunId: string | null;
+}>) {
   const router = useRouter();
   const [agentRun, setAgentRun] = useState<PlanGenerationAgentRun | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -97,6 +106,45 @@ export function PlanGenerationAction({
       }
     };
   }, [activeRunId, activeRunStatus, router]);
+
+  // 刷新后本地没有 run 对象：用目标上带来的在途 run id 取回同一个任务，进度展示与轮询接着走。
+  useEffect(() => {
+    if (agentRun || !inFlightRunId) {
+      return;
+    }
+
+    let active = true;
+    void getPlanGenerationRun(inFlightRunId)
+      .then((latestRun) => {
+        if (!active) {
+          return;
+        }
+        setAgentRun(latestRun);
+        if (latestRun.status === "succeeded") {
+          const planId = latestRun.plan_result?.learning_plan_id;
+          if (planId) {
+            router.replace("/learning-plans/" + planId);
+          } else {
+            setErrorMessage("学习路线已生成，但未返回路线编号。请重新发起生成。");
+          }
+          return;
+        }
+        if (latestRun.status === "failed") {
+          setErrorMessage(latestRun.error?.message ?? "学习路线生成失败，请重新发起。");
+          return;
+        }
+        if (latestRun.status === "cancelled" || latestRun.status === "expired") {
+          setErrorMessage("学习路线生成任务已结束，请重新发起。");
+        }
+      })
+      .catch(() => {
+        // 读不到就退回静态状态，不打断页面。
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [agentRun, inFlightRunId, router]);
 
   async function handleGenerate(): Promise<void> {
     setErrorMessage(null);

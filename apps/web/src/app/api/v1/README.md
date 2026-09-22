@@ -8,7 +8,7 @@
 
 学习路线生成成功后，`GET /api/v1/learning-plans/{plan_id}` 返回书籍章节式路线目录，`GET /api/v1/plan-nodes/{node_id}` 返回单个章节详情；两者都按 Session 所有权过滤。路线展示页面位于 `/learning-plans/{plan_id}`。
 
-`POST /api/v1/plan-nodes/{node_id}/content-runs` 使用 UUID `Idempotency-Key` 创建节点知识内容任务，仅允许当前有效路线中尚无成功内容的节点发起；Worker 会异步执行 Node Tutor 并回写内容状态。
+`POST /api/v1/plan-nodes/{node_id}/content-runs` 使用 UUID `Idempotency-Key` 创建节点知识内容任务，仅允许当前有效路线中尚无成功内容的节点发起；除幂等键外还有**目标级幂等**：该节点已有在途（queued/running）任务时返回既有任务（200），不重复创建。节点 `content_status` 的流转是：创建后 `generating`、内容回写后 `ready`、最终失败 `failed`；`GET /api/v1/plan-nodes/{node_id}` 在生成中会一并返回 `latest_content_run_id`，页面据此在刷新后接上真实进度流。`plan_generate` 与 `assessment_generate` 同样采用**目标级幂等**，并各自在目标读接口带出在途任务 id（`latest_plan_run_id` / `latest_assessment_run_id`）；`posttest_generate` 的在途 id 由节点读接口的 `latest_posttest_run_id` 带出。这四个 id 都从 `agent_runs` 的 `queued`/`running` 派生，是页面刷新后恢复「生成中」显示与进度流的唯一依据。
 
 具体接口字段以 `packages/contracts/openapi/core.yaml` 为准。
 

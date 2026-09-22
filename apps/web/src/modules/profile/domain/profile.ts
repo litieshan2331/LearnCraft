@@ -63,6 +63,10 @@ export interface LearningGoalSnapshot {
   profileVersion: number;
   status: LearningGoalStatus;
   activeLearningPlanId: string | null;
+  /** 该目标正在执行的 plan_generate 任务 id（queued/running）；用于刷新后继续展示进度。 */
+  latestPlanRunId: string | null;
+  /** 该目标正在执行的 assessment_generate 任务 id（queued/running）；用于刷新后继续展示进度。 */
+  latestAssessmentRunId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

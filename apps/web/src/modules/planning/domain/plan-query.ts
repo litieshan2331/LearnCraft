@@ -45,6 +45,10 @@ export interface PlanNodeSnapshot extends LearningPlanNodeSnapshot {
   goalId: string;
   planTitle: string;
   planStatus: string;
+  /** 该节点正在执行的 card_content_generate 运行 id；没有在途任务时为 null。 */
+  latestContentRunId: string | null;
+  /** 该节点正在执行的 posttest_generate 运行 id；没有在途任务时为 null。 */
+  latestPosttestRunId: string | null;
 }
 
 export interface PlanQueryRepository {

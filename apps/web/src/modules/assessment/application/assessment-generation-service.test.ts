@@ -59,9 +59,15 @@ class FakeContextRepository implements AssessmentGenerationContextRepository {
 class FakeAgentRunRequester implements AssessmentGenerationAgentRunRequester {
   input: Parameters<AssessmentGenerationAgentRunRequester["request"]>[0] | null = null;
 
+  inFlightRun: AgentRunSnapshot | null = null;
+
   async request(input: Parameters<AssessmentGenerationAgentRunRequester["request"]>[0]): Promise<AgentRunProductionResult> {
     this.input = input;
     return { agentRun, created: true };
+  }
+
+  async findInFlightRun(): Promise<AgentRunSnapshot | null> {
+    return this.inFlightRun;
   }
 }
 
@@ -94,6 +100,23 @@ describe("AssessmentGenerationService", () => {
         kind: "diagnostic",
       },
     });
+  });
+
+  it("目标已有在途前测任务时返回它而不重复创建", async () => {
+    const requester = new FakeAgentRunRequester();
+    requester.inFlightRun = agentRun;
+    const service = new AssessmentGenerationService(new FakeContextRepository(), requester);
+
+    await expect(service.request({
+      ownerId,
+      goalId,
+      kind: "diagnostic",
+      questionCount: 10,
+      difficulty: "hard",
+      idempotencyKey: "c9a3bbb1-0b6d-476d-9038-c50b192df519",
+    })).resolves.toEqual({ agentRun, created: false });
+
+    expect(requester.input).toBeNull();
   });
 
 });

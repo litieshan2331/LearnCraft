@@ -8,7 +8,7 @@
  * - AssessmentGenerationApplicationError：映射稳定的业务错误码。
  */
 
-import type { AgentRunProductionResult } from "@/modules/agent-run/domain/agent-run";
+import type { AgentRunProductionResult, AgentRunSnapshot } from "@/modules/agent-run/domain/agent-run";
 
 export const ASSESSMENT_GENERATION_KINDS = ["diagnostic"] as const;
 export const ASSESSMENT_GENERATION_DIFFICULTIES = ["normal", "hard"] as const;
@@ -54,6 +54,13 @@ export interface AssessmentGenerationAgentRunRequester {
     requestedModelProfile: string;
     inputSummaryJson: Record<string, unknown>;
   }): Promise<AgentRunProductionResult>;
+  /** 目标级幂等：该目标已有在途（queued/running）的 assessment_generate 任务时返回它。 */
+  findInFlightRun(query: {
+    ownerId: string;
+    runType: "assessment_generate";
+    targetType: "learning_goal";
+    targetId: string;
+  }): Promise<AgentRunSnapshot | null>;
 }
 
 export type AssessmentGenerationApplicationErrorCode =

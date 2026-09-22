@@ -43,6 +43,10 @@ export interface PlanNode extends LearningPlanNode {
   goal_id: string;
   plan_title: string;
   plan_status: string;
+  /** 该节点正在执行的 card_content_generate 运行 id（用于刷新后继续展示进度）；无在途任务时为 null。 */
+  latest_content_run_id: string | null;
+  /** 该节点正在执行的 posttest_generate 运行 id（用于刷新后继续展示进度）；无在途任务时为 null。 */
+  latest_posttest_run_id: string | null;
 }
 
 export type PlanGenerationAgentRunStatus =

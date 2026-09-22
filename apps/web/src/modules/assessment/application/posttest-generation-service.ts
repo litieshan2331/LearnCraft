@@ -44,6 +44,16 @@ export class PosttestGenerationService {
       input.planNodeId,
     );
     if (availability === "active") {
+      // 目标级幂等：已有在途任务时返回它（不再报错），前端据此接上同一个任务的进度流。
+      const inFlight = await this.agentRunRequester.findInFlightRun({
+        ownerId: input.ownerId,
+        runType: "posttest_generate",
+        targetType: "plan_node",
+        targetId: context.planNodeId,
+      });
+      if (inFlight) {
+        return { agentRun: inFlight, created: false };
+      }
       throw new PosttestGenerationApplicationError("POSTTEST_GENERATION_IN_PROGRESS");
     }
     if (availability === "awaiting_attempt") {

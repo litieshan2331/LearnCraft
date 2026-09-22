@@ -1436,6 +1436,8 @@ components:
         - profile_version
         - status
         - active_learning_plan_id
+        - latest_plan_run_id
+        - latest_assessment_run_id
         - created_at
         - updated_at
       properties:
@@ -1482,6 +1484,16 @@ components:
           format: uuid
           nullable: true
           description: 当前有效学习路线；尚未成功生成时为 null。
+        latest_plan_run_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 该目标正在执行的 plan_generate AgentRun id（queued/running）；页面刷新后前端据此继续展示真实进度。没有在途任务时为 null。
+        latest_assessment_run_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 该目标正在执行的 assessment_generate AgentRun id（queued/running）；页面刷新后前端据此继续展示真实进度。没有在途任务时为 null。
         created_at:
           type: string
           format: date-time
@@ -2110,7 +2122,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/LearningPlanNode'
         - type: object
-          required: [goal_id, plan_title, plan_status]
+          required: [goal_id, plan_title, plan_status, latest_content_run_id, latest_posttest_run_id]
           properties:
             goal_id:
               type: string
@@ -2119,6 +2131,16 @@ components:
               type: string
             plan_status:
               type: string
+            latest_content_run_id:
+              type: string
+              format: uuid
+              nullable: true
+              description: 该节点正在执行的 card_content_generate AgentRun id（queued/running）；页面刷新后前端据此继续展示真实进度。没有在途任务时为 null。
+            latest_posttest_run_id:
+              type: string
+              format: uuid
+              nullable: true
+              description: 该节点正在执行的 posttest_generate AgentRun id（queued/running）；页面刷新后前端据此继续展示真实进度。没有在途任务时为 null。
     ModelConnectionCreateRequest:
       type: object
       additionalProperties: false

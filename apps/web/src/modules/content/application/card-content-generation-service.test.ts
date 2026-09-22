@@ -43,6 +43,7 @@ const agentRun: AgentRunSnapshot = {
 
 class FakeContextRepository implements CardContentGenerationContextRepository {
   contentStatus: "not_requested" | "generating" | "ready" | "failed" = "not_requested";
+  readonly statusWrites: Array<{ ownerId: string; planNodeId: string; status: "generating" | "failed" }> = [];
 
   async findOwnedNodeContext() {
     return {
@@ -71,16 +72,26 @@ class FakeContextRepository implements CardContentGenerationContextRepository {
   async hasDefaultModelConnection() {
     return true;
   }
+
+  async markContentStatus(ownerId: string, planNodeId: string, status: "generating" | "failed") {
+    this.statusWrites.push({ ownerId, planNodeId, status });
+  }
 }
 
 class FakeAgentRunRequester implements CardContentGenerationAgentRunRequester {
   input: Parameters<CardContentGenerationAgentRunRequester["request"]>[0] | null = null;
+  inFlightRun: AgentRunSnapshot | null = null;
+  created = true;
 
   async request(
     input: Parameters<CardContentGenerationAgentRunRequester["request"]>[0],
   ): Promise<AgentRunProductionResult> {
     this.input = input;
-    return { agentRun, created: true };
+    return { agentRun, created: this.created };
+  }
+
+  async findInFlightRun(): Promise<AgentRunSnapshot | null> {
+    return this.inFlightRun;
   }
 }
 
@@ -129,5 +140,52 @@ describe("CardContentGenerationService", () => {
       code: "CARD_CONTENT_ALREADY_AVAILABLE",
     } satisfies Partial<CardContentGenerationApplicationError>);
     expect(requester.input).toBeNull();
+  });
+
+  it("节点已有在途任务时返回它、不新建、也不重复置 generating", async () => {
+    const contextRepository = new FakeContextRepository();
+    const requester = new FakeAgentRunRequester();
+    requester.inFlightRun = agentRun;
+    const service = new CardContentGenerationService(contextRepository, requester);
+
+    await expect(service.request({
+      ownerId,
+      planNodeId,
+      idempotencyKey: "b9a3bbb1-0b6d-476d-9038-c50b192df519",
+    })).resolves.toEqual({ agentRun, created: false });
+
+    expect(requester.input).toBeNull();
+    expect(contextRepository.statusWrites).toEqual([]);
+  });
+
+  it("新建任务成功后把节点置为 generating", async () => {
+    const contextRepository = new FakeContextRepository();
+    const requester = new FakeAgentRunRequester();
+    const service = new CardContentGenerationService(contextRepository, requester);
+
+    await service.request({
+      ownerId,
+      planNodeId,
+      idempotencyKey: "b9a3bbb1-0b6d-476d-9038-c50b192df519",
+    });
+
+    expect(contextRepository.statusWrites).toEqual([
+      { ownerId, planNodeId, status: "generating" },
+    ]);
+  });
+
+  it("幂等命中既有任务（created=false）时不重复置 generating", async () => {
+    const contextRepository = new FakeContextRepository();
+    const requester = new FakeAgentRunRequester();
+    requester.created = false;
+    const service = new CardContentGenerationService(contextRepository, requester);
+
+    await service.request({
+      ownerId,
+      planNodeId,
+      idempotencyKey: "b9a3bbb1-0b6d-476d-9038-c50b192df519",
+    });
+
+    expect(contextRepository.statusWrites).toEqual([]);
   });
 });

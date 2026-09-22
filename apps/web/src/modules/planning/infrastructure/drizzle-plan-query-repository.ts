@@ -5,10 +5,11 @@
  * - DrizzlePlanQueryRepository：按所有者读取路线、章节和前置关系。
  */
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { getDatabase } from "@/lib/db/client";
 import {
+  agentRuns,
   cardContents,
   learningPlans,
   planNodePrerequisites,
@@ -105,8 +106,41 @@ export class DrizzlePlanQueryRepository implements PlanQueryRepository {
       planTitle: record.planTitle,
       planStatus: record.planStatus,
       cardContentId: record.cardContentId ?? null,
+      // 节点正在生成时一并返回在途 run id，页面刷新后前端仍能接上真实进度流。
+      latestContentRunId: nodeSnapshot.contentStatus === "generating"
+        ? await findInFlightRunId(database, ownerId, record.node.id, "card_content_generate")
+        : null,
+      latestPosttestRunId: await findInFlightRunId(
+        database,
+        ownerId,
+        record.node.id,
+        "posttest_generate",
+      ),
     };
   }
+}
+
+/** 读取该节点上指定类型的在途运行 id（queued/running）；没有则返回 null。 */
+async function findInFlightRunId(
+  database: ReturnType<typeof getDatabase>,
+  ownerId: string,
+  planNodeId: string,
+  runType: "card_content_generate" | "posttest_generate",
+): Promise<string | null> {
+  const [run] = await database
+    .select({ id: agentRuns.id })
+    .from(agentRuns)
+    .where(and(
+      eq(agentRuns.ownerId, ownerId),
+      eq(agentRuns.runType, runType),
+      eq(agentRuns.targetType, "plan_node"),
+      eq(agentRuns.targetId, planNodeId),
+      inArray(agentRuns.status, ["queued", "running"]),
+    ))
+    .orderBy(desc(agentRuns.createdAt))
+    .limit(1);
+
+  return run?.id ?? null;
 }
 
 async function withPrerequisiteIds(

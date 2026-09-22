@@ -73,9 +73,15 @@ class FakeContextRepository implements PlanGenerationContextRepository {
 class FakeAgentRunRequester implements PlanGenerationAgentRunRequester {
   input: Parameters<PlanGenerationAgentRunRequester["request"]>[0] | null = null;
 
+  inFlightRun: AgentRunSnapshot | null = null;
+
   async request(input: Parameters<PlanGenerationAgentRunRequester["request"]>[0]): Promise<AgentRunProductionResult> {
     this.input = input;
     return { agentRun, created: true };
+  }
+
+  async findInFlightRun(): Promise<AgentRunSnapshot | null> {
+    return this.inFlightRun;
   }
 }
 
@@ -120,5 +126,19 @@ describe("PlanGenerationService", () => {
     })).rejects.toMatchObject({
       code: "PLAN_GENERATION_PREREQUISITES_NOT_MET",
     } satisfies Partial<PlanGenerationApplicationError>);
+  });
+
+  it("目标已有在途路线任务时返回它而不重复创建", async () => {
+    const requester = new FakeAgentRunRequester();
+    requester.inFlightRun = agentRun;
+    const service = new PlanGenerationService(new FakeContextRepository(), requester);
+
+    await expect(service.request({
+      ownerId,
+      goalId,
+      idempotencyKey: "c9a3bbb1-0b6d-476d-9038-c50b192df519",
+    })).resolves.toEqual({ agentRun, created: false });
+
+    expect(requester.input).toBeNull();
   });
 });

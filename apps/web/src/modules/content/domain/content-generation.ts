@@ -8,7 +8,7 @@
  * - CardContentGenerationApplicationError：映射稳定的内容生成业务错误。
  */
 
-import type { AgentRunProductionResult } from "@/modules/agent-run/domain/agent-run";
+import type { AgentRunProductionResult, AgentRunSnapshot } from "@/modules/agent-run/domain/agent-run";
 
 export interface CardContentGenerationRequest {
   ownerId: string;
@@ -44,6 +44,12 @@ export interface CardContentGenerationContextRepository {
     planNodeId: string,
   ): Promise<CardContentGenerationContext | null>;
   hasDefaultModelConnection(ownerId: string): Promise<boolean>;
+  /** 回写节点的内容状态：发起任务时置 generating，任务最终失败时置 failed（成功由结果回写置 ready）。 */
+  markContentStatus(
+    ownerId: string,
+    planNodeId: string,
+    status: "generating" | "failed",
+  ): Promise<void>;
 }
 
 export interface CardContentGenerationAgentRunRequester {
@@ -61,6 +67,13 @@ export interface CardContentGenerationAgentRunRequester {
     requestedModelProfile: string;
     inputSummaryJson: Record<string, unknown>;
   }): Promise<AgentRunProductionResult>;
+  /** 目标级幂等：该节点已有在途（queued/running）的 card_content_generate 任务时返回它。 */
+  findInFlightRun(query: {
+    ownerId: string;
+    runType: "card_content_generate";
+    targetType: "plan_node";
+    targetId: string;
+  }): Promise<AgentRunSnapshot | null>;
 }
 
 export type CardContentGenerationApplicationErrorCode =
