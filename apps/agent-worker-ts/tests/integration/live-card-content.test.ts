@@ -217,7 +217,7 @@ describe.skipIf(!enabled)('真实 card_content_generate 端到端（经命令层
       };
       expect(card.status).toBe('ready');
       expect(card.version).toBe(1);
-      expect(card.schema_version).toBe('card_content.v1');
+      expect(card.schema_version).toBe('card_content.v2');
       expect(card.plan_node_id).toBe(planNodeId);
       expect(String(outputSummary.card_content_id)).toBe(card.id);
 
@@ -226,8 +226,16 @@ describe.skipIf(!enabled)('真实 card_content_generate 端到端（经命令层
       const memory = card.runner_spec_json.teaching_memory as Record<string, unknown>;
       expect(String(card.public_content_json.foundation).length).toBeGreaterThan(50);
       expect(Object.keys(workedExample).sort()).toEqual([
-        'call_sequence', 'code', 'expected_output', 'explanation',
+        'call_sequence', 'entry_file', 'expected_output', 'explanation', 'files',
       ]);
+      const files = workedExample.files as Array<Record<string, unknown>>;
+      expect(files.length).toBeGreaterThanOrEqual(1);
+      const entryFile = files.find((file) => file.path === workedExample.entry_file);
+      expect(entryFile).toBeDefined();
+      for (const file of files) {
+        expect(Object.keys(file).sort()).toEqual(['content', 'language', 'path', 'role']);
+      }
+      expect(typeof workedExample.expected_output).toBe('string');
       expect(pitfalls.length).toBeGreaterThanOrEqual(1);
       for (const pitfall of pitfalls) {
         expect(Object.keys(pitfall).sort()).toEqual(['cause', 'fix', 'title']);
@@ -243,7 +251,9 @@ describe.skipIf(!enabled)('真实 card_content_generate 端到端（经命令层
         '  · Web 已落库：card_content=' + card.id + '，foundation=' + String(card.public_content_json.foundation).length +
           ' 字，误区=' + String(pitfalls.length) + ' 项，key_concepts=' + String((memory.key_concepts as string[]).length) + ' 项',
       );
-      console.log('  · 示例代码首行：' + String(workedExample.code).split('\n')[0]);
+      console.log(
+        '  · 入口文件 ' + String(entryFile?.path) + ' 首行：' + String(entryFile?.content ?? '').split('\n')[0],
+      );
       console.log('  · 元数据=' + JSON.stringify(card.generation_metadata));
 
       // Web 在写入内容后把节点内容状态置为 ready（与 Python 路径完全一致）。

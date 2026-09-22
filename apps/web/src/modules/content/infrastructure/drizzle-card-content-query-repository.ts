@@ -14,6 +14,7 @@ import type {
   CardContentQueryRepository,
   CardContentSnapshot,
 } from "../domain/content-query";
+import { normalizeWorkedExample } from "./card-content-worked-example-normalizer";
 
 export class DrizzleCardContentQueryRepository implements CardContentQueryRepository {
   async findOwnedReadyContent(ownerId: string, cardContentId: string): Promise<CardContentSnapshot | null> {
@@ -35,8 +36,12 @@ export class DrizzleCardContentQueryRepository implements CardContentQueryReposi
     const publicContent = toRecord(content.publicContentJson);
     const foundation = toText(publicContent.foundation);
     const pitfallsDebug = toPitfallDebugList(publicContent.pitfalls_debug);
-    const workedExample = toRecord(publicContent.worked_example);
-    if (!foundation || !pitfallsDebug || pitfallsDebug.length === 0 || Object.keys(workedExample).length === 0) {
+    // v2 直接映射；v1（历史数据）在读侧按 `// 路径` 拆分归一化——v1 内容不重新生成，这条分支长期存在。
+    const workedExample = normalizeWorkedExample({
+      raw: publicContent.worked_example,
+      schemaVersion: content.schemaVersion,
+    });
+    if (!foundation || !pitfallsDebug || pitfallsDebug.length === 0 || workedExample === null) {
       return null;
     }
 

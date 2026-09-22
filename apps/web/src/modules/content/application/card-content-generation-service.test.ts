@@ -101,6 +101,7 @@ describe("CardContentGenerationService", () => {
       targetType: "plan_node",
       targetId: planNodeId,
       graphVersion: "card_content_generate.v1",
+      outputSchemaVersion: "card_content.v2",
       inputSummaryJson: {
         agent_role: "node_tutor",
         logical_session_key: "node:" + planNodeId,

@@ -2253,23 +2253,12 @@ components:
           enum: [ready]
         schema_version:
           type: string
-          enum: [card_content.v1]
+          description: 数据库中的存储版本；读取接口统一返回规范化后的 v2 worked_example 形状。
+          enum: [card_content.v1, card_content.v2]
         foundation:
           type: string
         worked_example:
-          type: object
-          required: [explanation, code, call_sequence, expected_output]
-          properties:
-            explanation:
-              type: string
-            code:
-              type: string
-            call_sequence:
-              type: array
-              items:
-                type: string
-            expected_output:
-              type: string
+          $ref: '#/components/schemas/CardContentRenderedWorkedExample'
         pitfalls_debug:
           type: array
           minItems: 1
@@ -2342,23 +2331,11 @@ components:
           format: uuid
         schema_version:
           type: string
-          enum: [card_content.v1]
+          enum: [card_content.v2]
         foundation:
           type: string
         worked_example:
-          type: object
-          required: [explanation, code, call_sequence, expected_output]
-          properties:
-            explanation:
-              type: string
-            code:
-              type: string
-            call_sequence:
-              type: array
-              items:
-                type: string
-            expected_output:
-              type: string
+          $ref: '#/components/schemas/CardContentWorkedExample'
         pitfalls_debug:
           type: array
           minItems: 1
@@ -2397,6 +2374,105 @@ components:
         generation_metadata:
           type: object
           additionalProperties: true
+    CardContentFile:
+      type: object
+      additionalProperties: false
+      required: [path, language, role, content]
+      description: worked_example 中的单个代码文件；language 只能取受控语言集合，未知语言在读取侧回落 text。
+      properties:
+        path:
+          type: string
+          minLength: 1
+        language:
+          type: string
+          enum: [js, jsx, ts, tsx, python, java, go, c, cpp, csharp, html, css, scss, sql, text]
+        role:
+          type: string
+          enum: [entry, types, module, ui, config, test, other]
+        content:
+          type: string
+    CardContentCallStep:
+      type: object
+      additionalProperties: false
+      required: [step, file, function, note]
+      description: 调用顺序中的一步，指向 files[] 中的文件与真实函数名。
+      properties:
+        step:
+          type: integer
+          minimum: 1
+        file:
+          type: string
+        function:
+          type: string
+        note:
+          type: string
+    CardContentWorkedExample:
+      type: object
+      additionalProperties: false
+      required: [explanation, files, entry_file, call_sequence, expected_output]
+      description: card_content.v2 的 worked_example；读取接口会把历史 v1 内容规范化为本形状后再返回。
+      properties:
+        explanation:
+          type: string
+        files:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/CardContentFile'
+        entry_file:
+          type: string
+          description: 必须是 files[] 中某个 path。
+        call_sequence:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/CardContentCallStep'
+        expected_output:
+          type: string
+          description: 保持单个字符串，由提示词约束以“文件路径 › 函数名：”开头。
+    CardContentRenderedFile:
+      type: object
+      additionalProperties: false
+      required: [path, language, role, content, html]
+      description: 读取接口返回的示例文件——在内部写回形状之上加服务端预渲染的高亮 HTML（html 不落库）。
+      properties:
+        path:
+          type: string
+        language:
+          type: string
+        role:
+          type: string
+        content:
+          type: string
+        html:
+          type: string
+          description: 已转义的内联高亮 HTML（只含 span 与转义文本，不含 pre 包裹与背景色）。
+    CardContentRenderedWorkedExample:
+      type: object
+      additionalProperties: false
+      required: [explanation, files, entry_file, call_sequence, expected_output]
+      description: 读取接口返回的 worked_example；与 CardContentWorkedExample 同形，区别是每个文件多一个 html。
+      properties:
+        explanation:
+          type: string
+        files:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/CardContentRenderedFile'
+        entry_file:
+          type: string
+          description: 必须是 files[] 中某个 path。
+        call_sequence:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/CardContentCallStep'
+        expected_output:
+          type: string
+          description: 保持单个字符串，由提示词约束以“文件路径 › 函数名：”开头。
     AgentRunResultSubmission:
       deprecated: true
       description: 预留的通用结果容器，当前没有任何接口实现它。实际回写请使用 assessment-result、plan-result、card-content-result 三个内部端点；保留该 schema 仅为记录早期设计，不得据此实现客户端。

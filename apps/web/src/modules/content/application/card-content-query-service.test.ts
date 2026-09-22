@@ -27,9 +27,14 @@ const content: CardContentSnapshot = {
   foundation: "变量用于保存程序运行过程中的值。",
   workedExample: {
     explanation: "计算两个数的平均值。",
-    code: "print((10 + 14) / 2)",
-    call_sequence: ["计算", "打印"],
-    expected_output: "12.0",
+    files: [
+      { path: "main.py", language: "python", role: "entry", content: "print((10 + 14) / 2)" },
+    ],
+    entryFile: "main.py",
+    callSequence: [
+      { step: 1, file: "main.py", function: "main", note: "计算并打印平均值" },
+    ],
+    expectedOutput: "12.0",
   },
   pitfallsDebug: [{ title: "字符串参与计算", cause: "输入值实际是字符串。", fix: "在计算前进行类型转换。" }],
   sourceRefs: [],

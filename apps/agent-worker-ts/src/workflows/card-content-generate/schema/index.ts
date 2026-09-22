@@ -1,29 +1,30 @@
 /**
- * card_content_generate 输入合同与节点知识内容合同
- * （输入部分自原 card-content-generate.ts 拆分；内容合同来自原 card-content-document.ts，
- * 等价于 Python card_content_generate.py 的 CardContentDocument / _normalize_card_content
- * 及其辅助函数）。
+ * card_content_generate 输入合同与节点知识内容合同（card_content.v2）。
  *
  * 职责：
  * - 输入：定义节点内容生成任务快照的契约（agent_role 固定 node_tutor、logical_session_key
  *   1-200、goal / learner_profile / learning_plan / plan_node 宽松对象，plan_node.id 必填）；
- * - 内容：定义 card_content.v1 的运行时校验（字段与 Web 内部接口 /card-content-result 完全一致），
- *   并把模型常见的宽松输出收敛到该形状。与 Python 不同的是：**规范化在每次解析时都会执行**
- *   （首轮、修复、兜底都一样），这正是 Python CardContentDocument.from_json 的行为。
+ * - 内容：定义 card_content.**v2** 的运行时校验（字段与 Web 内部接口 /card-content-result 完全一致），
+ *   并把模型常见的宽松输出收敛到该形状；规范化在每次解析时都会执行（首轮、修复、兜底都一样）。
  *
- * 与 Python 的差异：
- * - 输入：Python 直接取 value.plan_node["id"]，缺失即 KeyError；本实现在输入校验阶段
- *   返回 CARD_CONTENT_INPUT_INVALID。
- * - 内容：Python 的 teaching_memory 是 dict[str, Any]，内层长度上限只在 Web 侧校验；
- *   本实现用与 Web 相同的合同提前校验，因此 key_concepts 超过 300 字符之类的边界会**在本地**
- *   判定为输出非法并进入修复，而不是把请求发到 Web 换取 422（错误码因此可能从
- *   CARD_CONTENT_PERSISTENCE_REJECTED 变为 CARD_CONTENT_OUTPUT_INVALID）。
+ * v2 相对 v1 的变化（2026-09-21 用户确认）：
+ * - `worked_example.code: string`（多个文件挤在一段文本里）改为 `worked_example.files[]`
+ *   （一个文件一个元素，含 path / language / role / content）；
+ * - `worked_example.call_sequence: string[]`（自由文本）改为对象数组
+ *   （step / file / function / note），可校验、可点击跳转；
+ * - 新增 `worked_example.entry_file`，必须存在于 files 中；
+ * - `worked_example.expected_output` **保持字符串不变**（刻意不对象化）：格式靠提示词要求
+ *   "文件 › 函数：" 前缀，无法结构化校验、前端不做跳转（已知取舍）。
  *
  * 导出：
  * - CardContentGenerationInputSchema / CardContentGenerationInput：输入合同。
- * - CardContentPitfallDebugSchema / CardContentWorkedExampleSchema / CardContentTeachingMemorySchema
+ * - CARD_CONTENT_LANGUAGES / CardContentLanguageSchema：语言标识白名单（text 表示不高亮）。
+ * - CARD_CONTENT_FILE_ROLES / CardContentFileRoleSchema：文件角色。
+ * - CARD_CONTENT_FILE_LIMITS：文件数、单文件与总长度、调用步数上限。
+ * - CardContentFileSchema / CardContentCallStepSchema / CardContentWorkedExampleSchema
+ *   / CardContentPitfallDebugSchema / CardContentTeachingMemorySchema：内容子合同。
  * - CardContentDocumentSchema / CardContentDocument：节点内容合同与类型。
- * - CardContentParseError：解析或规范化失败，message 与 Python 的 ValueError 文案一致。
+ * - CardContentParseError：解析或规范化失败，携带脱敏字段路径供模型自纠。
  * - parseCardContentDocument：从模型文本解析出受校验的节点内容。
  * - normalizeCardContent：把宽松对象收敛为合同形状（供本模块与测试复用）。
  */
@@ -56,6 +57,67 @@ export const CardContentGenerationInputSchema = z
 
 export type CardContentGenerationInput = z.infer<typeof CardContentGenerationInputSchema>;
 
+/**
+ * 受支持的语言标识；`text` 表示不高亮（配置文件、伪代码、未知语言等的统一兜底）。
+ * 前端 Shiki 只注册这些语言中除 text 以外的部分。
+ */
+export const CARD_CONTENT_LANGUAGES = [
+  'js',
+  'jsx',
+  'ts',
+  'tsx',
+  'python',
+  'java',
+  'go',
+  'c',
+  'cpp',
+  'csharp',
+  'html',
+  'css',
+  'scss',
+  'sql',
+  'text',
+] as const;
+
+export const CardContentLanguageSchema = z.enum(CARD_CONTENT_LANGUAGES);
+export type CardContentLanguage = z.infer<typeof CardContentLanguageSchema>;
+
+/** 文件在教学示例中的角色；缺省按 module 处理。 */
+export const CARD_CONTENT_FILE_ROLES = ['entry', 'types', 'module', 'ui', 'config', 'test', 'other'] as const;
+export const CardContentFileRoleSchema = z.enum(CARD_CONTENT_FILE_ROLES).default('module');
+export type CardContentFileRole = z.infer<typeof CardContentFileRoleSchema>;
+
+/** 内容规模的硬上限（2026-09-21 用户确认的默认值）。 */
+export const CARD_CONTENT_FILE_LIMITS = {
+  maxFiles: 8,
+  maxFileChars: 6_000,
+  maxTotalChars: 24_000,
+  maxCallSteps: 20,
+} as const;
+
+export const CardContentFileSchema = z
+  .object({
+    /** 仓库相对路径，例如 src/types/todo.ts；不带 // 前缀、不以 / 开头。 */
+    path: z.string().min(1).max(200),
+    language: CardContentLanguageSchema,
+    role: CardContentFileRoleSchema,
+    /** 单个文件的完整内容。 */
+    content: z.string().min(1).max(CARD_CONTENT_FILE_LIMITS.maxFileChars),
+  })
+  .strict();
+
+export const CardContentCallStepSchema = z
+  .object({
+    /** 从 1 连续编号。 */
+    step: z.number().int().min(1).max(CARD_CONTENT_FILE_LIMITS.maxCallSteps),
+    /** 必须是 files 中存在的 path。 */
+    file: z.string().min(1).max(200),
+    /** 该文件中的函数/方法/组件名。 */
+    function: z.string().min(1).max(120),
+    note: z.string().min(1).max(300),
+  })
+  .strict();
+
 export const CardContentPitfallDebugSchema = z
   .object({
     title: z.string().min(1).max(300),
@@ -67,11 +129,56 @@ export const CardContentPitfallDebugSchema = z
 export const CardContentWorkedExampleSchema = z
   .object({
     explanation: z.string().min(1).max(4_000),
-    code: z.string().min(1).max(12_000),
-    call_sequence: z.array(z.string().min(1).max(500)).min(1).max(50),
+    files: z.array(CardContentFileSchema).min(1).max(CARD_CONTENT_FILE_LIMITS.maxFiles),
+    entry_file: z.string().min(1).max(200),
+    call_sequence: z.array(CardContentCallStepSchema).min(1).max(CARD_CONTENT_FILE_LIMITS.maxCallSteps),
+    /** 保持字符串：格式要求由提示词约束（"文件 › 函数：" 前缀），不做结构化校验。 */
     expected_output: z.string().min(1).max(4_000),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    const paths = new Set<string>();
+    value.files.forEach((file, index) => {
+      if (paths.has(file.path)) {
+        context.addIssue({ code: 'custom', path: ['files', index, 'path'], message: '文件路径不能重复。' });
+      }
+      paths.add(file.path);
+    });
+
+    const totalChars = value.files.reduce((sum, file) => sum + file.content.length, 0);
+    if (totalChars > CARD_CONTENT_FILE_LIMITS.maxTotalChars) {
+      context.addIssue({
+        code: 'custom',
+        path: ['files'],
+        message: '示例代码总长度不能超过 ' + String(CARD_CONTENT_FILE_LIMITS.maxTotalChars) + ' 字符。',
+      });
+    }
+
+    if (!paths.has(value.entry_file)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['entry_file'],
+        message: 'entry_file 必须是 files 中已存在的路径。',
+      });
+    }
+
+    value.call_sequence.forEach((call, index) => {
+      if (call.step !== index + 1) {
+        context.addIssue({
+          code: 'custom',
+          path: ['call_sequence', index, 'step'],
+          message: 'step 必须从 1 连续编号。',
+        });
+      }
+      if (!paths.has(call.file)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['call_sequence', index, 'file'],
+          message: 'file 必须是 files 中已存在的路径。',
+        });
+      }
+    });
+  });
 
 export const CardContentTeachingMemorySchema = z
   .object({
@@ -83,7 +190,7 @@ export const CardContentTeachingMemorySchema = z
 
 export const CardContentDocumentSchema = z
   .object({
-    schema_version: z.literal('card_content.v1'),
+    schema_version: z.literal('card_content.v2'),
     foundation: z.string().min(1).max(12_000),
     worked_example: CardContentWorkedExampleSchema,
     pitfalls_debug: z.array(CardContentPitfallDebugSchema).min(1),
@@ -93,6 +200,8 @@ export const CardContentDocumentSchema = z
   .strict();
 
 export type CardContentDocument = z.infer<typeof CardContentDocumentSchema>;
+export type CardContentFile = z.infer<typeof CardContentFileSchema>;
+export type CardContentCallStep = z.infer<typeof CardContentCallStepSchema>;
 
 /**
  * 解析或规范化失败；message 与 Python 的 ValueError 文案保持一致。
@@ -184,51 +293,136 @@ function normalizePitfallsDebug(value: unknown): Array<Record<string, string>> {
   return normalized;
 }
 
-/** 将模型常见的宽松字段收敛为 card_content.v1 的稳定形状。 */
+/** 语言别名映射：把模型常见的写法收敛到白名单标识；无法识别一律归到 text（不高亮）。 */
+const LANGUAGE_ALIASES: Readonly<Record<string, CardContentLanguage>> = {
+  js: 'js', javascript: 'js', mjs: 'js', cjs: 'js', node: 'js',
+  jsx: 'jsx',
+  ts: 'ts', typescript: 'ts',
+  tsx: 'tsx',
+  py: 'python', python: 'python', python3: 'python',
+  java: 'java',
+  go: 'go', golang: 'go',
+  c: 'c', h: 'c',
+  cpp: 'cpp', 'c++': 'cpp', cxx: 'cpp', cc: 'cpp', hpp: 'cpp',
+  csharp: 'csharp', 'c#': 'csharp', cs: 'csharp', dotnet: 'csharp',
+  html: 'html', htm: 'html',
+  css: 'css',
+  scss: 'scss', sass: 'scss',
+  sql: 'sql',
+  text: 'text', txt: 'text', plaintext: 'text', md: 'text', markdown: 'text',
+  json: 'text', yaml: 'text', yml: 'text', toml: 'text', ini: 'text', env: 'text',
+  sh: 'text', shell: 'text', bash: 'text', zsh: 'text', powershell: 'text', ps1: 'text',
+  dockerfile: 'text', xml: 'text', vue: 'text', svelte: 'text', graphql: 'text', proto: 'text',
+};
+
+/** 按文件扩展名推断语言；识别不了返回 text。 */
+function languageFromPath(path: string): CardContentLanguage {
+  const match = /\.([A-Za-z0-9]+)$/.exec(path.trim());
+  if (match === null) {
+    return 'text';
+  }
+  return LANGUAGE_ALIASES[match[1]!.toLowerCase()] ?? 'text';
+}
+
+/** 归一化语言标识：先按别名表，再按路径扩展名，最后回落 text。 */
+function normalizeLanguage(value: unknown, path: string): CardContentLanguage {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const mapped = LANGUAGE_ALIASES[value.trim().toLowerCase()];
+    if (mapped !== undefined) {
+      return mapped;
+    }
+  }
+  return path.length > 0 ? languageFromPath(path) : 'text';
+}
+
+/** 归一化单个文件：只剩字段名别名与类型收敛，其余交给严格校验。 */
+function normalizeFile(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+  const rawPath = pyOr(value.path, value.file, value.filename, value.name);
+  const path = typeof rawPath === 'string' ? rawPath.trim().slice(0, 200) : '';
+  const rawContent = pyOr(value.content, value.code, value.body, value.source);
+  const file: Record<string, unknown> = {
+    path: rawPath ?? '',
+    language: normalizeLanguage(pyOr(value.language, value.lang), path),
+    // role 缺省或非法时统一按 module 处理，保证归一化输出本身就是合同形状。
+    role: typeof value.role === 'string' && (CARD_CONTENT_FILE_ROLES as readonly string[]).includes(value.role)
+      ? value.role
+      : 'module',
+    content: typeof rawContent === 'string' ? rawContent : (rawContent ?? ''),
+  };
+  return file;
+}
+
+/** 归一化一个调用步骤；非对象原样返回，交给严格校验报出字段路径。 */
+function normalizeCallStep(value: unknown, index: number, fallbackFile: string): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+  return {
+    step: typeof value.step === 'number' ? value.step : index + 1,
+    file: pyOr(value.file, value.path) ?? fallbackFile,
+    function: pyOr(value.function, value.fn, value.name, value.method) ?? '',
+    note: pyOr(value.note, value.description, value.text) ?? '',
+  };
+}
+
+/**
+ * 把模型常见的宽松字段收敛为 card_content.**v2** 的稳定形状。
+ * 只做「字段名别名 + 类型收敛 + 语言归一化 + 缺省补齐」，不放宽合同；缺字段仍会由严格校验报出字段路径。
+ */
 export function normalizeCardContent(raw: unknown): Record<string, unknown> {
   if (!isRecord(raw)) {
     throw new CardContentParseError('模型内容必须是 JSON 对象。', ['response.object']);
   }
 
   const workedRaw = pyOr(raw.worked_example, raw.example, raw.workedExample);
-  let workedExample: Record<string, unknown>;
-  if (isRecord(workedRaw)) {
-    workedExample = {
-      explanation: contentText(
-        pyOr(workedRaw.explanation, workedRaw.description),
-        '本示例演示本章节核心概念的基本用法。',
-        4_000,
-      ),
-      code: contentText(
-        pyOr(workedRaw.code, workedRaw.snippet),
-        '# 请根据本章节目标补充示例代码',
-        12_000,
-      ),
-      call_sequence: contentTextList(
-        pyOr(workedRaw.call_sequence, workedRaw.steps),
-        ['准备输入', '执行核心步骤', '核对结果'],
-        50,
-      ),
-      expected_output: contentText(
-        pyOr(workedRaw.expected_output, workedRaw.output),
-        '示例应输出符合章节目标的结果。',
-        4_000,
-      ),
-    };
-  } else {
-    workedExample = {
-      explanation: contentText(workedRaw, '本示例演示本章节核心概念的基本用法。', 4_000),
-      code: '# 请根据本章节目标补充示例代码',
-      call_sequence: ['准备输入', '执行核心步骤', '核对结果'],
-      expected_output: '示例应输出符合章节目标的结果。',
-    };
-  }
+  const worked = isRecord(workedRaw) ? workedRaw : {};
+
+  const rawFiles = pyOr(worked.files, worked.file_list, worked.sources);
+  const files = Array.isArray(rawFiles) ? rawFiles.map((file) => normalizeFile(file)) : [];
+
+  // 入口文件：优先取显式字段，其次取 role=entry 的文件，最后取第一个文件。
+  const explicitEntry = pyOr(worked.entry_file, worked.entry, worked.entryFile);
+  const entryCandidate = files.find(
+    (file) => isRecord(file) && file.role === 'entry' && typeof file.path === 'string' && file.path.length > 0,
+  );
+  const firstPath = files.find(
+    (file) => isRecord(file) && typeof file.path === 'string' && file.path.length > 0,
+  );
+  const entryFile = typeof explicitEntry === 'string' && explicitEntry.trim().length > 0
+    ? explicitEntry.trim().slice(0, 200)
+    : (isRecord(entryCandidate) && typeof entryCandidate.path === 'string'
+      ? entryCandidate.path
+      : (isRecord(firstPath) && typeof firstPath.path === 'string' ? firstPath.path : ''));
+
+  const rawCallSequence = pyOr(worked.call_sequence, worked.steps);
+  const callSequence = Array.isArray(rawCallSequence)
+    ? rawCallSequence.map((step, index) => normalizeCallStep(step, index, entryFile))
+    : [];
+
+  const workedExample: Record<string, unknown> = {
+    explanation: contentText(
+      pyOr(worked.explanation, worked.description),
+      '本示例演示本章节核心概念的基本用法。',
+      4_000,
+    ),
+    files,
+    entry_file: entryFile,
+    call_sequence: callSequence,
+    expected_output: contentText(
+      pyOr(worked.expected_output, worked.output),
+      '示例应输出符合章节目标的结果。',
+      4_000,
+    ),
+  };
 
   const memoryRaw = pyOr(raw.teaching_memory, raw.teachingMemory);
   const memory = isRecord(memoryRaw) ? memoryRaw : {};
 
   return {
-    schema_version: 'card_content.v1',
+    schema_version: 'card_content.v2',
     foundation: contentText(
       pyOr(raw.foundation, raw.content, raw.summary),
       '本章节围绕节点目标建立必要概念，并说明它们之间的关系。',
@@ -285,7 +479,7 @@ export function parseCardContentDocument(content: string): CardContentDocument {
   const parsed = CardContentDocumentSchema.safeParse(normalized);
   if (!parsed.success) {
     throw new CardContentParseError(
-      '模型返回的节点内容不符合 card_content.v1。',
+      '模型返回的节点内容不符合 card_content.v2。',
       cardContentValidationPaths(parsed.error),
     );
   }

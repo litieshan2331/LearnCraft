@@ -5,3 +5,5 @@
 资料与卡片规则放 `domain`，请求内容生成与读取放 `application`，Drizzle/对象存储/检索适配放 `infrastructure`，外部输入输出放 `interfaces`。
 
 已实现 `POST /api/v1/plan-nodes/{node_id}/content-runs`：它只为当前有效路线中的节点创建 `card_content_generate` AgentRun，并冻结目标、画像和节点摘要；Worker 已注册 NodeTutorAgent 与 card_content_generate 工作流，并通过内部 card-content-result 接收校验后的内容；已实现 `GET /api/v1/card-contents/{card_content_id}`，仅返回 ready 内容的公开知识区块和来源引用；`pitfalls_debug` 使用只含 `title`、`cause`、`fix` 的结构化数组。
+
+卡片内容合同为 `card_content.v2`：`worked_example` 由 `files[]`（path / language / role / content）、`entry_file`、`call_sequence[]`（step / file / function / note）与字符串 `expected_output` 组成；历史 `card_content.v1` 行只在读取侧规范化（按 `// 路径` 注释行切分为多个文件，不回写、不重新生成）。示例区由 `presentation/components/worked-example-view.tsx` 与 `code-file-browser.tsx` 渲染“左侧目录树 + 右侧代码”（可点击切换文件、调用顺序可跳转）；因为节点内容是在客户端组件里 fetch 的，所以高亮不在组件里做，而是由读取接口在服务端用 `infrastructure/code-highlighter.ts` 预渲染成 `files[].html` 一起返回（只注册 JS/TS/TSX/JSX、Python、Java、Go、C/C++/C#、HTML/CSS/SCSS、SQL，主题 `github-dark`），浏览器不加载高亮引擎。

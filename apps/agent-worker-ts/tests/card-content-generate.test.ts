@@ -49,10 +49,16 @@ function buildCredential(ownerId: string): DefaultModelConnectionEnvelope['crede
 
 const CREDENTIAL = buildCredential(OWNER_ID);
 
-/** 旧字段名构成的宽松输出，用于验证「每次解析都会先规范化」。 */
+/** 旧字段名构成的宽松输出，用于验证「每次解析都会先规范化」（v2：files 一个文件一个元素）。 */
 const LOOSE_DOCUMENT_JSON = JSON.stringify({
   summary: '由旧字段构成的基础内容。',
-  example: { description: '示例说明', snippet: 'print(2)', steps: ['准备', '执行'], output: '2' },
+  example: {
+    description: '示例说明',
+    files: [{ file: 'src/a.ts', lang: 'typescript', code: 'export const a = 1;' }],
+    entry: 'src/a.ts',
+    steps: [{ file: 'src/a.ts', fn: 'a', description: '调用 a' }],
+    output: '1',
+  },
   common_mistakes: [{ title: '误区', cause: '原因', fix: '修复' }],
   references: [{ url: 'https://example.com', title: '资料' }],
   teaching_memory: { concepts: ['概念'], mistakes: ['错误'], targets: ['目标'] },
@@ -60,13 +66,14 @@ const LOOSE_DOCUMENT_JSON = JSON.stringify({
 
 /** 结构合同可解析但内层字段非法的输出（pitfalls_debug 字段名错误），用于验证字段路径回灌。 */
 const INVALID_PITFALLS_JSON = JSON.stringify({
-  schema_version: 'card_content.v1',
+  schema_version: 'card_content.v2',
   foundation: '基础内容。',
   worked_example: {
     explanation: '说明',
-    code: 'print(1)',
-    call_sequence: ['准备'],
-    expected_output: '1',
+    files: [{ path: 'src/a.ts', language: 'ts', role: 'entry', content: 'export const a = 1;' }],
+    entry_file: 'src/a.ts',
+    call_sequence: [{ step: 1, file: 'src/a.ts', function: 'a', note: '准备' }],
+    expected_output: 'src/a.ts › a：1',
   },
   pitfalls_debug: [{ title: '误区', reason: '原因写错字段名', fix: '修复' }],
   source_refs: [],
@@ -74,13 +81,14 @@ const INVALID_PITFALLS_JSON = JSON.stringify({
 });
 
 const VALID_DOCUMENT_JSON = JSON.stringify({
-  schema_version: 'card_content.v1',
+  schema_version: 'card_content.v2',
   foundation: '基础内容。',
   worked_example: {
     explanation: '说明',
-    code: 'print(1)',
-    call_sequence: ['准备'],
-    expected_output: '1',
+    files: [{ path: 'src/a.ts', language: 'ts', role: 'entry', content: 'export const a = 1;' }],
+    entry_file: 'src/a.ts',
+    call_sequence: [{ step: 1, file: 'src/a.ts', function: 'a', note: '准备' }],
+    expected_output: 'src/a.ts › a：1',
   },
   pitfalls_debug: [{ title: '误区', cause: '原因', fix: '修复' }],
   source_refs: [],
@@ -229,7 +237,7 @@ describe('单会话 ReAct 行为', () => {
       'tool_call_count',
     ]);
     expect(payload?.plan_node_id).toBe(PLAN_NODE_ID);
-    expect(payload?.schema_version).toBe('card_content.v1');
+    expect(payload?.schema_version).toBe('card_content.v2');
   });
 
   it('首轮不可解析时在同一会话追加反馈后自纠，消息列表不重建', async () => {

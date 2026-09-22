@@ -27,10 +27,35 @@ export interface CardContentGenerationRun {
   };
 }
 
+/**
+ * 示例文件（v2）：一个文件一个元素；role 默认 module，language 为受控白名单标识。
+ * `html` 是读取接口在服务端预渲染的、已转义的内联高亮 HTML，浏览器不再加载高亮引擎。
+ */
+export interface WorkedExampleFile {
+  path: string;
+  language: string;
+  role: string;
+  content: string;
+  html: string;
+}
+
+/** 调用顺序（v2）：对象化，指明「哪个文件里的哪个函数」。 */
+export interface WorkedExampleCallStep {
+  step: number;
+  file: string;
+  function: string;
+  note: string;
+}
+
+/**
+ * 示例区块：v2 为 files + entry_file + 对象化 call_sequence；
+ * 历史 v1 内容由服务端读侧归一化成同一形状（expected_output 始终是字符串）。
+ */
 export interface WorkedExample {
   explanation: string;
-  code: string;
-  call_sequence: string[];
+  files: WorkedExampleFile[];
+  entry_file: string;
+  call_sequence: WorkedExampleCallStep[];
   expected_output: string;
 }
 
@@ -45,7 +70,7 @@ export interface CardContent {
   plan_node_id: string;
   version: number;
   status: "ready";
-  schema_version: "card_content.v1";
+  schema_version: "card_content.v1" | "card_content.v2";
   foundation: string;
   worked_example: WorkedExample;
   pitfalls_debug: PitfallDebug[];

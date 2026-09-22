@@ -17,7 +17,7 @@ import {
 const GRAPH_VERSION = "card_content_generate.v1";
 const PROMPT_VERSION = "card_content_generate.v1";
 const INPUT_SCHEMA_VERSION = "card_content_generate.input.v1";
-const OUTPUT_SCHEMA_VERSION = "card_content.v1";
+const OUTPUT_SCHEMA_VERSION = "card_content.v2";
 const REQUESTED_MODEL_PROFILE = "account_default_openai_compatible";
 
 export class CardContentGenerationService {

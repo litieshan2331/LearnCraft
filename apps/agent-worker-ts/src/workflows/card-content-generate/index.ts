@@ -13,7 +13,8 @@
  *   校验失败时把 zod 字段路径回灌给模型。
  *
  * 行为保持不变的契约：
- * - 输入契约（agent_role 固定 node_tutor、plan_node.id 必填）、内容合同 card_content.v1、
+ * - 输入契约（agent_role 固定 node_tutor、plan_node.id 必填）、内容合同 card_content.v2
+ *   （worked_example.files[] 逐文件拆分代码，expected_output 仍为单个字符串）、
  *   输出摘要的 4 个键与元数据的 3 个键不变；
  * - 结构类失败仍映射为 CARD_CONTENT_OUTPUT_INVALID；
  * - token 用量仍写真实值，由调用方写入 agent_runs 的 token 列。

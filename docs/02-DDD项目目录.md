@@ -10,6 +10,8 @@
 > - 用户阅读后可标记已学完，并自行选择是否生成节点后测；后测不再作为内容生成或阅读完成后的自动步骤。
 >
 > 本更新取代本文中关于 `concept/syntax/practice/debug`、`LocalDemo` 与强制节点后测的旧约定。
+>
+> **内容合同更新（2026-09-22）：**节点内容合同已从 `card_content.v1` 升级为 `card_content.v2`：`worked_example.files[]` 逐文件承载代码（path / language / role / content，1–8 个文件），配 `entry_file` 与 `call_sequence[]`（step / file / function / note），`expected_output` 仍为单个字符串。页面以“左侧目录树 + 右侧代码”呈现并做语法高亮（Shiki）。历史 v1 内容只在读取侧兼容，不重新生成。
 
 > **范围决策更新（2026-08-16，优先于本文其他 P0 描述）：**`Practice Execution` 在 P0 仅持有本地 Demo 内容产物的领域契约，不创建 `ExecutionJob`，不提供在线执行接口，也不启动 Runner 容器。Demo 必须包含代码文件、中文注释、入口、依赖与本地运行步骤、预期输出和调用顺序；真正的 Sandbox、`ExecutionJob`、stdout/stderr 和资源隔离后置 P1。`practice/` 目录与 Runner port 保留为 P1 扩展边界。
 >

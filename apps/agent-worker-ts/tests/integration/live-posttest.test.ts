@@ -118,10 +118,18 @@ describe.skipIf(!enabled)('真实 posttest_generate 端到端（经命令层）'
         planNodeId,
         1,
         'ready',
-        'card_content.v1',
+        'card_content.v2',
         JSON.stringify({
           foundation: 'Python 使用 def 定义函数，参数写在括号内，return 返回结果；没有 return 时返回 None。',
-          worked_example: { title: '求和函数', code: 'def add(a, b):\n    return a + b' },
+          worked_example: {
+            explanation: '定义 add 后调用它，返回值由 return 决定。',
+            files: [
+              { path: 'main.py', language: 'python', role: 'entry', content: 'def add(a, b):\n    return a + b' },
+            ],
+            entry_file: 'main.py',
+            call_sequence: [{ step: 1, file: 'main.py', function: 'add', note: '调用求和函数' }],
+            expected_output: 'main.py › add：返回 3',
+          },
           pitfalls_debug: [{ title: '忘记写 return', cause: '函数没有返回值时会返回 None。', fix: '在函数体末尾补上 return 语句。' }],
         }),
         JSON.stringify({

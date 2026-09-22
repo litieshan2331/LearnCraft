@@ -2,7 +2,7 @@
  * Agent Worker 提交节点知识内容结果的内部 Route Handler。
  *
  * 主要职责：
- * - 校验共享内部密钥和 card_content 合同。
+ * - 校验共享内部密钥和 card_content 合同（**v2**：files 数组 + 对象化 call_sequence + 字符串 expected_output）。
  * - 校验 AgentRun 的目标节点与所有权。
  * - 在事务中幂等写入唯一成功的 card_contents，并更新节点内容状态。
  */
@@ -15,6 +15,11 @@ import { z } from "zod";
 
 import { getDatabase } from "@/lib/db/client";
 import { agentRuns, cardContents, planNodes } from "@/lib/db/schema";
+import {
+  CARD_CONTENT_FILE_ROLES,
+  CARD_CONTENT_LANGUAGES,
+  CARD_CONTENT_LIMITS,
+} from "@/modules/content/domain/content-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,12 +28,60 @@ interface RouteContext {
   params: Promise<{ agentRunId: string }>;
 }
 
+const fileSchema = z.object({
+  /** 仓库相对路径，例如 src/types/todo.ts。 */
+  path: z.string().min(1).max(200),
+  language: z.enum(CARD_CONTENT_LANGUAGES),
+  role: z.enum(CARD_CONTENT_FILE_ROLES).default("module"),
+  content: z.string().min(1).max(CARD_CONTENT_LIMITS.maxFileChars),
+}).strict();
+
+const callStepSchema = z.object({
+  /** 从 1 连续编号。 */
+  step: z.number().int().min(1).max(CARD_CONTENT_LIMITS.maxCallSteps),
+  file: z.string().min(1).max(200),
+  function: z.string().min(1).max(120),
+  note: z.string().min(1).max(300),
+}).strict();
+
 const workedExampleSchema = z.object({
   explanation: z.string().min(1).max(4_000),
-  code: z.string().min(1).max(12_000),
-  call_sequence: z.array(z.string().min(1).max(500)).min(1).max(50),
+  files: z.array(fileSchema).min(1).max(CARD_CONTENT_LIMITS.maxFiles),
+  entry_file: z.string().min(1).max(200),
+  call_sequence: z.array(callStepSchema).min(1).max(CARD_CONTENT_LIMITS.maxCallSteps),
+  // 与 Worker 合同一致：expected_output 保持字符串，格式由提示词约束（"文件 › 函数：" 前缀）。
   expected_output: z.string().min(1).max(4_000),
-}).strict();
+}).strict().superRefine((value, context) => {
+  const paths = new Set<string>();
+  value.files.forEach((file, index) => {
+    if (paths.has(file.path)) {
+      context.addIssue({ code: "custom", path: ["files", index, "path"], message: "文件路径不能重复。" });
+    }
+    paths.add(file.path);
+  });
+
+  const totalChars = value.files.reduce((sum, file) => sum + file.content.length, 0);
+  if (totalChars > CARD_CONTENT_LIMITS.maxTotalChars) {
+    context.addIssue({
+      code: "custom",
+      path: ["files"],
+      message: "示例代码总长度不能超过 " + String(CARD_CONTENT_LIMITS.maxTotalChars) + " 字符。",
+    });
+  }
+
+  if (!paths.has(value.entry_file)) {
+    context.addIssue({ code: "custom", path: ["entry_file"], message: "entry_file 必须是 files 中已存在的路径。" });
+  }
+
+  value.call_sequence.forEach((call, index) => {
+    if (call.step !== index + 1) {
+      context.addIssue({ code: "custom", path: ["call_sequence", index, "step"], message: "step 必须从 1 连续编号。" });
+    }
+    if (!paths.has(call.file)) {
+      context.addIssue({ code: "custom", path: ["call_sequence", index, "file"], message: "file 必须是 files 中已存在的路径。" });
+    }
+  });
+});
 
 const teachingMemorySchema = z.object({
   key_concepts: z.array(z.string().min(1).max(300)).min(1).max(30),
@@ -43,7 +96,7 @@ const pitfallDebugSchema = z.object({
 }).strict();
 const resultSchema = z.object({
   plan_node_id: z.uuid(),
-  schema_version: z.literal("card_content.v1"),
+  schema_version: z.literal("card_content.v2"),
   foundation: z.string().min(1).max(12_000),
   worked_example: workedExampleSchema,
   pitfalls_debug: z.array(pitfallDebugSchema).min(1),

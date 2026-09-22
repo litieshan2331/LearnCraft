@@ -3,12 +3,16 @@
  *
  * 组件与函数：
  * - CardContentView：展示 foundation、worked_example、pitfalls_debug 和来源引用。
- * - ContentText：以保留换行的纯文本方式展示模型生成内容。
+ *
+ * 示例区块（多文件目录树 + 高亮 + 调用顺序）由 worked-example-view.tsx 渲染；
+ * 纯文本渲染复用 content-text.tsx 的 ContentText。
  */
 
-import { BookOpenText, ExternalLink, Lightbulb, ListChecks } from "lucide-react";
+import { BookOpenText, ExternalLink, Lightbulb } from "lucide-react";
 
 import type { CardContent } from "../api/content-client";
+import { ContentText } from "./content-text";
+import { WorkedExampleView } from "./worked-example-view";
 
 export function CardContentView({ content }: Readonly<{ content: CardContent }>) {
   return (
@@ -25,20 +29,7 @@ export function CardContentView({ content }: Readonly<{ content: CardContent }>)
 
       <article className="mt-5 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-7">
         <h2 className="font-heading text-2xl font-medium">示例：从输入到结果</h2>
-        <ContentText className="mt-4 text-sm leading-8 text-muted-foreground" value={content.worked_example.explanation} />
-        <pre className="mt-5 overflow-x-auto rounded-[1.25rem] border border-[#17353a] bg-[#17353a] p-4 font-mono text-sm leading-6 text-[#eef7f6]"><code>{content.worked_example.code}</code></pre>
-        <div className="mt-5 grid gap-5 border-t border-border pt-5 sm:grid-cols-2">
-          <div>
-            <p className="inline-flex items-center gap-2 text-xs tracking-[0.14em] text-primary"><ListChecks aria-hidden className="size-4" />调用顺序</p>
-            <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-7">
-              {content.worked_example.call_sequence.map((step) => <li key={step}>{step}</li>)}
-            </ol>
-          </div>
-          <div>
-            <p className="text-xs tracking-[0.14em] text-primary">预期输出</p>
-            <ContentText className="mt-3 text-sm leading-7 text-muted-foreground" value={content.worked_example.expected_output} />
-          </div>
-        </div>
+        <WorkedExampleView workedExample={content.worked_example} />
       </article>
 
       <article className="mt-5 rounded-[1.25rem] border border-border/80 bg-card/85 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] p-5 sm:p-7">
@@ -78,10 +69,3 @@ export function CardContentView({ content }: Readonly<{ content: CardContent }>)
   );
 }
 
-function ContentText({ value, className }: Readonly<{ value: string; className?: string }>) {
-  return (
-    <p className={className}>
-      {value.split("\n").map((line, index) => <span key={String(index) + "-" + line}>{index > 0 ? <br /> : null}{line}</span>)}
-    </p>
-  );
-}
