@@ -1,104 +1,51 @@
 /**
- * 模型思考增量的合并与上报（自 tool-aware-generator.ts 拆出，逻辑不变）。
+ * 模型思考原文的上报（自 tool-aware-generator.ts 拆出；**不含任何缓冲、节流或总量限制**）。
  *
- * 职责：把流式到达的思考增量先缓冲，再按「字符数阈值」或「时间阈值」合并成一条
- * `thinking.delta` 进度事件；轮次结束时强制补发剩余内容，并限制单次运行的上报总量。
- * 与 ReAct 循环解耦：循环只负责「增量到达时 push」与「轮次结束时 flushTurn」，
- * 本模块只负责节流、补发与上限；不落库、不写日志，上报只经 AgentProgressReporter。
+ * 职责：把模型思考原文以最实时的方式交给进度通道：
+ * - push：流式增量到达即透传一条 `thinking.delta`（不缓冲、不合并、不限速）；
+ * - completeTurn：轮次结束时上报该轮权威整段 `thinking.completed`，前端用它覆盖本轮增量。
  *
- * 不使用定时器：只在增量到达或轮次结束时判断是否该发，因此不会为一个已结束的轮次补发。
+ * 设计取舍（2026-09-18 用户确认）：**只有工具调用需要缓冲完整结构化结果**；
+ * 思考流要实时送达前端，因此这里不做字符阈值、时间窗或总量截断，也不使用定时器。
+ * 既有的相关边界不在本模块：出网层单次响应 8MB 上限（模型侧）、浏览器只保留最近若干字符（展示侧）。
+ *
+ * 不落库、不写日志：上报只经 AgentProgressReporter（见 agent-progress.ts）。
  *
  * 导出：
- * - DEFAULT_THINKING_FLUSH_CHARS / DEFAULT_THINKING_FLUSH_MS / DEFAULT_THINKING_TOTAL_LIMIT：默认阈值。
- * - AgentThinkingStreamOptions：上报端口、阈值与可注入时钟。
- * - AgentThinkingStream：push（追加增量）/ flushTurn（轮次结束强制补发）。
- * - createAgentThinkingStream：按默认阈值创建实例。
+ * - AgentThinkingStream：push（增量透传）/ completeTurn（轮次权威整段）。
+ * - createAgentThinkingStream：创建实例。
  */
 
 import type { AgentProgressReporter } from './agent-progress.js';
 
-/** 默认字符数阈值：缓冲达到该长度即上报（越小越流畅，频道消息越多）。 */
-export const DEFAULT_THINKING_FLUSH_CHARS = 40;
-/** 默认时间阈值：距上次上报超过该毫秒数且有新内容时上报。 */
-export const DEFAULT_THINKING_FLUSH_MS = 80;
-/** 默认单次运行上报总量上限：达到后丢弃后续增量，避免长时间会话占满临时通道。 */
-export const DEFAULT_THINKING_TOTAL_LIMIT = 64_000;
-
-export interface AgentThinkingStreamOptions {
-  /** 进度上报端口（通常是 Redis 发布器创建的上报器）。 */
-  report: AgentProgressReporter;
-  /** 字符数阈值，默认 DEFAULT_THINKING_FLUSH_CHARS。 */
-  flushChars?: number;
-  /** 时间阈值（毫秒），默认 DEFAULT_THINKING_FLUSH_MS。 */
-  flushIntervalMs?: number;
-  /** 单次运行总量上限（字符），默认 DEFAULT_THINKING_TOTAL_LIMIT。 */
-  totalLimit?: number;
-  /** 时钟注入，便于单测；默认 Date.now。 */
-  now?: () => number;
-}
-
 export class AgentThinkingStream {
-  private readonly report: AgentProgressReporter;
-  private readonly flushChars: number;
-  private readonly flushIntervalMs: number;
-  private readonly totalLimit: number;
-  private readonly now: () => number;
+  constructor(private readonly report: AgentProgressReporter) {}
 
-  /** 尚未上报的增量。 */
-  private buffer = '';
-  /** 上次上报时间；初始为 0，使首个增量立即可见。 */
-  private lastFlushAt = 0;
-  /** 已上报的思考原文总长度。 */
-  private published = 0;
-
-  constructor(options: AgentThinkingStreamOptions) {
-    this.report = options.report;
-    this.flushChars = options.flushChars ?? DEFAULT_THINKING_FLUSH_CHARS;
-    this.flushIntervalMs = options.flushIntervalMs ?? DEFAULT_THINKING_FLUSH_MS;
-    this.totalLimit = options.totalLimit ?? DEFAULT_THINKING_TOTAL_LIMIT;
-    this.now = options.now ?? (() => Date.now());
-  }
-
-  /** 追加一段思考增量；达到任一阈值时合并上报（不足则留在缓冲里等下次）。 */
+  /** 追加一段思考增量：立即透传，不缓冲也不合并；空增量直接忽略。 */
   push(turn: number, delta: string): void {
     if (delta.length === 0) {
       return;
     }
-    this.buffer += delta;
-    this.drain(turn, false);
+    this.report.report('thinking.delta', { turn, text: delta });
   }
 
-  /** 轮次结束：强制补发缓冲中的剩余增量（即使未达阈值）。 */
-  flushTurn(turn: number): void {
-    this.drain(turn, true);
-  }
-
-  /** 按阈值判断是否上报；force 时忽略阈值。达到总量上限后丢弃缓冲。 */
-  private drain(turn: number, force: boolean): void {
-    if (this.buffer.length === 0) {
+  /**
+   * 轮次结束：上报该轮完整思考原文（权威整段），供前端覆盖本轮增量。
+   * 空白内容视为该轮没有可展示的思考，不上报。
+   */
+  completeTurn(turn: number, reasoning: string | null | undefined): void {
+    if (typeof reasoning !== 'string') {
       return;
     }
-    const now = this.now();
-    if (
-      !force
-      && this.buffer.length < this.flushChars
-      && now - this.lastFlushAt < this.flushIntervalMs
-    ) {
+    const text = reasoning.trim();
+    if (text.length === 0) {
       return;
     }
-    if (this.published >= this.totalLimit) {
-      this.buffer = '';
-      return;
-    }
-    const chunk = this.buffer.slice(0, this.totalLimit - this.published);
-    this.buffer = this.buffer.slice(chunk.length);
-    this.published += chunk.length;
-    this.lastFlushAt = now;
-    this.report.report('thinking.delta', { turn, text: chunk });
+    this.report.report('thinking.completed', { turn, text });
   }
 }
 
-/** 按默认阈值创建思考增量合并器。 */
-export function createAgentThinkingStream(options: AgentThinkingStreamOptions): AgentThinkingStream {
-  return new AgentThinkingStream(options);
+/** 创建思考原文上报器（实时透传，无阈值参数）。 */
+export function createAgentThinkingStream(report: AgentProgressReporter): AgentThinkingStream {
+  return new AgentThinkingStream(report);
 }

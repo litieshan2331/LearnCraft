@@ -1,8 +1,10 @@
 /**
- * 思考增量合并器的单元测试（注入时钟，结果完全确定）。
+ * 思考原文上报器的单元测试。
  *
- * 重点固化：字符阈值、时间阈值、轮次结束强制补发、单次运行总量上限与超限丢弃、
- * 以及空增量被忽略——这些行为与拆分前 tool-aware-generator.ts 内的内联实现逐条一致。
+ * 重点固化（2026-09-18 用户确认的实时透传语义）：
+ * - 每段增量立即透传，不缓冲、不合并、无字符/时间阈值；
+ * - 空增量被忽略；
+ * - 轮次结束上报权威整段 thinking.completed，空白内容不上报。
  */
 import { describe, expect, it } from 'vitest';
 
@@ -26,97 +28,57 @@ class RecordingReporter implements AgentProgressReporter {
   }
 }
 
-/** 可手动推进的时钟。 */
-function clock(start = 0): { now: () => number; advance: (ms: number) => void } {
-  let current = start;
-  return {
-    now: () => current,
-    advance: (ms: number) => {
-      current += ms;
-    },
-  };
-}
-
 describe('AgentThinkingStream', () => {
-  it('达到字符阈值即上报', () => {
+  it('每段增量立即透传，一条增量一条事件', () => {
     const reporter = new RecordingReporter();
-    const stream = new AgentThinkingStream({
-      report: reporter,
-      flushChars: 40,
-      flushIntervalMs: 1_000,
-      now: () => 0,
-    });
+    const stream = new AgentThinkingStream(reporter);
 
-    stream.push(1, 'x'.repeat(40));
+    stream.push(1, '第一段');
+    stream.push(1, '第二段');
 
-    expect(reporter.events).toHaveLength(1);
-    expect(reporter.events[0]).toMatchObject({ step: 'thinking.delta', turn: 1 });
-    expect(reporter.events[0]?.text).toHaveLength(40);
+    expect(reporter.events).toEqual([
+      { step: 'thinking.delta', turn: 1, text: '第一段' },
+      { step: 'thinking.delta', turn: 1, text: '第二段' },
+    ]);
   });
 
-  it('未达阈值时不上报，轮次结束强制补发', () => {
+  it('单字符增量同样立即透传（无最小长度阈值）', () => {
     const reporter = new RecordingReporter();
-    const stream = new AgentThinkingStream({
-      report: reporter,
-      flushChars: 100,
-      flushIntervalMs: 1_000,
-      now: () => 0,
-    });
+    const stream = new AgentThinkingStream(reporter);
 
-    stream.push(1, '很短的一段');
-    expect(reporter.events).toHaveLength(0);
-
-    stream.flushTurn(1);
-    expect(reporter.events).toHaveLength(1);
-    expect(reporter.events[0]?.text).toBe('很短的一段');
-  });
-
-  it('时间阈值到点后，下一段增量会连带缓冲一起上报', () => {
-    const reporter = new RecordingReporter();
-    const time = clock();
-    const stream = new AgentThinkingStream({
-      report: reporter,
-      flushChars: 100,
-      flushIntervalMs: 100,
-      now: time.now,
-    });
-
-    stream.push(2, 'aaaaa');
-    expect(reporter.events).toHaveLength(0);
-
-    time.advance(150);
-    stream.push(2, 'bbbbb');
+    stream.push(2, 'a');
 
     expect(reporter.events).toHaveLength(1);
-    expect(reporter.events[0]).toMatchObject({ turn: 2 });
-    expect(reporter.events[0]?.text).toBe('aaaaabbbbb');
-  });
-
-  it('达到总量上限后按上限截断，并丢弃后续增量', () => {
-    const reporter = new RecordingReporter();
-    const stream = new AgentThinkingStream({
-      report: reporter,
-      flushChars: 1,
-      flushIntervalMs: 0,
-      totalLimit: 10,
-      now: () => 0,
-    });
-
-    stream.push(1, 'x'.repeat(12));
-    expect(reporter.events).toHaveLength(1);
-    expect(reporter.events[0]?.text).toHaveLength(10);
-
-    stream.push(1, 'yyyyy');
-    stream.flushTurn(1);
-    expect(reporter.events).toHaveLength(1);
+    expect(reporter.events[0]).toMatchObject({ step: 'thinking.delta', turn: 2, text: 'a' });
   });
 
   it('空增量被忽略', () => {
     const reporter = new RecordingReporter();
-    const stream = new AgentThinkingStream({ report: reporter, now: () => 0 });
+    const stream = new AgentThinkingStream(reporter);
 
     stream.push(1, '');
-    stream.flushTurn(1);
+
+    expect(reporter.events).toHaveLength(0);
+  });
+
+  it('轮次结束上报权威整段（去除首尾空白）', () => {
+    const reporter = new RecordingReporter();
+    const stream = new AgentThinkingStream(reporter);
+
+    stream.completeTurn(3, '  完整思考  ');
+
+    expect(reporter.events).toEqual([
+      { step: 'thinking.completed', turn: 3, text: '完整思考' },
+    ]);
+  });
+
+  it('没有思考内容时不上报整段', () => {
+    const reporter = new RecordingReporter();
+    const stream = new AgentThinkingStream(reporter);
+
+    stream.completeTurn(1, null);
+    stream.completeTurn(1, undefined);
+    stream.completeTurn(1, '   ');
 
     expect(reporter.events).toHaveLength(0);
   });

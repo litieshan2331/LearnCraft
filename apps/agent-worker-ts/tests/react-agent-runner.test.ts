@@ -335,6 +335,42 @@ describe('进度上报', () => {
     expect(progress.steps).toContain('turn.started');
   });
 
+  it('同一条消息内的多个工具调用：call_index 连续，调用计数按真实执行次数累计', async () => {
+    // 模型的并行工具调用：一条 assistant 消息里带两个 tool_calls，之后再来一个。
+    const gateway = new ScriptedGateway([
+      {
+        content: null,
+        toolCalls: [
+          { id: 'c1', name: 'tavily_search', argumentsJson: '{"query":"第一批 A"}' },
+          { id: 'c2', name: 'tavily_search', argumentsJson: '{"query":"第一批 B"}' },
+        ],
+      },
+      {
+        content: null,
+        toolCalls: [{ id: 'c3', name: 'tavily_search', argumentsJson: '{"query":"第二批 C"}' }],
+      },
+      { content: 'OK' },
+    ]);
+    const tools = new ScriptedToolGateway(OK_RESULT);
+    const progress = new RecordingProgressReporter();
+
+    const result = await runReactAgentSession(input(gateway, tools, { onProgress: progress }));
+
+    const calledIndexes = progress.events
+      .filter((event) => event.step === 'tool.called')
+      .map((event) => event.data?.call_index);
+    const completedIndexes = progress.events
+      .filter((event) => event.step === 'tool.completed')
+      .map((event) => event.data?.call_index);
+
+    // 修复前会得到 1、3、3（同批次内 toolCallCount 被重复计入）。
+    expect(calledIndexes).toEqual([1, 2, 3]);
+    expect(completedIndexes).toEqual([1, 2, 3]);
+    // 执行次数与计数不受编号修复影响。
+    expect(tools.calls).toHaveLength(3);
+    expect(result.toolCallCount).toBe(3);
+  });
+
   it('校验失败上报字段路径与自纠，且不回显模型正文', async () => {
     const gateway = new ScriptedGateway([{ content: '坏输出' }, { content: 'OK' }]);
     const progress = new RecordingProgressReporter();
@@ -386,7 +422,7 @@ describe('进度上报', () => {
     expect(thinking[1]?.data).toMatchObject({ turn: 2, text: '资料足够，开始出题。' });
   });
 
-  it('流式增量合并后上报 thinking.delta，累计内容与增量一致', async () => {
+  it('思考增量实时透传：一条增量一条 thinking.delta，顺序与内容不变', async () => {
     const deltas = ['甲'.repeat(120), '乙'.repeat(120), '丙'];
     const gateway = new ScriptedGateway([{ reasoningDeltas: deltas, content: 'OK' }]);
     const progress = new RecordingProgressReporter();
@@ -396,13 +432,12 @@ describe('进度上报', () => {
     );
 
     const chunks = progress.events.filter((event) => event.step === 'thinking.delta');
-    // 200 字符阈值：前两段合成一条，剩余部分在轮末补发。
-    expect(chunks.length).toBeGreaterThanOrEqual(2);
-    expect(chunks.map((event) => String(event.data?.text)).join('')).toBe(deltas.join(''));
+    expect(chunks).toHaveLength(deltas.length);
+    expect(chunks.map((event) => String(event.data?.text))).toEqual(deltas);
     expect(chunks.every((event) => event.data?.turn === 1)).toBe(true);
   });
 
-  it('增量未达阈值时在轮末补发，且仍上报权威整段', async () => {
+  it('短增量同样立即透传，无需等待阈值或轮末', async () => {
     const gateway = new ScriptedGateway([
       { reasoningDeltas: ['很短的一段'], reasoning: '很短的一段', content: 'OK' },
     ]);
@@ -412,10 +447,9 @@ describe('进度上报', () => {
       input(gateway, new ScriptedToolGateway(OK_RESULT), { onProgress: progress }),
     );
 
-    const deltas = progress.events.filter((event) => event.step === 'thinking.delta');
-    expect(deltas).toHaveLength(1);
-    expect(deltas[0]?.data?.text).toBe('很短的一段');
-    expect(progress.steps).toContain('thinking.completed');
+    expect(progress.steps).toEqual(['turn.started', 'thinking.delta', 'thinking.completed']);
+    expect(progress.events[1]?.data?.text).toBe('很短的一段');
+    expect(progress.events[2]?.data?.text).toBe('很短的一段');
   });
 
   it('没有思考原文时不上报 thinking.completed', async () => {
