@@ -1,11 +1,5 @@
 /**
  * worked_example 读侧归一化的单元测试。
- *
- * 重点固化：
- * - v2（files + entry_file + 对象化 call_sequence）直接映射，语言别名归一化；
- * - v1 历史内容按 \`// 路径\` 注释拆分成多文件（这正是 v1 的书写约定），语言按扩展名推断，
- *   字符串数组的调用顺序包成对象并挂到入口文件；
- * - 无法使用时返回 null（调用方据此判定内容不可读）。
  */
 import { describe, expect, it } from "vitest";
 

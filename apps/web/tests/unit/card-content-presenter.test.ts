@@ -1,8 +1,5 @@
 /**
  * 节点知识内容公开响应映射器的单元测试。
- *
- * 重点固化：示例文件在对外形状里是 snake_case（path / language / role / content / html），
- * html 取调用方传入的预渲染映射；expected_output 始终是字符串；调用顺序对象化。
  */
 import { describe, expect, it } from "vitest";
 
