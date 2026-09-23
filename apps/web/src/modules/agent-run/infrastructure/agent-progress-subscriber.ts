@@ -7,14 +7,20 @@
  * 2. 每条消息都经 Zod 白名单校验，非法或超长内容直接丢弃（防御脏数据/敌意数据）；
  *    `thinking.completed` 的 `data.text` 是模型思考原文：只转发给当前登录的所有者，不落库、不写日志；
  * 3. 未配置 `AGENT_PROGRESS_REDIS_URL` 或连接失败时抛 AgentProgressUnavailableError，
- *    由上层降级为「没有实时进度」，不影响状态轮询与最终结果。
+ *    由上层降级为「没有实时进度」，不影响状态轮询与最终结果；
+ * 4. **序号不设上限**（只要求非负整数）：长运行不会因为 seq 变大而整段失效；
+ *    只有 `thinking.delta` 有每连接条数上限（AGENT_PROGRESS_MAX_THINKING_DELTAS），
+ *    超限后只丢增量，步骤事件（turn.started / tool.* / validation.failed / run.completed 等）永远转发；
+ *    每轮的权威整段仍由 `thinking.completed` 送达，所以丢增量不会丢整段思考。
  *
  * 导出：
  * - AGENT_PROGRESS_CHANNEL_PREFIX / agentProgressChannel：与 Worker 一致的频道命名。
  * - AgentProgressStep：允许上报的步骤 code 集合。
  * - AgentProgressEvent：校验后的事件结构。
+ * - AGENT_PROGRESS_MAX_THINKING_DELTAS：单个连接最多转发的思考增量条数。
  * - AgentProgressUnavailableError：订阅通道不可用。
  * - AgentProgressSubscription：可关闭的订阅句柄。
+ * - createAgentProgressForwarder：把频道消息转成受校验、有上限的事件转发器。
  * - subscribeAgentProgress：建立一次订阅。
  */
 
@@ -46,7 +52,8 @@ export const agentProgressEventSchema = z.object({
   v: z.literal(1),
   step: z.enum(AGENT_PROGRESS_STEPS),
   at: z.string().min(1).max(40),
-  seq: z.number().int().min(0).max(10_000),
+  // 不设上限：序号只用于排序，长运行（思考增量可达数万条）不应因此整段失效。
+  seq: z.number().int().nonnegative(),
   data: z
     .record(
       z.string().max(40),
@@ -93,12 +100,10 @@ export async function subscribeAgentProgress(input: {
 
   try {
     await client.connect();
-    await client.subscribe(agentProgressChannel(input.runId), (message) => {
-      const event = parseAgentProgressEvent(message);
-      if (event !== null) {
-        input.onEvent(event);
-      }
-    });
+    await client.subscribe(
+      agentProgressChannel(input.runId),
+      createAgentProgressForwarder(input.onEvent),
+    );
   } catch (error) {
     await client.quit().catch(() => undefined);
     throw new AgentProgressUnavailableError(
@@ -111,6 +116,37 @@ export async function subscribeAgentProgress(input: {
       await client.unsubscribe(agentProgressChannel(input.runId)).catch(() => undefined);
       await client.quit().catch(() => undefined);
     },
+  };
+}
+
+/**
+ * 单个连接最多转发的思考增量条数。
+ * 正常一轮思考的增量在数千条量级（实测一次 50s 的节点内容生成约 5.9k 条），
+ * 这里的上限只为挡住失控的长思考把浏览器压垮；步骤事件不受它限制，
+ * 且每轮的完整思考仍会由 `thinking.completed` 送达。
+ */
+export const AGENT_PROGRESS_MAX_THINKING_DELTAS = 8_000;
+
+/**
+ * 把频道消息转成事件转发器：非法消息丢弃；`thinking.delta` 超过上限后不再转发，
+ * 其余步骤事件一律照常转发——因此超限只会「少看一部分逐字思考」，绝不会整段静默失效。
+ */
+export function createAgentProgressForwarder(
+  onEvent: (event: AgentProgressEvent) => void,
+): (message: string) => void {
+  let forwardedDeltas = 0;
+  return (message: string): void => {
+    const event = parseAgentProgressEvent(message);
+    if (event === null) {
+      return;
+    }
+    if (event.step === "thinking.delta") {
+      if (forwardedDeltas >= AGENT_PROGRESS_MAX_THINKING_DELTAS) {
+        return;
+      }
+      forwardedDeltas += 1;
+    }
+    onEvent(event);
   };
 }
 

@@ -2,14 +2,17 @@
  * 进度订阅适配器的测试（不连真实 Redis）。
  *
  * 重点固化：频道命名与 Worker 一致、消息白名单校验（非法内容一律丢弃）、
- * 思考原文（thinking.completed）的放行与长度上限，以及未配置连接串时的降级异常。
+ * 思考原文（thinking.completed）的放行与长度上限、序号不设上限（长运行不整段失效）、
+ * 思考增量超限后只丢增量而保留步骤事件，以及未配置连接串时的降级异常。
  */
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   AGENT_PROGRESS_CHANNEL_PREFIX,
+  AGENT_PROGRESS_MAX_THINKING_DELTAS,
   AgentProgressUnavailableError,
   agentProgressChannel,
+  createAgentProgressForwarder,
   parseAgentProgressEvent,
   subscribeAgentProgress,
 } from "./agent-progress-subscriber";
@@ -57,6 +60,12 @@ describe("parseAgentProgressEvent", () => {
     expect(parseAgentProgressEvent(JSON.stringify(tooLong))).toBeNull();
   });
 
+  it("序号只要求非负整数，不再有 1 万上限", () => {
+    expect(parseAgentProgressEvent(JSON.stringify({ ...VALID_EVENT, seq: 123_456 }))?.seq).toBe(123_456);
+    expect(parseAgentProgressEvent(JSON.stringify({ ...VALID_EVENT, seq: -1 }))).toBeNull();
+    expect(parseAgentProgressEvent(JSON.stringify({ ...VALID_EVENT, seq: 1.5 }))).toBeNull();
+  });
+
   it("丢弃非 JSON、非对象与协议版本不符的消息", () => {
     expect(parseAgentProgressEvent("不是 JSON")).toBeNull();
     expect(parseAgentProgressEvent("[]")).toBeNull();
@@ -70,6 +79,45 @@ describe("parseAgentProgressEvent", () => {
         JSON.stringify({ ...VALID_EVENT, data: { query: "x".repeat(4_001) } }),
       ),
     ).toBeNull();
+  });
+});
+
+describe("createAgentProgressForwarder", () => {
+  it("转发合法事件，静默丢弃非法消息", () => {
+    const received: string[] = [];
+    const forward = createAgentProgressForwarder((event) => received.push(event.step));
+
+    forward(JSON.stringify(VALID_EVENT));
+    forward("不是 JSON");
+    forward(JSON.stringify({ ...VALID_EVENT, step: "model.content" }));
+
+    expect(received).toEqual(["tool.called"]);
+  });
+
+  it("思考增量超过上限后只丢增量，步骤事件与轮末整段照常转发", () => {
+    const received: string[] = [];
+    const forward = createAgentProgressForwarder((event) => received.push(event.step));
+    const delta = JSON.stringify({
+      ...VALID_EVENT,
+      step: "thinking.delta",
+      data: { turn: 1, text: "思考片段" },
+    });
+
+    for (let index = 0; index < AGENT_PROGRESS_MAX_THINKING_DELTAS; index += 1) {
+      forward(delta);
+    }
+    forward(delta);
+    forward(JSON.stringify({
+      ...VALID_EVENT,
+      step: "thinking.completed",
+      data: { turn: 1, text: "该轮完整思考" },
+    }));
+    forward(JSON.stringify({ ...VALID_EVENT, step: "run.completed" }));
+
+    expect(received.filter((step) => step === "thinking.delta"))
+      .toHaveLength(AGENT_PROGRESS_MAX_THINKING_DELTAS);
+    expect(received).toContain("thinking.completed");
+    expect(received.at(-1)).toBe("run.completed");
   });
 });
 
