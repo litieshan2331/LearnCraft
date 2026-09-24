@@ -37,17 +37,22 @@ class FakeEgress implements ModelEgressPort {
 
   constructor(private readonly responder: (input: ModelEgressCallInput) => unknown[] | Error) {}
 
-  async postOpenAiCompatibleSse(input: ModelEgressCallInput): Promise<{ statusCode: number; events: unknown[] }> {
+  async postOpenAiCompatibleSse(
+    input: ModelEgressCallInput,
+  ): Promise<{ statusCode: number; events: AsyncIterable<unknown> }> {
     this.calls.push(input);
     const result = this.responder(input);
     if (result instanceof Error) {
       throw result;
     }
-    // 模拟真实出网客户端的逐事件回调（仅当调用方传了 onEvent）。
-    for (const item of result) {
-      input.onEvent?.(item);
-    }
-    return { statusCode: 200, events: result };
+    return {
+      statusCode: 200,
+      events: (async function* streamEvents() {
+        for (const item of result) {
+          yield item;
+        }
+      })(),
+    };
   }
 }
 
@@ -188,6 +193,33 @@ describe('错误分类与重试', () => {
 
     expect(response.message.content).toBe('{}');
     expect(egress.calls).toHaveLength(2);
+    expect(delays).toEqual([500]);
+  });
+
+  it('流消费期间出现可重试错误时丢弃本次局部聚合并重新请求', async () => {
+    let attempt = 0;
+    const egress: ModelEgressPort = {
+      postOpenAiCompatibleSse: async () => {
+        attempt += 1;
+        const currentAttempt = attempt;
+        return {
+          statusCode: 200,
+          events: (async function* streamEvents() {
+            yield event({ content: currentAttempt === 1 ? '失败尝试' : '成功' });
+            if (currentAttempt === 1) {
+              throw new ModelEgressRequestError('MODEL_PROVIDER_INVALID_SSE', '缺少结束标记', true);
+            }
+          })(),
+        };
+      },
+    };
+    const delays: number[] = [];
+    const gateway = new OpenAiCompatibleModelGateway(egress, 2, async (ms) => void delays.push(ms));
+
+    const response = await gateway.complete(request());
+
+    expect(response.message.content).toBe('成功');
+    expect(attempt).toBe(2);
     expect(delays).toEqual([500]);
   });
 

@@ -95,6 +95,15 @@ function call(client: SafeModelEgressClient, endpointSegments: readonly string[]
   });
 }
 
+/** 把异步事件流消费完并收集，测试同时借此触发流尾完整性校验。 */
+async function collectEvents(events: AsyncIterable<unknown>): Promise<unknown[]> {
+  const collected: unknown[] = [];
+  for await (const event of events) {
+    collected.push(event);
+  }
+  return collected;
+}
+
 describe('SafeModelEgressClient 请求构造', () => {
   it('连接钉死 IP，并以原域名作为 servername 与 Host 头', async () => {
     const requester = new FakeRequester(() => failingResponse([Buffer.from('{"ok":true}')], { 'content-type': 'application/json' }));
@@ -259,17 +268,54 @@ describe('SafeModelEgressClient SSE', () => {
       Buffer.from('data: [DONE]\n\n'),
     ]);
     const result = await callSse(client);
-    expect(result.events).toEqual([{ choices: [{ delta: { content: 'hi' } }] }]);
+    await expect(collectEvents(result.events)).resolves.toEqual([
+      { choices: [{ delta: { content: 'hi' } }] },
+    ]);
+  });
+
+  it('Provider 尚未结束时即可消费首个事件，不等待完整响应', async () => {
+    let releaseTail: () => void = () => undefined;
+    const tailReady = new Promise<void>((resolve) => {
+      releaseTail = resolve;
+    });
+    const requester = new FakeRequester(() => ({
+      statusCode: 200,
+      headers: sseHeaders,
+      body: (async function* streamBody() {
+        yield Buffer.from('data: {\"choices\":[{\"delta\":{\"content\":\"首段\"}}]}\n\n');
+        await tailReady;
+        yield Buffer.from('data: [DONE]\n\n');
+      })(),
+    }));
+    const client = new SafeModelEgressClient(OPTIONS, new RecordingAuditWriter(), stubPolicy(), requester);
+
+    const result = await callSse(client);
+    const iterator = result.events[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: { choices: [{ delta: { content: '首段' } }] },
+    });
+
+    releaseTail();
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
   });
 
   it('缺少 [DONE] 时归类为可重试', async () => {
     const client = sseClient([Buffer.from('data: {"choices":[]}\n\n')]);
-    await expect(callSse(client)).rejects.toMatchObject({ code: MODEL_PROVIDER_INVALID_SSE, retryable: true });
+    const result = await callSse(client);
+    await expect(collectEvents(result.events)).rejects.toMatchObject({
+      code: MODEL_PROVIDER_INVALID_SSE,
+      retryable: true,
+    });
   });
 
   it('没有事件时归类为不可重试', async () => {
     const client = sseClient([Buffer.from('data: [DONE]\n\n')]);
-    await expect(callSse(client)).rejects.toMatchObject({ code: MODEL_PROVIDER_INVALID_SSE, retryable: false });
+    const result = await callSse(client);
+    await expect(collectEvents(result.events)).rejects.toMatchObject({
+      code: MODEL_PROVIDER_INVALID_SSE,
+      retryable: false,
+    });
   });
 
   it('Content-Type 不是 text/event-stream 时拒绝', async () => {

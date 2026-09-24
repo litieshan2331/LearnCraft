@@ -25,7 +25,9 @@ import {
 
 /** 出网端口：网关只依赖它，测试可注入假实现。 */
 export interface ModelEgressPort {
-  postOpenAiCompatibleSse(input: ModelEgressCallInput): Promise<{ statusCode: number; events: unknown[] }>;
+  postOpenAiCompatibleSse(
+    input: ModelEgressCallInput,
+  ): Promise<{ statusCode: number; events: AsyncIterable<unknown> }>;
 }
 
 export type ModelRole = 'system' | 'user' | 'assistant' | 'tool';
@@ -162,7 +164,6 @@ export class OpenAiCompatibleModelGateway {
 
     for (let attempt = 0; attempt <= this.requestMaxRetries; attempt += 1) {
       try {
-        const onReasoningDelta = request.onReasoningDelta;
         const response = await this.egressClient.postOpenAiCompatibleSse({
           ownerId: request.connection.ownerId,
           modelConnectionId: request.connection.connectionId,
@@ -171,11 +172,12 @@ export class OpenAiCompatibleModelGateway {
           apiKey: request.connection.apiKey,
           endpointSegments: ['chat', 'completions'],
           payload,
-          ...(onReasoningDelta === undefined
-            ? {}
-            : { onEvent: (event: unknown) => forwardReasoningDelta(event, onReasoningDelta) }),
         });
-        return parseStreamCompletion(response.events);
+        const accumulator = new ModelCompletionAccumulator(request.onReasoningDelta);
+        for await (const event of response.events) {
+          accumulator.accept(event);
+        }
+        return accumulator.finish();
       } catch (error) {
         if (!(error instanceof ModelEgressRequestError)) {
           throw error;
@@ -239,65 +241,62 @@ function toGatewayError(error: ModelEgressRequestError, hasTools: boolean): Mode
   return new ModelGatewayError(error.code, error.message, error.retryable);
 }
 
-/** 从单个 SSE 事件中取出思考增量并回调；结构与字段不符时静默跳过。 */
-function forwardReasoningDelta(event: unknown, onDelta: (text: string) => void): void {
-  if (!isRecord(event)) {
-    return;
-  }
-  const choices = event.choices;
-  if (!Array.isArray(choices) || choices.length === 0 || !isRecord(choices[0])) {
-    return;
-  }
-  const delta = choices[0].delta;
-  if (!isRecord(delta) || typeof delta.reasoning_content !== 'string' || delta.reasoning_content.length === 0) {
-    return;
-  }
-  onDelta(delta.reasoning_content);
-}
+/**
+ * OpenAI-compatible 流式聚合器：每收到一个事件立即合并，只保留工作流最终需要的正文、思考、
+ * 工具参数、用量和结束原因，不保存 Provider 原始事件数组。
+ */
+export class ModelCompletionAccumulator {
+  private content = '';
+  private reasoningContent = '';
+  private finishReason: string | null = null;
+  private readonly toolCalls = new Map<number, { id: string; name: string; argumentsJson: string }>();
+  private inputTokens = 0;
+  private outputTokens = 0;
 
-/** 聚合 SSE 事件为完整响应；只处理 choices[0]，工具调用按 index 合并。 */
-export function parseStreamCompletion(events: readonly unknown[]): ModelCompletionResponse {
-  let content = '';
-  let reasoningContent = '';
-  let finishReason: string | null = null;
-  const toolCalls = new Map<number, { id: string; name: string; argumentsJson: string }>();
-  let inputTokens = 0;
-  let outputTokens = 0;
+  constructor(private readonly onReasoningDelta?: (text: string) => void) {}
 
-  for (const event of events) {
+  /** 合并一个 Provider SSE 事件；只处理 choices[0]，工具调用按 index 拼接。 */
+  accept(event: unknown): void {
     if (!isRecord(event)) {
-      continue;
+      return;
     }
     const usage = event.usage;
     if (isRecord(usage)) {
       if (typeof usage.prompt_tokens === 'number') {
-        inputTokens = usage.prompt_tokens;
+        this.inputTokens = usage.prompt_tokens;
       }
       if (typeof usage.completion_tokens === 'number') {
-        outputTokens = usage.completion_tokens;
+        this.outputTokens = usage.completion_tokens;
       }
     }
 
     const choices = event.choices;
     if (!Array.isArray(choices) || choices.length === 0) {
-      continue;
+      return;
     }
     const choice = choices[0];
     if (!isRecord(choice)) {
-      continue;
+      return;
     }
     if (typeof choice.finish_reason === 'string') {
-      finishReason = choice.finish_reason;
+      this.finishReason = choice.finish_reason;
     }
     const delta = choice.delta;
     if (!isRecord(delta)) {
-      continue;
+      return;
     }
     if (typeof delta.content === 'string') {
-      content += delta.content;
+      this.content += delta.content;
     }
     if (typeof delta.reasoning_content === 'string') {
-      reasoningContent += delta.reasoning_content;
+      this.reasoningContent += delta.reasoning_content;
+      if (delta.reasoning_content.length > 0 && this.onReasoningDelta !== undefined) {
+        try {
+          this.onReasoningDelta(delta.reasoning_content);
+        } catch {
+          // 思考进度展示是 best-effort；回调失败不能影响模型聚合与工作流执行。
+        }
+      }
     }
     const rawToolCalls = delta.tool_calls;
     if (Array.isArray(rawToolCalls)) {
@@ -306,7 +305,7 @@ export function parseStreamCompletion(events: readonly unknown[]): ModelCompleti
           return;
         }
         const index = typeof rawCall.index === 'number' && rawCall.index >= 0 ? rawCall.index : position;
-        const existing = toolCalls.get(index) ?? { id: '', name: '', argumentsJson: '' };
+        const existing = this.toolCalls.get(index) ?? { id: '', name: '', argumentsJson: '' };
         if (typeof rawCall.id === 'string' && rawCall.id.length > 0) {
           existing.id = rawCall.id;
         }
@@ -319,35 +318,47 @@ export function parseStreamCompletion(events: readonly unknown[]): ModelCompleti
             existing.argumentsJson += fn.arguments;
           }
         }
-        toolCalls.set(index, existing);
+        this.toolCalls.set(index, existing);
       });
     }
   }
 
-  if (finishReason === 'length') {
-    throw new ModelGatewayError(
-      'MODEL_PROVIDER_RESPONSE_TRUNCATED',
-      '模型输出因长度上限被截断。',
-      false,
-    );
+  /** 流结束后校验并生成工作流使用的完整响应。 */
+  finish(): ModelCompletionResponse {
+    if (this.finishReason === 'length') {
+      throw new ModelGatewayError(
+        'MODEL_PROVIDER_RESPONSE_TRUNCATED',
+        '模型输出因长度上限被截断。',
+        false,
+      );
+    }
+
+    const mergedToolCalls = [...this.toolCalls.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([, call]) => ({ id: call.id, name: call.name, argumentsJson: call.argumentsJson }));
+
+    if (this.content.length === 0 && mergedToolCalls.length === 0) {
+      throw new ModelGatewayError('MODEL_PROVIDER_RESPONSE_INVALID', '模型没有返回最终文本内容。', false);
+    }
+
+    return {
+      message: {
+        role: 'assistant',
+        content: this.content,
+        reasoningContent: this.reasoningContent.length > 0 ? this.reasoningContent : null,
+        toolCalls: mergedToolCalls,
+      },
+      usage: { inputTokens: this.inputTokens, outputTokens: this.outputTokens },
+      finishReason: this.finishReason,
+    };
   }
+}
 
-  const mergedToolCalls = [...toolCalls.entries()]
-    .sort((left, right) => left[0] - right[0])
-    .map(([, call]) => ({ id: call.id, name: call.name, argumentsJson: call.argumentsJson }));
-
-  if (content.length === 0 && mergedToolCalls.length === 0) {
-    throw new ModelGatewayError('MODEL_PROVIDER_RESPONSE_INVALID', '模型没有返回最终文本内容。', false);
+/** 兼容同步测试与局部调用：逐事件喂给同一个聚合器后返回完整响应。 */
+export function parseStreamCompletion(events: Iterable<unknown>): ModelCompletionResponse {
+  const accumulator = new ModelCompletionAccumulator();
+  for (const event of events) {
+    accumulator.accept(event);
   }
-
-  return {
-    message: {
-      role: 'assistant',
-      content,
-      reasoningContent: reasoningContent.length > 0 ? reasoningContent : null,
-      toolCalls: mergedToolCalls,
-    },
-    usage: { inputTokens, outputTokens },
-    finishReason,
-  };
+  return accumulator.finish();
 }

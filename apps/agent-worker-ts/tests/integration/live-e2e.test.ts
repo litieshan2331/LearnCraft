@@ -50,12 +50,16 @@ interface ConnectionRow {
   encryption_key_version: string;
 }
 
-/** 从 SSE 事件里取出正文与用量；只做最小提取，不实现完整网关。 */
-function extractCompletion(events: readonly unknown[]): { text: string; inputTokens: number; outputTokens: number } {
+/** 从 SSE 事件流里边读边提取正文与用量；只做最小提取，不保存原始事件。 */
+async function extractCompletion(
+  events: AsyncIterable<unknown>,
+): Promise<{ text: string; inputTokens: number; outputTokens: number; eventCount: number }> {
   let text = '';
   let inputTokens = 0;
   let outputTokens = 0;
-  for (const event of events) {
+  let eventCount = 0;
+  for await (const event of events) {
+    eventCount += 1;
     if (typeof event !== 'object' || event === null) {
       continue;
     }
@@ -87,7 +91,7 @@ function extractCompletion(events: readonly unknown[]): { text: string; inputTok
       text += content;
     }
   }
-  return { text, inputTokens, outputTokens };
+  return { text, inputTokens, outputTokens, eventCount };
 }
 
 describe.skipIf(!enabled)('真实端到端：领取 → 解密 → 调用 Provider → 回写', () => {
@@ -190,10 +194,10 @@ describe.skipIf(!enabled)('真实端到端：领取 → 解密 → 调用 Provid
           stream_options: { include_usage: true },
         },
       });
-      const completion = extractCompletion(response.events);
+      const completion = await extractCompletion(response.events);
       expect(completion.text.length).toBeGreaterThan(0);
       console.log(
-        '  · Provider 返回：状态=' + String(response.statusCode) + '，事件数=' + String(response.events.length) +
+        '  · Provider 返回：状态=' + String(response.statusCode) + '，事件数=' + String(completion.eventCount) +
           '，耗时=' + String(Date.now() - started) + 'ms，正文=' + completion.text.slice(0, 40) +
           '，tokens=' + String(completion.inputTokens) + '/' + String(completion.outputTokens),
       );
@@ -205,7 +209,7 @@ describe.skipIf(!enabled)('真实端到端：领取 → 解密 → 调用 Provid
         outputSummary: {
           smoke: true,
           provider_status: response.statusCode,
-          event_count: response.events.length,
+          event_count: completion.eventCount,
           text_length: completion.text.length,
         },
         inputTokens: completion.inputTokens,

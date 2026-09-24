@@ -254,12 +254,6 @@ export interface ModelEgressCallInput {
   endpointSegments: readonly string[];
   payload: unknown;
   ca?: string | Buffer;
-  /**
-   * 可选的逐事件回调：流式读取过程中，每解析出一个 SSE 事件就即时回调一次。
-   * 仅用于「边生成边展示」的进度场景；回调是 best-effort——抛错会被忽略，不影响 SSE 解析、
-   * 字节上限、[DONE] 校验与错误分类。
-   */
-  onEvent?: (event: unknown) => void;
 }
 
 export class SafeModelEgressClient {
@@ -290,8 +284,13 @@ export class SafeModelEgressClient {
     }
   }
 
-  /** 发起流式请求，读取并解析 data-only SSE；缺少 [DONE] 视为可重试。 */
-  async postOpenAiCompatibleSse(input: ModelEgressCallInput): Promise<{ statusCode: number; events: unknown[] }> {
+  /**
+   * 发起流式请求并返回可逐项消费的 data-only SSE 事件流。
+   * 调用方必须把 events 迭代到结束，才能完成响应体上限、非空事件与 [DONE] 完整性校验。
+   */
+  async postOpenAiCompatibleSse(
+    input: ModelEgressCallInput,
+  ): Promise<{ statusCode: number; events: AsyncIterable<unknown> }> {
     const response = await this.post(input, 'text/event-stream');
     this.ensureNotRedirect(response.statusCode);
     this.ensureNotTooLargeByHeader(response);
@@ -304,8 +303,10 @@ export class SafeModelEgressClient {
     if (!contentType.startsWith('text/event-stream')) {
       throw new ModelEgressRequestError(MODEL_PROVIDER_INVALID_SSE, '流式响应缺少 text/event-stream。', false);
     }
-    const parsed = await readSse(response, this.options.maxResponseBytes, input.onEvent);
-    return { statusCode: response.statusCode, events: parsed };
+    return {
+      statusCode: response.statusCode,
+      events: readSse(response, this.options.maxResponseBytes),
+    };
   }
 
   private async post(input: ModelEgressCallInput, accept: string): Promise<PinnedHttpResponse> {
@@ -457,17 +458,15 @@ function extractProviderError(body: Buffer): { code: string | null; message: str
 }
 
 /**
- * 读取 data-only SSE：忽略注释行与非 data 行，必须以 [DONE] 结束。
- * 传入 onEvent 时按到达顺序即时回调（best-effort：回调抛错被忽略，不影响解析与校验）。
+ * 逐项解析 data-only SSE：忽略注释行与非 data 行，不保存完整事件数组，并要求以 [DONE] 结束。
  */
-async function readSse(
+async function* readSse(
   response: PinnedHttpResponse,
   maxBytes: number,
-  onEvent?: (event: unknown) => void,
-): Promise<unknown[]> {
-  const events: unknown[] = [];
+): AsyncGenerator<unknown, void, void> {
   let buffer = '';
   let received = 0;
+  let eventCount = 0;
   let sawDone = false;
   for await (const chunk of prepareBody(response)) {
     received += chunk.byteLength;
@@ -487,14 +486,8 @@ async function readSse(
           } else if (data.length > 0) {
             try {
               const event: unknown = JSON.parse(data);
-              events.push(event);
-              if (onEvent !== undefined) {
-                try {
-                  onEvent(event);
-                } catch {
-                  // 回调失败只影响进度展示，不影响本次流式调用。
-                }
-              }
+              eventCount += 1;
+              yield event;
             } catch {
               throw new ModelEgressRequestError(MODEL_PROVIDER_INVALID_SSE, '模型流式响应包含非法 JSON。', false);
             }
@@ -507,11 +500,10 @@ async function readSse(
   if (buffer.length > 0) {
     throw new ModelEgressRequestError(MODEL_PROVIDER_INVALID_SSE, '模型流式响应存在残缺尾部。', false);
   }
-  if (events.length === 0) {
+  if (eventCount === 0) {
     throw new ModelEgressRequestError(MODEL_PROVIDER_INVALID_SSE, '模型流式响应没有事件。', false);
   }
   if (!sawDone) {
     throw new ModelEgressRequestError(MODEL_PROVIDER_INVALID_SSE, '模型流式响应缺少结束标记。', true);
   }
-  return events;
 }
