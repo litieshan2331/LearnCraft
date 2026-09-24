@@ -11,7 +11,7 @@
 
 import pg from 'pg';
 
-import { formatRedisConnection, readAgentQueueConfig, readOutboxDispatcherConfig } from '../bootstrap/config.js';
+import { formatRedisConnection, readAgentQueuePoolConfigs, readOutboxDispatcherConfig } from '../bootstrap/config.js';
 import { closeAgentQueue, createAgentQueue, createBullMqPublisher } from '../infrastructure/queue/bullmq-agent-queue.js';
 import { OutboxDispatcher } from '../infrastructure/queue/outbox-dispatcher.js';
 import { RespRedisClient } from '../infrastructure/redis/resp-client.js';
@@ -19,20 +19,20 @@ import { createReadinessChecker, startHealthServer } from '../interfaces/http/he
 
 async function main(): Promise<void> {
   const dispatcherConfig = readOutboxDispatcherConfig();
-  const queueConfig = readAgentQueueConfig();
+  const queueConfigs = readAgentQueuePoolConfigs();
 
   const pool = new pg.Pool({ connectionString: dispatcherConfig.databaseUrl, max: 4 });
-  const queue = createAgentQueue(queueConfig);
-  const dispatcher = new OutboxDispatcher(pool, createBullMqPublisher(queue, queueConfig), dispatcherConfig);
+  const queues = { short: createAgentQueue(queueConfigs.short), long: createAgentQueue(queueConfigs.long) };
+  const dispatcher = new OutboxDispatcher(pool, createBullMqPublisher(queues, queueConfigs), dispatcherConfig);
 
-  const readinessRedis = new RespRedisClient({ url: formatRedisConnection(queueConfig.connection) });
+  const readinessRedis = new RespRedisClient({ url: formatRedisConnection(queueConfigs.short.connection) });
   const health = await startHealthServer({
     service: 'agent-dispatcher-ts',
     port: Number(process.env.AGENT_HTTP_PORT ?? 8080),
     host: process.env.AGENT_HTTP_HOST ?? '0.0.0.0',
     details: () => ({
       dispatcher_id: dispatcherConfig.dispatcherId,
-      queue: dispatcherConfig.queueName,
+      queues: { short: queueConfigs.short.queueName, long: queueConfigs.long.queueName },
       queue_prefix: dispatcherConfig.queuePrefix,
       claims_all_run_types: true,
     }),
@@ -58,7 +58,7 @@ async function main(): Promise<void> {
     console.log('[dispatcher] 收到 ' + signal + '，开始优雅关闭');
     await health.close();
     await dispatcher.stop();
-    await closeAgentQueue(queue);
+    await Promise.all([closeAgentQueue(queues.short), closeAgentQueue(queues.long)]);
     await pool.end();
     await readinessRedis.close();
     console.log('[dispatcher] 已关闭');
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
 
   console.log(
     '[dispatcher] 启动：id=' + dispatcherConfig.dispatcherId +
-      '，队列=' + dispatcherConfig.queueName +
+      '，短队列=' + queueConfigs.short.queueName + '，长队列=' + queueConfigs.long.queueName +
       '，前缀=' + dispatcherConfig.queuePrefix +
       '，领取范围=全部 run_type' +
       '，健康端点=:' + String(health.port),

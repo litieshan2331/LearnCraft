@@ -5,7 +5,7 @@
 - `outbox-dispatcher.ts`：`OutboxDispatcher` —— 以 `FOR UPDATE OF o SKIP LOCKED` 领取本运行时负责的
   `run_type` 事件，校验契约后投递，并回写 `published` / `failed`（退避）/ `dead`；
   支持优雅关闭（停止领取并立即释放已领取未发布的事件，而不是等 900 秒锁租约）。
-- `bullmq-agent-queue.ts`：BullMQ 装配 —— `jobId` 使用 `agent_run_id` 去重、`attempts = maxRetries + 1`、
+- `workflow-pool.ts`：固定四类工作流的资源池映射：前测/后测进入短任务池，路线/节点内容进入长任务池；`bullmq-agent-queue.ts` 分别装配两类队列与 Worker。\n- `bullmq-agent-queue.ts`：BullMQ 装配 —— `jobId` 使用 `agent_run_id` 去重、`attempts = maxRetries + 1`、
   自定义退避复用 10/20/40… 封顶 300 秒、`lockDuration` 大于任务硬超时、键前缀与 Celery 完全隔离。
 
 **关键点**：领取语句必须写 `FOR UPDATE OF o`。写成裸 `FOR UPDATE` 会连带锁住 `agent.agent_runs`，

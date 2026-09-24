@@ -21,6 +21,7 @@ import { calculateRetryDelaySeconds } from '../../application/commands/execute-a
 import type { AgentQueueConfig } from '../../bootstrap/config.js';
 import type { AgentRunTask } from '../../application/commands/execute-agent-run.js';
 import type { AgentRunPublisher } from './outbox-dispatcher.js';
+import type { WorkflowPool } from './workflow-pool.js';
 
 export const AGENT_RUN_JOB_NAME = 'agent.run';
 
@@ -67,13 +68,14 @@ export async function closeAgentQueue(queue: Queue<AgentRunJobPayload>): Promise
 }
 
 /** 把 BullMQ 队列适配为 Dispatcher 使用的投递端口。 */
+/** 按资源池选择 BullMQ 队列；Outbox 重投仍使用同一工作流路由规则。 */
 export function createBullMqPublisher(
-  queue: Queue<AgentRunJobPayload>,
-  config: AgentQueueConfig,
+  queues: { short: Queue<AgentRunJobPayload>; long: Queue<AgentRunJobPayload> },
+  configs: { short: AgentQueueConfig; long: AgentQueueConfig },
 ): AgentRunPublisher {
   return {
-    publish: async (task) => {
-      await publishAgentRun(queue, task, config);
+    publish: async (task, pool: WorkflowPool) => {
+      await publishAgentRun(queues[pool], task, configs[pool]);
     },
   };
 }

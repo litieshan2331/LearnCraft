@@ -14,7 +14,7 @@ import { CoreInternalClient } from '../acl/core-internal-client.js';
 import { AgentWorkflowRegistry } from '../application/services/agent-workflow-registry.js';
 import {
   formatRedisConnection,
-  readAgentQueueConfig,
+  readAgentQueuePoolConfigs,
   readAgentReactMaxTurns,
   readAgentToolMaxCalls,
   readCoreInternalClientOptions,
@@ -51,7 +51,7 @@ function requireDatabaseUrl(): string {
 }
 
 async function main(): Promise<void> {
-  const queueConfig = readAgentQueueConfig();
+  const queueConfigs = readAgentQueuePoolConfigs();
   const pool = new pg.Pool({ connectionString: requireDatabaseUrl(), max: 12 });
   const repository = new PgAgentRunRepository(pool);
 
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
   // 实时进度（B2）：与队列共用 Redis 实例，发布到 learncraft:agent-progress:{runId}。
   // 通道不可用时只告警，绝不影响 AgentRun；web 侧未配置订阅时这些事件也不会有人读取。
   const progressPublisher = new RedisAgentProgressPublisher({
-    url: formatRedisConnection(queueConfig.connection),
+    url: formatRedisConnection(queueConfigs.short.connection),
     commandTimeoutMs: 1_000,
     // 思考原文单条上限（默认 200 会截断）；其余事件字段都很短，放宽不影响其它事件。
     maxTextLength: 4_000,
@@ -117,21 +117,27 @@ async function main(): Promise<void> {
     reactMaxTurns: reactMaxTurns.cardContentGenerate,
   }));
 
-  const worker = createAgentRunWorker(
-    queueConfig,
-    createAgentRunProcessor({ repository, workflows, maxRetries: queueConfig.maxAttempts }),
-  );
+  const workers = {
+    short: createAgentRunWorker(
+      queueConfigs.short,
+      createAgentRunProcessor({ repository, workflows, maxRetries: queueConfigs.short.maxAttempts }),
+    ),
+    long: createAgentRunWorker(
+      queueConfigs.long,
+      createAgentRunProcessor({ repository, workflows, maxRetries: queueConfigs.long.maxAttempts }),
+    ),
+  };
 
   // 健康与就绪端点：Python 侧 agent-api 下线后，运维与 compose healthcheck 依赖它判断 Agent 侧状态。
-  const readinessRedis = new RespRedisClient({ url: formatRedisConnection(queueConfig.connection) });
+  const readinessRedis = new RespRedisClient({ url: formatRedisConnection(queueConfigs.short.connection) });
   const health = await startHealthServer({
     service: 'agent-worker-ts',
     port: Number(process.env.AGENT_HTTP_PORT ?? 8080),
     host: process.env.AGENT_HTTP_HOST ?? '0.0.0.0',
     details: () => ({
-      queue: queueConfig.queueName,
-      queue_prefix: queueConfig.prefix,
-      concurrency: queueConfig.concurrency,
+      queues: { short: queueConfigs.short.queueName, long: queueConfigs.long.queueName },
+      queue_prefix: queueConfigs.short.prefix,
+      concurrency: { short: queueConfigs.short.concurrency, long: queueConfigs.long.concurrency },
       registered_run_types: workflows.registeredRunTypes(),
       tavily_configured: tavilySettings.apiKey !== null,
       tavily_quota_configured: redisQuota !== null,
@@ -150,9 +156,11 @@ async function main(): Promise<void> {
       },
     }),
   });
-  worker.on('failed', (job, error) => {
-    console.error('[worker] 任务失败 run=' + String(job?.id) + ' attempts=' + String(job?.attemptsMade) + '：' + error.message);
-  });
+  for (const [pool, worker] of Object.entries(workers)) {
+    worker.on('failed', (job, error) => {
+      console.error('[worker] ' + pool + ' 任务失败 run=' + String(job?.id) + ' attempts=' + String(job?.attemptsMade) + '：' + error.message);
+    });
+  }
 
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
@@ -162,7 +170,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     console.log('[worker] 收到 ' + signal + '，等待在飞任务结束');
     await health.close();
-    await worker.close();
+    await Promise.all([workers.short.close(), workers.long.close()]);
     await pool.end();
     await readinessRedis.close();
     await progressPublisher.close();
@@ -174,9 +182,9 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => void shutdown('SIGINT'));
 
   console.log(
-    '[worker] 启动：队列=' + queueConfig.queueName +
-      '，前缀=' + queueConfig.prefix +
-      '，并发=' + String(queueConfig.concurrency) +
+    '[worker] 启动：短队列=' + queueConfigs.short.queueName + '，长队列=' + queueConfigs.long.queueName +
+      '，前缀=' + queueConfigs.short.prefix +
+      '，并发=' + String(queueConfigs.short.concurrency) + '/' + String(queueConfigs.long.concurrency) +
       '，已注册工作流=' + JSON.stringify(workflows.registeredRunTypes()) +
       '，联网工具=' + (tavilySettings.apiKey === null ? '未配置' : '已配置') +
       '，配额 Redis=' + (redisQuota === null ? '未配置' : '已配置') +

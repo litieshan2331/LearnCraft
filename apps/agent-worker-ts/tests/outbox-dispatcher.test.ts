@@ -10,6 +10,7 @@ import type { AgentRunTask } from '../src/application/commands/execute-agent-run
 import type { OutboxDispatcherConfig } from '../src/bootstrap/config.js';
 import type { PoolClientLike, PoolLike, QueryResultLike } from '../src/infrastructure/database/agent-run-repository.js';
 import { OutboxDispatcher, type AgentRunPublisher } from '../src/infrastructure/queue/outbox-dispatcher.js';
+import type { WorkflowPool } from '../src/infrastructure/queue/workflow-pool.js';
 
 const RUN_ID = '11111111-2222-4333-8444-555555555555';
 
@@ -64,23 +65,24 @@ function eventRow(overrides: Record<string, unknown> = {}): Record<string, unkno
     event_version: 1,
     payload_json: { agent_run_id: RUN_ID, trace_id: 'trace-1', task_version: 1 },
     attempt_count: 1,
+    run_type: 'assessment_generate',
     ...overrides,
   };
 }
 
 class RecordingPublisher implements AgentRunPublisher {
-  readonly published: AgentRunTask[] = [];
+  readonly published: Array<{ task: AgentRunTask; pool: WorkflowPool }> = [];
 
   constructor(
     private readonly behavior: 'ok' | 'fail' = 'ok',
     private readonly afterFirstPublish?: () => Promise<void>,
   ) {}
 
-  async publish(task: AgentRunTask): Promise<void> {
+  async publish(task: AgentRunTask, pool: WorkflowPool): Promise<void> {
     if (this.behavior === 'fail') {
       throw new Error('队列不可用');
     }
-    this.published.push(task);
+    this.published.push({ task, pool });
     if (this.published.length === 1 && this.afterFirstPublish !== undefined) {
       await this.afterFirstPublish();
     }
@@ -103,8 +105,8 @@ describe('领取 SQL', () => {
     const claim = client.find('FOR UPDATE OF o');
     expect(claim).toBeDefined();
     expect(claim?.text).toContain('JOIN agent.agent_runs r ON r.id = o.aggregate_id');
-    // 只有一套运行时，领取语句不再带 run_type 路由过滤。
-    expect(claim?.text).not.toContain('run_type');
+    // 不按 run_type 过滤，但需要读取其值以选择资源池。
+    expect(claim?.text).toContain('run_type');
     // 关键：必须是 OF o，否则会连带锁住 agent_runs 并与 beginExecution 互相阻塞。
     expect(claim?.text).toContain('FOR UPDATE OF o SKIP LOCKED');
     expect(claim?.text).not.toMatch(/FOR UPDATE SKIP LOCKED/);
@@ -129,8 +131,28 @@ describe('投递与状态回写', () => {
     const claimed = await dispatcher.dispatchOnce();
 
     expect(claimed).toBe(1);
-    expect(publisher.published).toEqual([{ agentRunId: RUN_ID, traceId: 'trace-1', taskVersion: 1 }]);
+    expect(publisher.published).toEqual([{ task: { agentRunId: RUN_ID, traceId: 'trace-1', taskVersion: 1 }, pool: 'short' }]);
     expect(client.find("SET status = 'published'")?.values).toEqual(['event-1', 'dispatcher-under-test']);
+  });
+
+  it('四类工作流按短、长资源池路由', async () => {
+    for (const [runType, pool] of [
+      ['assessment_generate', 'short'],
+      ['posttest_generate', 'short'],
+      ['plan_generate', 'long'],
+      ['card_content_generate', 'long'],
+    ] as const) {
+      const { dispatcher, publisher } = build([eventRow({ run_type: runType })]);
+      await dispatcher.dispatchOnce();
+      expect(publisher.published[0]?.pool).toBe(pool);
+    }
+  });
+
+  it('未知工作流仍交给 Worker 写入终态失败，避免 AgentRun 卡在 queued', async () => {
+    const { dispatcher, client, publisher } = build([eventRow({ run_type: 'unknown' })]);
+    await dispatcher.dispatchOnce();
+    expect(publisher.published[0]?.pool).toBe('short');
+    expect(client.find("SET status = 'published'")).toBeDefined();
   });
 
   it('事件版本不是 1 时转 dead 且不投递', async () => {

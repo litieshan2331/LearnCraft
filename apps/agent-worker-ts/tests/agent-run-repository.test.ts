@@ -6,6 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { executeAgentRun } from '../src/application/commands/execute-agent-run.js';
+
 import {
   AgentRunInvariantError,
   AgentRunNotFoundError,
@@ -54,6 +56,63 @@ class FakePool implements PoolLike {
   async connect(): Promise<PoolClientLike> {
     return this.client;
   }
+}
+
+/** 可观测连接池：记录当前持有的数据库连接数量，供生命周期回归测试使用。 */
+class TrackingPool implements PoolLike {
+  activeConnections = 0;
+  maxActiveConnections = 0;
+
+  /** 获取一个会在 release 时归还计数的跟踪连接。 */
+  async connect(): Promise<PoolClientLike> {
+    this.activeConnections += 1;
+    this.maxActiveConnections = Math.max(this.maxActiveConnections, this.activeConnections);
+    return new TrackingClient(this);
+  }
+
+  /** 在连接释放时减少当前活动连接计数。 */
+  releaseConnection(): void {
+    this.activeConnections -= 1;
+  }
+}
+
+/** 跟踪连接池中的单个连接，并返回 AgentRun 仓储所需的最小查询结果。 */
+class TrackingClient implements PoolClientLike {
+  private released = false;
+
+  constructor(private readonly pool: TrackingPool) {}
+
+  /** 响应仓储测试所需的行锁、取消状态与事件序号查询。 */
+  async query(text: string): Promise<QueryResultLike> {
+    if (text.includes('FOR UPDATE')) {
+      return { rows: [runRow()] };
+    }
+    if (text.includes('SELECT status FROM agent.agent_runs')) {
+      return { rows: [{ status: 'running' }] };
+    }
+    if (text.includes('MAX(sequence_no)')) {
+      return { rows: [{ last_sequence_no: 0 }] };
+    }
+    return { rows: [] };
+  }
+
+  /** 只允许连接释放一次，避免测试计数出现负数。 */
+  release(): void {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
+    this.pool.releaseConnection();
+  }
+}
+
+/** 创建可手动放行的异步闸门，用于模拟模型请求持续等待。 */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolvePromise: () => void = () => undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return { promise, resolve: resolvePromise };
 }
 
 function runRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -148,7 +207,40 @@ describe('PgAgentRunRepository.markFailed', () => {
   });
 });
 
-describe('PgAgentRunRepository.beginExecution', () => {
+describe('AgentRun 执行连接生命周期', () => {
+  it('模型等待期间不持有 PostgreSQL 连接', async () => {
+    const pool = new TrackingPool();
+    const repository = new PgAgentRunRepository(pool);
+    const modelGate = deferred();
+    const workflowStarted = deferred();
+
+    const execution = executeAgentRun({
+      task: { agentRunId: RUN_ID, traceId: TRACE_ID, taskVersion: 1 },
+      retryCount: 0,
+      repository,
+      workflows: {
+        resolve: () => ({
+          run: async () => {
+            workflowStarted.resolve();
+            await modelGate.promise;
+            return {
+              outputSummary: { model_id: 'test-model' },
+              usage: { inputTokens: 3, outputTokens: 5 },
+            };
+          },
+        }),
+      },
+    });
+
+    await workflowStarted.promise;
+    expect(pool.activeConnections).toBe(0);
+
+    modelGate.resolve();
+    await expect(execution).resolves.toEqual({ status: 'succeeded', runId: RUN_ID });
+    expect(pool.activeConnections).toBe(0);
+    expect(pool.maxActiveConnections).toBeGreaterThan(0);
+  });
+
   it('以行锁领取 queued 运行并追加 run.started', async () => {
     const { repository, client } = buildRepository({ lastSequenceNo: 3 });
 

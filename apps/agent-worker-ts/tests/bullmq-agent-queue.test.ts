@@ -6,8 +6,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  queueAdds: [] as Array<{ name: string; data: unknown; options: Record<string, unknown> }>,
+  queueAdds: [] as Array<{ queueName: string; name: string; data: unknown; options: Record<string, unknown> }>,
   queueOptions: [] as unknown[],
+  workerNames: [] as string[],
   workerOptions: [] as unknown[],
 }));
 
@@ -23,7 +24,7 @@ vi.mock('bullmq', () => {
     }
 
     async add(name: string, data: unknown, options: Record<string, unknown>): Promise<{ id: string }> {
-      mocks.queueAdds.push({ name, data, options });
+      mocks.queueAdds.push({ queueName: this.name, name, data, options });
       return { id: 'job-1' };
     }
 
@@ -40,6 +41,7 @@ vi.mock('bullmq', () => {
       this.processor = processor;
       this.options = options;
       mocks.workerOptions.push(options);
+      mocks.workerNames.push(name);
     }
 
     async close(): Promise<void> {}
@@ -56,6 +58,7 @@ import {
   agentJobBackoffDelayMs,
   createAgentQueue,
   createAgentRunWorker,
+  createBullMqPublisher,
   publishAgentRun,
 } from '../src/infrastructure/queue/bullmq-agent-queue.js';
 
@@ -74,6 +77,7 @@ beforeEach(() => {
   mocks.queueAdds.length = 0;
   mocks.queueOptions.length = 0;
   mocks.workerOptions.length = 0;
+  mocks.workerNames.length = 0;
 });
 
 describe('队列装配', () => {
@@ -96,6 +100,25 @@ describe('队列装配', () => {
       attempts: 4,
       backoff: { type: 'custom' },
     });
+  });
+
+  it('Publisher 把短任务与长任务发到不同队列，重试仍使用原队列 jobId', async () => {
+    const short = { ...CONFIG, queueName: 'agent.run.short' };
+    const long = { ...CONFIG, queueName: 'agent.run.long' };
+    const publisher = createBullMqPublisher(
+      { short: createAgentQueue(short), long: createAgentQueue(long) },
+      { short, long },
+    );
+    const task = { agentRunId: 'run-1', traceId: 'trace-1', taskVersion: 1 as const };
+
+    await publisher.publish(task, 'short');
+    await publisher.publish(task, 'long');
+    await publisher.publish(task, 'long');
+
+    expect(mocks.queueAdds.map(({ queueName }) => queueName)).toEqual([
+      'agent.run.short', 'agent.run.long', 'agent.run.long',
+    ]);
+    expect(mocks.queueAdds.map(({ options }) => options.jobId)).toEqual(['run-1', 'run-1', 'run-1']);
   });
 
   it('消费端把并发、锁时长与自定义退避交给 BullMQ', () => {

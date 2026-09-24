@@ -21,6 +21,7 @@ import { z } from 'zod';
 import { calculateRetryDelaySeconds, type AgentRunTask } from '../../application/commands/execute-agent-run.js';
 import type { OutboxDispatcherConfig } from '../../bootstrap/config.js';
 import type { PoolClientLike, PoolLike } from '../database/agent-run-repository.js';
+import { UnknownWorkflowPoolError, workflowPoolForRunType, type WorkflowPool } from './workflow-pool.js';
 
 export const AgentRunTaskSchema = z
   .object({
@@ -31,7 +32,7 @@ export const AgentRunTaskSchema = z
   .strict();
 
 export interface AgentRunPublisher {
-  publish(task: AgentRunTask): Promise<void>;
+  publish(task: AgentRunTask, pool: WorkflowPool): Promise<void>;
 }
 
 export interface ClaimedOutboxEvent {
@@ -39,6 +40,7 @@ export interface ClaimedOutboxEvent {
   aggregateId: string;
   eventVersion: number;
   payloadJson: unknown;
+  runType: string;
   attemptCount: number;
 }
 
@@ -70,7 +72,8 @@ export const SQL_CLAIM_EVENTS = [
   '    attempt_count = e.attempt_count + 1, last_error = NULL',
   'FROM candidate',
   'WHERE e.id = candidate.id',
-  'RETURNING e.id, e.aggregate_id, e.event_version, e.payload_json, e.attempt_count',
+  'RETURNING e.id, e.aggregate_id, e.event_version, e.payload_json, e.attempt_count,',
+  '  (SELECT r.run_type FROM agent.agent_runs r WHERE r.id = e.aggregate_id) AS run_type',
 ].join('\n');
 
 const SQL_MARK_PUBLISHED = [
@@ -176,6 +179,7 @@ export class OutboxDispatcher {
         aggregateId: String(row.aggregate_id),
         eventVersion: Number(row.event_version),
         payloadJson: row.payload_json,
+        runType: String(row.run_type),
         attemptCount: Number(row.attempt_count),
       }));
     } catch (error) {
@@ -198,8 +202,19 @@ export class OutboxDispatcher {
       throw error;
     }
 
+    let pool: WorkflowPool;
     try {
-      await this.publisher.publish(task);
+      pool = workflowPoolForRunType(event.runType);
+    } catch (error) {
+      if (!(error instanceof UnknownWorkflowPoolError)) {
+        throw error;
+      }
+      // 沿用原有语义：未知类型交由 Worker 写入 AGENT_RUN_WORKFLOW_NOT_REGISTERED，避免 AgentRun 永远 queued。
+      pool = 'short';
+    }
+
+    try {
+      await this.publisher.publish(task, pool);
     } catch {
       await this.markRetryableFailure(event);
       return;

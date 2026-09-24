@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { parseRedisConnection } from '../src/bootstrap/config.js';
+import { parseRedisConnection, readAgentQueuePoolConfigs } from '../src/bootstrap/config.js';
 
 describe('parseRedisConnection', () => {
   it('解析主机、端口、密码与数据库编号', () => {
@@ -25,3 +25,44 @@ describe('parseRedisConnection', () => {
   });
 });
 
+
+describe('readAgentQueuePoolConfigs', () => {
+  it('沿用原队列处理短任务，并为长任务配置独立队列与并发', () => {
+    const previous = {
+      url: process.env.AGENT_QUEUE_REDIS_URL,
+      shortQueue: process.env.AGENT_SHORT_QUEUE_NAME,
+      longQueue: process.env.AGENT_LONG_QUEUE_NAME,
+      shortConcurrency: process.env.AGENT_SHORT_WORKER_CONCURRENCY,
+      longConcurrency: process.env.AGENT_LONG_WORKER_CONCURRENCY,
+    };
+    try {
+      process.env.AGENT_QUEUE_REDIS_URL = 'redis://localhost:6379/0';
+      process.env.AGENT_SHORT_QUEUE_NAME = 'agent.run';
+      process.env.AGENT_LONG_QUEUE_NAME = 'agent.run.long';
+      process.env.AGENT_SHORT_WORKER_CONCURRENCY = '3';
+      process.env.AGENT_LONG_WORKER_CONCURRENCY = '2';
+      const configs = readAgentQueuePoolConfigs();
+      expect(configs.short.queueName).toBe('agent.run');
+      expect(configs.long.queueName).toBe('agent.run.long');
+      expect(configs.short.concurrency).toBe(3);
+      expect(configs.long.concurrency).toBe(2);
+      expect(configs.short.connection).toEqual(configs.long.connection);
+      process.env.AGENT_LONG_QUEUE_NAME = 'agent.run';
+      expect(() => readAgentQueuePoolConfigs()).toThrow(/不能同名/);
+    } finally {
+      for (const [name, value] of Object.entries({
+        AGENT_QUEUE_REDIS_URL: previous.url,
+        AGENT_SHORT_QUEUE_NAME: previous.shortQueue,
+        AGENT_LONG_QUEUE_NAME: previous.longQueue,
+        AGENT_SHORT_WORKER_CONCURRENCY: previous.shortConcurrency,
+        AGENT_LONG_WORKER_CONCURRENCY: previous.longConcurrency,
+      })) {
+        if (value === undefined) {
+          delete process.env[name];
+        } else {
+          process.env[name] = value;
+        }
+      }
+    }
+  });
+});

@@ -215,6 +215,24 @@ export function readAgentQueueConfig(): AgentQueueConfig {
   };
 }
 
+/** 分别读取短、长任务池的队列与并发配置，保留通用重试和连接参数。 */
+export function readAgentQueuePoolConfigs(): { short: AgentQueueConfig; long: AgentQueueConfig } {
+  const shared = readAgentQueueConfig();
+  const shortQueueName = process.env.AGENT_SHORT_QUEUE_NAME?.trim() || shared.queueName;
+  const longQueueName = process.env.AGENT_LONG_QUEUE_NAME?.trim() || 'agent.run.long';
+  if (shortQueueName === longQueueName) {
+    throw new Error('短任务队列与长任务队列不能同名。');
+  }
+  const shortConcurrency = numberEnv('AGENT_SHORT_WORKER_CONCURRENCY', shared.concurrency);
+  const longConcurrency = numberEnv('AGENT_LONG_WORKER_CONCURRENCY', shared.concurrency);
+  if (!Number.isInteger(shortConcurrency) || shortConcurrency < 1 || !Number.isInteger(longConcurrency) || longConcurrency < 1) {
+    throw new Error('短任务与长任务 Worker 并发必须是正整数。');
+  }
+  return {
+    short: { ...shared, queueName: shortQueueName, concurrency: shortConcurrency },
+    long: { ...shared, queueName: longQueueName, concurrency: longConcurrency },
+  };
+}
 export function readOutboxDispatcherConfig(): OutboxDispatcherConfig {
   return {
     connection: parseRedisConnection(requireEnv('AGENT_QUEUE_REDIS_URL')),
