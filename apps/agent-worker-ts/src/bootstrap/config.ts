@@ -149,6 +149,32 @@ export function readModelRateLimitSettings(): ModelRateLimitSettings {
   };
 }
 
+/** Tavily 熔断器参数：连续服务故障达到阈值后冷却，随后仅放行单个半开探测。 */
+export interface TavilyCircuitBreakerSettings {
+  failureThreshold: number;
+  failureWindowSeconds: number;
+  cooldownSeconds: number;
+  probeLeaseSeconds: number;
+  keyPrefix: string;
+}
+
+/** 读取 Tavily 熔断配置；所有阈值与时间均可通过环境变量覆盖。 */
+export function readTavilyCircuitBreakerSettings(): TavilyCircuitBreakerSettings {
+  return {
+    failureThreshold: readPositiveInteger('TAVILY_CIRCUIT_FAILURE_THRESHOLD', 3),
+    failureWindowSeconds: readPositiveInteger('TAVILY_CIRCUIT_FAILURE_WINDOW_SECONDS', 60),
+    cooldownSeconds: readPositiveInteger('TAVILY_CIRCUIT_COOLDOWN_SECONDS', 60),
+    probeLeaseSeconds: readPositiveInteger('TAVILY_CIRCUIT_PROBE_LEASE_SECONDS', 30),
+    keyPrefix: process.env.TAVILY_CIRCUIT_KEY_PREFIX?.trim() || 'circuit:tool:',
+  };
+}
+
+/** 模型网关请求级额外重试次数，限制在 1–2 次，缺省一次。 */
+export function readModelGatewayRequestMaxRetries(): number {
+  const retries = readPositiveInteger('MODEL_GATEWAY_REQUEST_MAX_RETRIES', 1);
+  return Math.min(2, Math.max(1, retries));
+}
+
 /** 出网审计保留天数（与 Python 的 MODEL_EGRESS_AUDIT_RETENTION_DAYS 同名同默认）。 */
 export interface TavilySettingsFromEnvironment {
   apiKey: string | null;

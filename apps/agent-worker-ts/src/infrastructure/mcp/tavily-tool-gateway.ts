@@ -28,6 +28,7 @@ import { Agent, ProxyAgent, fetch as undiciFetch, type Dispatcher } from 'undici
 
 import type { ModelToolCall, ModelToolDefinition } from '../llm/model-gateway.js';
 import { RespRedisClient } from '../redis/resp-client.js';
+import { ToolCircuitBreakerUnavailableError, type ToolCircuitBreaker, type ToolCircuitLease } from '../redis/tool-circuit-breaker.js';
 
 export const TAVILY_REMOTE_MCP_URL = 'https://mcp.tavily.com/mcp/';
 
@@ -132,6 +133,7 @@ export interface TavilyGatewayDeps {
   quota: DailyQuotaCounter;
   /** 测试注入；默认走 undici。 */
   fetchImpl?: typeof undiciFetch;
+  circuitBreaker?: ToolCircuitBreaker;
 }
 
 /**
@@ -161,11 +163,13 @@ export class TavilyToolGateway {
   private readonly quota: DailyQuotaCounter;
   private readonly fetchImpl: typeof undiciFetch;
   private readonly dispatcher: Dispatcher | null;
+  private readonly circuitBreaker: ToolCircuitBreaker | null;
 
   constructor(deps: TavilyGatewayDeps) {
     this.settings = deps.settings;
     this.quota = deps.quota;
     this.fetchImpl = deps.fetchImpl ?? undiciFetch;
+    this.circuitBreaker = deps.circuitBreaker ?? null;
     const proxyUrl = deps.settings.proxyUrl;
     this.dispatcher =
       proxyUrl !== null && proxyUrl.length > 0
@@ -188,24 +192,6 @@ export class TavilyToolGateway {
         ok: false,
         code: 'TAVILY_API_KEY_MISSING',
         message: '联网搜索服务尚未配置。',
-        data: {},
-      };
-    }
-
-    const quotaStatus = await this.consumeDailyQuota();
-    if (quotaStatus === 'exceeded') {
-      return {
-        ok: false,
-        code: 'TAVILY_DAILY_QUOTA_EXCEEDED',
-        message: '当前账户已达到 Tavily 今日工具调用额度。',
-        data: {},
-      };
-    }
-    if (quotaStatus === 'unavailable') {
-      return {
-        ok: false,
-        code: 'TAVILY_QUOTA_UNAVAILABLE',
-        message: 'Tavily 配额 Redis 暂时不可用，本次不会绕过配额调用网络工具。',
         data: {},
       };
     }
@@ -233,19 +219,60 @@ export class TavilyToolGateway {
       return { ok: false, code: 'TAVILY_QUERY_INVALID', message: '工具参数不是合法 JSON。', data: {} };
     }
 
+    const quotaStatus = await this.consumeDailyQuota();
+    if (quotaStatus === 'exceeded') {
+      return {
+        ok: false,
+        code: 'TAVILY_DAILY_QUOTA_EXCEEDED',
+        message: '当前账户已达到 Tavily 今日工具调用额度。',
+        data: {},
+      };
+    }
+    if (quotaStatus === 'unavailable') {
+      return {
+        ok: false,
+        code: 'TAVILY_QUOTA_UNAVAILABLE',
+        message: 'Tavily 配额 Redis 暂时不可用，本次不会绕过配额调用网络工具。',
+        data: {},
+      };
+    }
+
+    let circuitLease: ToolCircuitLease | null = null;
+    if (this.circuitBreaker !== null) {
+      try {
+        circuitLease = await this.circuitBreaker.acquire();
+      } catch (error) {
+        if (error instanceof ToolCircuitBreakerUnavailableError) {
+          return unavailableToolResult('工具熔断状态暂不可用，本次不会调用外部工具。');
+        }
+        return unavailableToolResult('联网工具暂时不可用。');
+      }
+      if (circuitLease === null) {
+        return unavailableToolResult('联网工具暂时不可用，请先根据当前上下文继续。');
+      }
+    }
+
     let lastError: unknown = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return await this.searchThenExtract(query);
+        const result = await this.searchThenExtract(query);
+        if (circuitLease !== null && this.circuitBreaker !== null) {
+          await this.circuitBreaker.recordSuccess(circuitLease).catch(() => undefined);
+        }
+        return result;
       } catch (error) {
         if (error instanceof TavilyMcpError) {
-          return { ok: false, code: error.code, message: error.message, data: {} };
+          lastError = error;
+          break;
         }
         lastError = error;
         if (attempt === 0) {
           await new Promise((resolve) => setTimeout(resolve, 1_000));
         }
       }
+    }
+    if (circuitLease !== null && this.circuitBreaker !== null) {
+      await this.circuitBreaker.recordFailure(circuitLease).catch(() => undefined);
     }
     // 与 Python 一致：网络类错误归为服务不可用，其余归为调用失败。
     if (isNetworkError(lastError)) {
@@ -412,6 +439,11 @@ export class TavilyToolGateway {
       await client.close().catch(() => undefined);
     }
   }
+}
+
+/** 返回统一的工具不可用结果，供熔断打开或熔断 Redis 不可用时使用。 */
+function unavailableToolResult(message: string): ToolExecutionResult {
+  return { ok: false, code: 'TOOL_UNAVAILABLE', message, data: {} };
 }
 
 /** 判断是否为网络层错误：对应 Python 的 httpx.HTTPError 与 TimeoutError 分类。 */

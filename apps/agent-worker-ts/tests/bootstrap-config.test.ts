@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { parseRedisConnection, readAgentQueuePoolConfigs, readModelRateLimitSettings } from '../src/bootstrap/config.js';
+import { parseRedisConnection, readAgentQueuePoolConfigs, readModelRateLimitSettings, readModelGatewayRequestMaxRetries, readTavilyCircuitBreakerSettings } from '../src/bootstrap/config.js';
 
 describe('parseRedisConnection', () => {
   it('解析主机、端口、密码与数据库编号', () => {
@@ -100,6 +100,48 @@ describe('readModelRateLimitSettings', () => {
         } else {
           process.env[name] = value;
         }
+      }
+    }
+  });
+});
+
+
+describe('模型重试与工具熔断配置', () => {
+  it('模型网关重试限制在 1 到 2 次', () => {
+    const previous = process.env.MODEL_GATEWAY_REQUEST_MAX_RETRIES;
+    try {
+      process.env.MODEL_GATEWAY_REQUEST_MAX_RETRIES = '5';
+      expect(readModelGatewayRequestMaxRetries()).toBe(2);
+      process.env.MODEL_GATEWAY_REQUEST_MAX_RETRIES = '0';
+      expect(readModelGatewayRequestMaxRetries()).toBe(1);
+    } finally {
+      if (previous === undefined) delete process.env.MODEL_GATEWAY_REQUEST_MAX_RETRIES;
+      else process.env.MODEL_GATEWAY_REQUEST_MAX_RETRIES = previous;
+    }
+  });
+
+  it('读取工具熔断器默认阈值', () => {
+    const names = [
+      'TAVILY_CIRCUIT_FAILURE_THRESHOLD',
+      'TAVILY_CIRCUIT_FAILURE_WINDOW_SECONDS',
+      'TAVILY_CIRCUIT_COOLDOWN_SECONDS',
+      'TAVILY_CIRCUIT_PROBE_LEASE_SECONDS',
+      'TAVILY_CIRCUIT_KEY_PREFIX',
+    ];
+    const previous = new Map(names.map((name) => [name, process.env[name]]));
+    try {
+      for (const name of names) delete process.env[name];
+      expect(readTavilyCircuitBreakerSettings()).toEqual({
+        failureThreshold: 3,
+        failureWindowSeconds: 60,
+        cooldownSeconds: 60,
+        probeLeaseSeconds: 30,
+        keyPrefix: 'circuit:tool:',
+      });
+    } finally {
+      for (const [name, value] of previous) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
       }
     }
   });

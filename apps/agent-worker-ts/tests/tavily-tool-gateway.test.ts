@@ -18,6 +18,7 @@ import {
   type DailyQuotaCounter,
   type TavilyToolSettings,
 } from '../src/infrastructure/mcp/tavily-tool-gateway.js';
+import type { ToolCircuitBreaker, ToolCircuitLease } from '../src/infrastructure/redis/tool-circuit-breaker.js';
 
 const SETTINGS: TavilyToolSettings = {
   apiKey: 'tvly-test-key',
@@ -54,11 +55,13 @@ function gateway(options: {
   settings?: Partial<TavilyToolSettings>;
   quota?: DailyQuotaCounter;
   fetchImpl?: unknown;
+  circuitBreaker?: ToolCircuitBreaker;
 } = {}) {
   const quota = options.quota ?? new FakeQuota(0);
   return new TavilyToolGateway({
     settings: { ...SETTINGS, ...options.settings },
     quota,
+    circuitBreaker: options.circuitBreaker,
     fetchImpl: (options.fetchImpl ?? (async () => {
       throw new Error('单元测试不应发起真实网络请求');
     })) as never,
@@ -66,6 +69,28 @@ function gateway(options: {
 }
 
 const SEARCH_CALL = { id: 'c1', name: 'tavily_search', argumentsJson: '{"query":"TypeScript"}' };
+
+
+class FakeCircuitBreaker implements ToolCircuitBreaker {
+  acquireCalls = 0;
+  successCalls = 0;
+  failureCalls = 0;
+  lease: ToolCircuitLease | null = { probe: false };
+
+  async acquire(): Promise<ToolCircuitLease | null> {
+    this.acquireCalls += 1;
+    return this.lease;
+  }
+
+  async recordSuccess(): Promise<void> {
+    this.successCalls += 1;
+  }
+
+  async recordFailure(): Promise<void> {
+    this.failureCalls += 1;
+  }
+}
+
 
 describe('执行前的校验与配额', () => {
   it('只接受 tavily_search', async () => {
@@ -105,6 +130,29 @@ describe('执行前的校验与配额', () => {
       const result = await gateway().execute({ ...SEARCH_CALL, argumentsJson });
       expect(result.code).toBe('TAVILY_QUERY_INVALID');
     }
+  });
+});
+
+describe('工具熔断接入', () => {
+  it('工具成功后记录熔断成功', async () => {
+    const circuit = new FakeCircuitBreaker();
+    const result = await gateway({
+      circuitBreaker: circuit,
+      fetchImpl: async () => {
+        throw new Error('普通错误');
+      },
+    }).execute(SEARCH_CALL);
+    expect(result.code).toBe('TAVILY_MCP_CALL_FAILED');
+    expect(circuit.acquireCalls).toBe(1);
+    expect(circuit.failureCalls).toBe(1);
+  });
+
+  it('熔断打开时返回 TOOL_UNAVAILABLE，不调用外部工具', async () => {
+    const circuit = new FakeCircuitBreaker();
+    circuit.lease = null;
+    const result = await gateway({ circuitBreaker: circuit }).execute(SEARCH_CALL);
+    expect(result).toMatchObject({ ok: false, code: 'TOOL_UNAVAILABLE' });
+    expect(circuit.acquireCalls).toBe(1);
   });
 });
 

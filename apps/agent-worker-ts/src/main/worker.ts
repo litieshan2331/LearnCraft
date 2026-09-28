@@ -22,6 +22,8 @@ import {
   readModelEgressOptions,
   readModelRateLimitSettings,
   readTavilyToolSettings,
+  readTavilyCircuitBreakerSettings,
+  readModelGatewayRequestMaxRetries,
 } from '../bootstrap/config.js';
 import { PgAgentRunRepository } from '../infrastructure/database/agent-run-repository.js';
 import { PgModelEgressAuditRepository } from '../infrastructure/database/model-egress-audit-repository.js';
@@ -38,6 +40,7 @@ import { createReadinessChecker, startHealthServer } from '../interfaces/http/he
 import { createAgentRunProcessor } from '../interfaces/queue/agent-run-processor.js';
 import { RespRedisClient } from '../infrastructure/redis/resp-client.js';
 import { RedisAgentProgressPublisher } from '../infrastructure/redis/agent-progress-publisher.js';
+import { RedisToolCircuitBreaker } from '../infrastructure/redis/tool-circuit-breaker.js';
 import { RedisModelRateLimiter } from '../infrastructure/redis/model-rate-limiter.js';
 import { createAssessmentGenerateWorkflow } from '../workflows/assessment-generate/index.js';
 import { createCardContentGenerateWorkflow } from '../workflows/card-content-generate/index.js';
@@ -70,7 +73,7 @@ async function main(): Promise<void> {
   const rateLimiter = new RedisModelRateLimiter(rateLimitRedis, readModelRateLimitSettings());
   const gateway = new OpenAiCompatibleModelGateway(
     egress,
-    Number(process.env.MODEL_GATEWAY_REQUEST_MAX_RETRIES ?? 5),
+    readModelGatewayRequestMaxRetries(),
     undefined,
     rateLimiter,
   );
@@ -86,6 +89,10 @@ async function main(): Promise<void> {
   const maxToolCalls = readAgentToolMaxCalls();
   // ReAct 轮数按工作流分别注入（一次运行内允许的模型调用次数，含工具调用轮）。
   const reactMaxTurns = readAgentReactMaxTurns();
+  const toolCircuitBreaker = new RedisToolCircuitBreaker(
+    rateLimitRedis,
+    readTavilyCircuitBreakerSettings(),
+  );
   const createToolGateway = (ownerId: string) =>
     new TavilyToolGateway({
       settings: {
@@ -98,6 +105,7 @@ async function main(): Promise<void> {
         extractChunksPerSource: tavilySettings.extractChunksPerSource,
         proxyUrl: tavilySettings.proxyUrl,
       },
+      circuitBreaker: toolCircuitBreaker,
       quota,
     });
 
