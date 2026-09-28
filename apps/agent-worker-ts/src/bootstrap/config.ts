@@ -255,7 +255,7 @@ export function readAgentReactMaxTurns(): AgentReactTurnsConfig {
     assessmentGenerate: readPositiveInteger('AGENT_REACT_MAX_TURNS_ASSESSMENT', 5),
     posttestGenerate: readPositiveInteger('AGENT_REACT_MAX_TURNS_POSTTEST', 5),
     planGenerate: readPositiveInteger('AGENT_REACT_MAX_TURNS_PLAN', 10),
-    cardContentGenerate: readPositiveInteger('AGENT_REACT_MAX_TURNS_CARD_CONTENT', 5),
+    cardContentGenerate: readPositiveInteger('AGENT_REACT_MAX_TURNS_CARD_CONTENT', 10),
   };
 }
 

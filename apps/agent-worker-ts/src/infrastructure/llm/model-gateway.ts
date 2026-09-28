@@ -164,7 +164,25 @@ export class OpenAiCompatibleModelGateway {
   /** 发起一次（含重试）模型调用，返回聚合后的完整响应。 */
   async complete(request: ModelCompletionRequest): Promise<ModelCompletionResponse> {
     const hasTools = (request.tools?.length ?? 0) > 0;
-    const response = await this.completeOnConnection(request, request.connection, hasTools);
+    try {
+      return await this.completeOnConnection(request, request.connection, hasTools);
+    } catch (error) {
+      if (!(error instanceof ModelGatewayError) || !isFallbackEligible(error.code) || this.fallbackConnection === null) {
+        throw error;
+      }
+    }
+    if (this.fallbackBudget !== null) {
+      try {
+        await this.fallbackBudget.allow();
+      } catch {
+        throw new ModelGatewayError('MODEL_FALLBACK_BUDGET_UNAVAILABLE', '备用模型预算不可用或已达上限。', false);
+      }
+    }
+    const fallbackConnection = { ...this.fallbackConnection, ownerId: request.connection.ownerId };
+    const response = await this.completeOnConnection(request, fallbackConnection, hasTools);
+    if (this.fallbackBudget !== null) {
+      await this.fallbackBudget.record(response.usage.inputTokens + response.usage.outputTokens);
+    }
     return response;
   }
 
@@ -210,22 +228,6 @@ export class OpenAiCompatibleModelGateway {
         const mapped = toGatewayError(error, hasTools);
         lastError = mapped;
         if (!mapped.retryable || attempt === this.requestMaxRetries) {
-          if (connection === request.connection && this.fallbackConnection !== null && mapped.retryable) {
-            if (this.fallbackBudget !== null) {
-              try {
-                await this.fallbackBudget.allow();
-              } catch (budgetError) {
-                throw new ModelGatewayError('MODEL_FALLBACK_BUDGET_EXCEEDED', '备用模型达到每日 Token 上限。', false);
-              }
-            }
-            const fallbackResponse = await this.completeOnConnection(request, this.fallbackConnection, hasTools);
-            if (this.fallbackBudget !== null) {
-              await this.fallbackBudget.record(
-                fallbackResponse.usage.inputTokens + fallbackResponse.usage.outputTokens,
-              );
-            }
-            return fallbackResponse;
-          }
           throw mapped;
         }
         await this.sleep(500 * 2 ** attempt);
@@ -272,6 +274,11 @@ export class OpenAiCompatibleModelGateway {
 
     return payload;
   }
+}
+
+/** 只有网络故障、429 和 5xx 能触发备用模型。 */
+function isFallbackEligible(code: string): boolean {
+  return code === 'MODEL_EGRESS_HTTP_ERROR' || code === 'MODEL_PROVIDER_HTTP_429' || /^MODEL_PROVIDER_HTTP_5\d\d$/.test(code);
 }
 
 /** 把出网错误映射为网关错误；工具场景下的 4xx 请求拒绝单独归类。 */

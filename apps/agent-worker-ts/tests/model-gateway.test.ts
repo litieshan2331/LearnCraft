@@ -15,6 +15,7 @@ import {
 } from '../src/infrastructure/llm/model-gateway.js';
 import { ModelEgressRequestError, type ModelEgressCallInput } from '../src/infrastructure/llm/safe-egress-client.js';
 import { ModelRateLimitError, type ModelRateLimiter } from '../src/infrastructure/redis/model-rate-limiter.js';
+import type { FallbackTokenBudget } from '../src/infrastructure/redis/fallback-budget.js';
 
 const CONNECTION = {
   ownerId: '11111111-2222-3333-4444-555555555555',
@@ -178,6 +179,40 @@ describe('SSE 聚合', () => {
 });
 
 describe('错误分类与重试', () => {
+  it('主模型重试耗尽后切换服务端备用模型并按实际 Token 记账', async () => {
+    const fallbackConnection = { ...CONNECTION, connectionId: 'system-fallback', modelId: 'fallback-model', apiKey: 'server-only-key' };
+    const egress = new FakeEgress((input) => {
+      if (input.modelConnectionId !== fallbackConnection.connectionId) {
+        return new ModelEgressRequestError('MODEL_PROVIDER_HTTP_503', '主模型不可用', true);
+      }
+      return [event({ content: '备用成功' }), { choices: [], usage: { prompt_tokens: 12, completion_tokens: 8 } }];
+    });
+    const recorded: number[] = [];
+    const budget: FallbackTokenBudget = {
+      allow: async () => undefined,
+      record: async (tokens) => { recorded.push(tokens); },
+    };
+    const gateway = new OpenAiCompatibleModelGateway(
+      egress,
+      1,
+      async () => undefined,
+      null,
+      fallbackConnection,
+      budget,
+    );
+
+    const response = await gateway.complete(request());
+
+    expect(response.message.content).toBe('备用成功');
+    expect(egress.calls.map((call) => call.modelConnectionId)).toEqual([
+      CONNECTION.connectionId,
+      CONNECTION.connectionId,
+      fallbackConnection.connectionId,
+    ]);
+    expect(recorded).toEqual([20]);
+    expect(egress.calls[2]?.apiKey).toBe('server-only-key');
+  });
+
   it('可重试错误按退避重试后成功', async () => {
     let attempt = 0;
     const egress = new FakeEgress(() => {

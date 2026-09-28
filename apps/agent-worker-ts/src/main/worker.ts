@@ -75,8 +75,8 @@ async function main(): Promise<void> {
   const rateLimiter = new RedisModelRateLimiter(rateLimitRedis, readModelRateLimitSettings());
   const fallbackSettings = readModelFallbackSettings();
   const fallbackConnection = fallbackSettings.enabled ? {
-    ownerId: 'system-fallback',
-    connectionId: 'system-fallback',
+    ownerId: '',
+    connectionId: '00000000-0000-4000-8000-000000000001',
     baseUrl: fallbackSettings.baseUrl!,
     modelId: fallbackSettings.modelId!,
     apiKey: fallbackSettings.apiKey!,
