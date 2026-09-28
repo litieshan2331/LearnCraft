@@ -3,7 +3,7 @@
  *
  * 组件：
  * - OnboardingFlow：加载既有画像和模型连接，并协调画像保存、目标创建与成功状态展示。
- * - ProfileForm：收集当前水平、时间、内容偏好、设备和背景。
+ * - ProfileForm：收集当前水平、时间、设备和背景；内容偏好固定为文档优先。
  * - LearningGoalForm：创建用户自定义主题的学习目标并可选择目标级模型连接。
  * - OnboardingProgress：呈现既有学习画像与学习目标步骤的视觉进度。
  * - getGoalIdempotencyKey：在一次目标创建及其安全重试期间复用幂等键。
@@ -77,12 +77,7 @@ const levelOptions: Array<{ value: ProfileFormValues["current_level"]; label: st
   { value: "advanced", label: "已有经验", description: "有开发经验，希望快速定位特定主题的薄弱点。" },
 ];
 
-const preferenceOptions: Array<{ value: ProfileFormValues["content_preference"]; label: string; description: string }> = [
-  { value: "document_first", label: "文档优先", description: "先读清概念和代码说明。" },
-  { value: "video_first", label: "视频优先", description: "先通过讲解建立直觉。" },
-  { value: "balanced", label: "均衡安排", description: "按知识点组合文档与视频。" },
-];
-
+/** 加载画像和模型连接，协调画像保存、目标创建与页面步骤。 */
 export function OnboardingFlow() {
   const [step, setStep] = useState<OnboardingStep>("loading");
   const [profile, setProfile] = useState<LearnerProfile | null>(null);
@@ -98,7 +93,7 @@ export function OnboardingFlow() {
       weekly_minutes: 300,
       operating_system: "windows",
       background_summary: "",
-      content_preference: "balanced",
+      content_preference: "document_first",
     },
   });
   const goalForm = useForm<LearningGoalFormValues>({
@@ -144,11 +139,13 @@ export function OnboardingFlow() {
     };
   }, [profileForm]);
 
+  /** 保存用户画像，并将内容偏好固定为文档优先。 */
   async function handleProfileSubmit(values: ProfileFormValues): Promise<void> {
     try {
       const savedProfile = await saveLearnerProfile({
         ...values,
         background_summary: values.background_summary || null,
+        content_preference: "document_first",
       });
       setProfile(savedProfile);
       profileForm.reset(toProfileFormValues(savedProfile));
@@ -159,6 +156,7 @@ export function OnboardingFlow() {
     }
   }
 
+  /** 创建学习目标并展示创建结果。 */
   async function handleGoalSubmit(values: LearningGoalFormValues): Promise<void> {
     try {
       const goal = await createLearningGoal(
@@ -257,6 +255,7 @@ export function OnboardingFlow() {
   );
 }
 
+/** 展示学习画像与学习目标的步骤进度。 */
 function OnboardingProgress({ step }: Readonly<{ step: OnboardingStep }>) {
   const activeStep = step === "goal" || step === "completed" ? 2 : 1;
   const stages = [
@@ -285,6 +284,7 @@ function OnboardingProgress({ step }: Readonly<{ step: OnboardingStep }>) {
   );
 }
 
+/** 展示和提交学习画像中需要用户填写的字段。 */
 function ProfileForm({
   form,
   onSubmit,
@@ -296,6 +296,7 @@ function ProfileForm({
 }) {
   return (
     <form noValidate onSubmit={form.handleSubmit(onSubmit)}>
+      <input type="hidden" {...form.register("content_preference")} />
       <FieldGroup className="gap-8">
         <div>
           <p className="text-xs font-medium tracking-[0.16em] text-primary">STEP 1 / 学习画像</p>
@@ -337,20 +338,6 @@ function ProfileForm({
           </Field>
         </div>
 
-        <Field data-invalid={Boolean(form.formState.errors.content_preference)}>
-          <FieldLabel>内容偏好</FieldLabel>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {preferenceOptions.map((option) => (
-              <label className="cursor-pointer rounded-2xl border border-border bg-background/60 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:bg-card has-[:checked]:border-primary has-[:checked]:bg-primary/[0.07] has-[:checked]:shadow-[0_14px_32px_-24px_rgba(36,122,128,0.65)] focus-within:ring-3 focus-within:ring-ring/25" key={option.value}>
-                <input className="sr-only" type="radio" value={option.value} {...form.register("content_preference")} />
-                <span className="block font-medium">{option.label}</span>
-                <span className="mt-2 block text-sm leading-6 text-muted-foreground">{option.description}</span>
-              </label>
-            ))}
-          </div>
-          <FieldError errors={[form.formState.errors.content_preference]} />
-        </Field>
-
         <Field data-invalid={Boolean(form.formState.errors.background_summary)}>
           <FieldLabel htmlFor="background-summary">学习背景（可选）</FieldLabel>
           <Textarea className="rounded-xl bg-background/70 px-3.5 py-2.5" id="background-summary" maxLength={2000} placeholder="例如：会一点 JavaScript，了解变量和函数，但没有系统学习过 Python。" rows={4} {...form.register("background_summary")} />
@@ -370,6 +357,7 @@ function ProfileForm({
   );
 }
 
+/** 展示和提交学习目标表单。 */
 function LearningGoalForm({
   form,
   modelConnections,
@@ -469,6 +457,7 @@ function LearningGoalForm({
   );
 }
 
+/** 展示目标创建成功后的操作入口。 */
 function GoalCreatedState({ goal, onCreateAnother }: { goal: LearningGoal; onCreateAnother: () => void }) {
   return (
     <div className="rounded-[1.25rem] bg-secondary/55 p-5 sm:p-7">
@@ -494,6 +483,7 @@ function GoalCreatedState({ goal, onCreateAnother }: { goal: LearningGoal; onCre
   );
 }
 
+/** 展示引导流程加载中的状态。 */
 function LoadingState() {
   return (
     <div className="rounded-[1.25rem] bg-secondary/50 p-6 sm:p-8">
@@ -513,16 +503,18 @@ function LoadingState() {
   );
 }
 
+/** 将已有画像转换为表单值，并将内容偏好设为文档优先。 */
 function toProfileFormValues(profile: LearnerProfile): ProfileFormValues {
   return {
     current_level: profile.current_level,
     weekly_minutes: profile.weekly_minutes,
     operating_system: profile.operating_system ?? "windows",
     background_summary: profile.background_summary ?? "",
-    content_preference: profile.content_preference,
+    content_preference: "document_first",
   };
 }
 
+/** 将画像接口错误映射到表单字段和提示信息。 */
 function applyProfileFormApiErrors(
   error: unknown,
   form: UseFormReturn<ProfileFormValues>,
@@ -541,6 +533,7 @@ function applyProfileFormApiErrors(
   setErrorMessage("网络连接异常，请确认服务已启动后重试。");
 }
 
+/** 将目标接口错误映射到表单字段和提示信息。 */
 function applyGoalFormApiErrors(
   error: unknown,
   form: UseFormReturn<LearningGoalFormValues>,
@@ -559,10 +552,12 @@ function applyGoalFormApiErrors(
   setErrorMessage("网络连接异常，请确认服务已启动后重试。");
 }
 
+/** 把未知错误转换为可展示的提示。 */
 function toDisplayError(error: unknown): string {
   return error instanceof Error ? error.message : "请求暂时无法完成，请稍后重试。";
 }
 
+/** 根据当前步骤生成进度标签。 */
 function getStepLabel(step: OnboardingStep): string {
   switch (step) {
     case "profile":
@@ -576,11 +571,13 @@ function getStepLabel(step: OnboardingStep): string {
   }
 }
 
+/** 检查日期字符串是否为有效日历日期。 */
 function isCalendarDate(value: string): boolean {
   const date = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+/** 为目标创建请求生成并复用幂等键。 */
 function getGoalIdempotencyKey(reference: { current: string | null }): string {
   if (!reference.current) {
     reference.current = crypto.randomUUID();
