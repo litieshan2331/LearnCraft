@@ -24,6 +24,7 @@ import {
   readTavilyToolSettings,
   readTavilyCircuitBreakerSettings,
   readModelGatewayRequestMaxRetries,
+  readModelFallbackSettings,
 } from '../bootstrap/config.js';
 import { PgAgentRunRepository } from '../infrastructure/database/agent-run-repository.js';
 import { PgModelEgressAuditRepository } from '../infrastructure/database/model-egress-audit-repository.js';
@@ -42,6 +43,7 @@ import { RespRedisClient } from '../infrastructure/redis/resp-client.js';
 import { RedisAgentProgressPublisher } from '../infrastructure/redis/agent-progress-publisher.js';
 import { RedisToolCircuitBreaker } from '../infrastructure/redis/tool-circuit-breaker.js';
 import { RedisModelRateLimiter } from '../infrastructure/redis/model-rate-limiter.js';
+import { RedisFallbackTokenBudget } from '../infrastructure/redis/fallback-budget.js';
 import { createAssessmentGenerateWorkflow } from '../workflows/assessment-generate/index.js';
 import { createCardContentGenerateWorkflow } from '../workflows/card-content-generate/index.js';
 import { createPlanGenerateWorkflow } from '../workflows/plan-generate/index.js';
@@ -71,11 +73,24 @@ async function main(): Promise<void> {
     commandTimeoutMs: 2_000,
   });
   const rateLimiter = new RedisModelRateLimiter(rateLimitRedis, readModelRateLimitSettings());
+  const fallbackSettings = readModelFallbackSettings();
+  const fallbackConnection = fallbackSettings.enabled ? {
+    ownerId: 'system-fallback',
+    connectionId: 'system-fallback',
+    baseUrl: fallbackSettings.baseUrl!,
+    modelId: fallbackSettings.modelId!,
+    apiKey: fallbackSettings.apiKey!,
+  } : null;
+  const fallbackBudget = fallbackSettings.enabled
+    ? new RedisFallbackTokenBudget(rateLimitRedis, fallbackSettings.dailyTokenLimit, fallbackSettings.keyPrefix)
+    : null;
   const gateway = new OpenAiCompatibleModelGateway(
     egress,
     readModelGatewayRequestMaxRetries(),
     undefined,
     rateLimiter,
+    fallbackConnection,
+    fallbackBudget,
   );
 
   // 联网工具：Key 或配额 Redis 缺失时不阻止启动，网关会把受控错误回传给模型（Python 同行为）。

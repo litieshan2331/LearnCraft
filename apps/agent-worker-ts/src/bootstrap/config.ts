@@ -175,6 +175,35 @@ export function readModelGatewayRequestMaxRetries(): number {
   return Math.min(2, Math.max(1, retries));
 }
 
+/** 读取服务端全局备用模型配置；四项同时配置才启用，模型名称与 Key 不会下发给用户。 */
+export interface ModelFallbackSettings {
+  enabled: boolean;
+  baseUrl: string | null;
+  modelId: string | null;
+  apiKey: string | null;
+  dailyTokenLimit: number;
+  keyPrefix: string;
+}
+
+/** 校验备用模型配置，避免只配置部分凭据导致运行时静默降级失败。 */
+export function readModelFallbackSettings(): ModelFallbackSettings {
+  const baseUrl = process.env.MODEL_FALLBACK_BASE_URL?.trim() || null;
+  const modelId = process.env.MODEL_FALLBACK_MODEL_ID?.trim() || null;
+  const apiKey = process.env.MODEL_FALLBACK_API_KEY?.trim() || null;
+  const enabled = (process.env.MODEL_FALLBACK_ENABLED?.trim() || 'false') === 'true';
+  if (enabled && (baseUrl === null || modelId === null || apiKey === null)) {
+    throw new Error('启用备用模型时必须同时配置 MODEL_FALLBACK_BASE_URL、MODEL_FALLBACK_MODEL_ID、MODEL_FALLBACK_API_KEY。');
+  }
+  return {
+    enabled,
+    baseUrl,
+    modelId,
+    apiKey,
+    dailyTokenLimit: readPositiveInteger('MODEL_FALLBACK_DAILY_TOKEN_LIMIT', 100_000),
+    keyPrefix: process.env.MODEL_FALLBACK_KEY_PREFIX?.trim() || 'quota:llm:fallback:',
+  };
+}
+
 /** 出网审计保留天数（与 Python 的 MODEL_EGRESS_AUDIT_RETENTION_DAYS 同名同默认）。 */
 export interface TavilySettingsFromEnvironment {
   apiKey: string | null;

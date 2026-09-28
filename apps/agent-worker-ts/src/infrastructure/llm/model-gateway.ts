@@ -23,6 +23,7 @@ import {
   type ModelEgressCallInput,
 } from './safe-egress-client.js';
 import { ModelRateLimitError, type ModelRateLimiter } from '../redis/model-rate-limiter.js';
+import type { FallbackTokenBudget } from '../redis/fallback-budget.js';
 
 /** 出网端口：网关只依赖它，测试可注入假实现。 */
 export interface ModelEgressPort {
@@ -156,30 +157,41 @@ export class OpenAiCompatibleModelGateway {
     private readonly sleep: (ms: number) => Promise<void> = (ms) =>
       new Promise((resolve) => setTimeout(resolve, ms)),
     private readonly rateLimiter: ModelRateLimiter | null = null,
+    private readonly fallbackConnection: ModelProviderConnection | null = null,
+    private readonly fallbackBudget: FallbackTokenBudget | null = null,
   ) {}
 
   /** 发起一次（含重试）模型调用，返回聚合后的完整响应。 */
   async complete(request: ModelCompletionRequest): Promise<ModelCompletionResponse> {
-    const payload = this.buildPayload(request);
     const hasTools = (request.tools?.length ?? 0) > 0;
-    let lastError: ModelGatewayError | null = null;
+    const response = await this.completeOnConnection(request, request.connection, hasTools);
+    return response;
+  }
 
+  /** 在主连接重试耗尽后切换服务端备用连接；备用连接的身份不会写入业务响应。 */
+  private async completeOnConnection(
+    request: ModelCompletionRequest,
+    connection: ModelProviderConnection,
+    hasTools: boolean,
+  ): Promise<ModelCompletionResponse> {
+    const payload = this.buildPayload({ ...request, connection });
+    let lastError: ModelGatewayError | null = null;
     for (let attempt = 0; attempt <= this.requestMaxRetries; attempt += 1) {
       let lease: { release(): Promise<void> } | null = null;
       try {
         if (this.rateLimiter !== null) {
           lease = await this.rateLimiter.acquire({
-            ownerId: request.connection.ownerId,
-            modelId: request.connection.modelId,
-            apiKey: request.connection.apiKey,
+            ownerId: connection.ownerId,
+            modelId: connection.modelId,
+            apiKey: connection.apiKey,
           });
         }
         const response = await this.egressClient.postOpenAiCompatibleSse({
-          ownerId: request.connection.ownerId,
-          modelConnectionId: request.connection.connectionId,
+          ownerId: connection.ownerId,
+          modelConnectionId: connection.connectionId,
           agentRunId: request.agentRunId,
-          baseUrl: request.connection.baseUrl,
-          apiKey: request.connection.apiKey,
+          baseUrl: connection.baseUrl,
+          apiKey: connection.apiKey,
           endpointSegments: ['chat', 'completions'],
           payload,
         });
@@ -198,6 +210,22 @@ export class OpenAiCompatibleModelGateway {
         const mapped = toGatewayError(error, hasTools);
         lastError = mapped;
         if (!mapped.retryable || attempt === this.requestMaxRetries) {
+          if (connection === request.connection && this.fallbackConnection !== null && mapped.retryable) {
+            if (this.fallbackBudget !== null) {
+              try {
+                await this.fallbackBudget.allow();
+              } catch (budgetError) {
+                throw new ModelGatewayError('MODEL_FALLBACK_BUDGET_EXCEEDED', '备用模型达到每日 Token 上限。', false);
+              }
+            }
+            const fallbackResponse = await this.completeOnConnection(request, this.fallbackConnection, hasTools);
+            if (this.fallbackBudget !== null) {
+              await this.fallbackBudget.record(
+                fallbackResponse.usage.inputTokens + fallbackResponse.usage.outputTokens,
+              );
+            }
+            return fallbackResponse;
+          }
           throw mapped;
         }
         await this.sleep(500 * 2 ** attempt);
