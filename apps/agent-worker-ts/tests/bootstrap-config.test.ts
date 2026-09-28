@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { parseRedisConnection, readAgentQueuePoolConfigs } from '../src/bootstrap/config.js';
+import { parseRedisConnection, readAgentQueuePoolConfigs, readModelRateLimitSettings } from '../src/bootstrap/config.js';
 
 describe('parseRedisConnection', () => {
   it('解析主机、端口、密码与数据库编号', () => {
@@ -57,6 +57,44 @@ describe('readAgentQueuePoolConfigs', () => {
         AGENT_SHORT_WORKER_CONCURRENCY: previous.shortConcurrency,
         AGENT_LONG_WORKER_CONCURRENCY: previous.longConcurrency,
       })) {
+        if (value === undefined) {
+          delete process.env[name];
+        } else {
+          process.env[name] = value;
+        }
+      }
+    }
+  });
+});
+
+
+describe('readModelRateLimitSettings', () => {
+  it('读取 v1 限流默认值', () => {
+    const names = [
+      'MODEL_RATE_LIMIT_GLOBAL_CONCURRENCY',
+      'MODEL_RATE_LIMIT_API_KEY_CONCURRENCY',
+      'MODEL_RATE_LIMIT_API_KEY_RPM',
+      'MODEL_RATE_LIMIT_USER_CONCURRENCY',
+      'MODEL_RATE_LIMIT_USER_RPM',
+      'MODEL_RATE_LIMIT_LEASE_TTL_SECONDS',
+      'MODEL_RATE_LIMIT_KEY_PREFIX',
+    ];
+    const previous = new Map(names.map((name) => [name, process.env[name]]));
+    try {
+      for (const name of names) {
+        delete process.env[name];
+      }
+      expect(readModelRateLimitSettings()).toEqual({
+        globalConcurrency: 8,
+        apiKeyConcurrency: 2,
+        apiKeyRpm: 30,
+        userConcurrency: 2,
+        userRpm: 10,
+        leaseTtlSeconds: 180,
+        keyPrefix: 'ratelimit:llm:',
+      });
+    } finally {
+      for (const [name, value] of previous) {
         if (value === undefined) {
           delete process.env[name];
         } else {

@@ -14,6 +14,7 @@ import {
   type ModelEgressPort,
 } from '../src/infrastructure/llm/model-gateway.js';
 import { ModelEgressRequestError, type ModelEgressCallInput } from '../src/infrastructure/llm/safe-egress-client.js';
+import { ModelRateLimitError, type ModelRateLimiter } from '../src/infrastructure/redis/model-rate-limiter.js';
 
 const CONNECTION = {
   ownerId: '11111111-2222-3333-4444-555555555555',
@@ -245,5 +246,54 @@ describe('错误分类与重试', () => {
 
   it('网关错误类型可被上层识别', () => {
     expect(new ModelGatewayError('X', 'y', false, ['a'])).toBeInstanceOf(Error);
+  });
+});
+
+
+describe('模型限流接入', () => {
+  it('每次 Provider 尝试前获取租约，结束后释放租约', async () => {
+    const calls: string[] = [];
+    const limiter: ModelRateLimiter = {
+      acquire: async () => {
+        calls.push('acquire');
+        return {
+          release: async () => {
+            calls.push('release');
+          },
+        };
+      },
+    };
+    const gateway = new OpenAiCompatibleModelGateway(
+      new FakeEgress(() => [event({ content: '{}' })]),
+      0,
+      undefined,
+      limiter,
+    );
+
+    await gateway.complete(request());
+
+    expect(calls).toEqual(['acquire', 'release']);
+  });
+
+  it('限流拒绝转换为可重试的网关错误且不请求 Provider', async () => {
+    let providerCalls = 0;
+    const limiter: ModelRateLimiter = {
+      acquire: async () => {
+        throw new ModelRateLimitError('MODEL_RATE_LIMIT_EXCEEDED', '达到限流额度');
+      },
+    };
+    const egress: ModelEgressPort = {
+      postOpenAiCompatibleSse: async () => {
+        providerCalls += 1;
+        throw new Error('不应请求 Provider');
+      },
+    };
+    const gateway = new OpenAiCompatibleModelGateway(egress, 3, undefined, limiter);
+
+    await expect(gateway.complete(request())).rejects.toMatchObject({
+      code: 'MODEL_RATE_LIMIT_EXCEEDED',
+      retryable: true,
+    });
+    expect(providerCalls).toBe(0);
   });
 });

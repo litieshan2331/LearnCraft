@@ -125,6 +125,30 @@ export function readModelEgressOptions(): {
   };
 }
 
+/** 模型 Redis 限流配置；v1 只限制全局/API Key/用户并发与 RPM，不做 TPM。 */
+export interface ModelRateLimitSettings {
+  globalConcurrency: number;
+  apiKeyConcurrency: number;
+  apiKeyRpm: number;
+  userConcurrency: number;
+  userRpm: number;
+  leaseTtlSeconds: number;
+  keyPrefix: string;
+}
+
+/** 从环境变量读取模型限流参数；缺失时使用 v1 的保守默认值。 */
+export function readModelRateLimitSettings(): ModelRateLimitSettings {
+  return {
+    globalConcurrency: readPositiveInteger('MODEL_RATE_LIMIT_GLOBAL_CONCURRENCY', 8),
+    apiKeyConcurrency: readPositiveInteger('MODEL_RATE_LIMIT_API_KEY_CONCURRENCY', 2),
+    apiKeyRpm: readPositiveInteger('MODEL_RATE_LIMIT_API_KEY_RPM', 30),
+    userConcurrency: readPositiveInteger('MODEL_RATE_LIMIT_USER_CONCURRENCY', 2),
+    userRpm: readPositiveInteger('MODEL_RATE_LIMIT_USER_RPM', 10),
+    leaseTtlSeconds: readPositiveInteger('MODEL_RATE_LIMIT_LEASE_TTL_SECONDS', 180),
+    keyPrefix: process.env.MODEL_RATE_LIMIT_KEY_PREFIX?.trim() || 'ratelimit:llm:',
+  };
+}
+
 /** 出网审计保留天数（与 Python 的 MODEL_EGRESS_AUDIT_RETENTION_DAYS 同名同默认）。 */
 export interface TavilySettingsFromEnvironment {
   apiKey: string | null;

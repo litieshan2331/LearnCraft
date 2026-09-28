@@ -22,6 +22,7 @@ import {
   ModelEgressRequestError,
   type ModelEgressCallInput,
 } from './safe-egress-client.js';
+import { ModelRateLimitError, type ModelRateLimiter } from '../redis/model-rate-limiter.js';
 
 /** 出网端口：网关只依赖它，测试可注入假实现。 */
 export interface ModelEgressPort {
@@ -154,6 +155,7 @@ export class OpenAiCompatibleModelGateway {
     private readonly requestMaxRetries: number,
     private readonly sleep: (ms: number) => Promise<void> = (ms) =>
       new Promise((resolve) => setTimeout(resolve, ms)),
+    private readonly rateLimiter: ModelRateLimiter | null = null,
   ) {}
 
   /** 发起一次（含重试）模型调用，返回聚合后的完整响应。 */
@@ -163,7 +165,15 @@ export class OpenAiCompatibleModelGateway {
     let lastError: ModelGatewayError | null = null;
 
     for (let attempt = 0; attempt <= this.requestMaxRetries; attempt += 1) {
+      let lease: { release(): Promise<void> } | null = null;
       try {
+        if (this.rateLimiter !== null) {
+          lease = await this.rateLimiter.acquire({
+            ownerId: request.connection.ownerId,
+            modelId: request.connection.modelId,
+            apiKey: request.connection.apiKey,
+          });
+        }
         const response = await this.egressClient.postOpenAiCompatibleSse({
           ownerId: request.connection.ownerId,
           modelConnectionId: request.connection.connectionId,
@@ -179,6 +189,9 @@ export class OpenAiCompatibleModelGateway {
         }
         return accumulator.finish();
       } catch (error) {
+        if (error instanceof ModelRateLimitError) {
+          throw new ModelGatewayError(error.code, error.message, true);
+        }
         if (!(error instanceof ModelEgressRequestError)) {
           throw error;
         }
@@ -188,6 +201,10 @@ export class OpenAiCompatibleModelGateway {
           throw mapped;
         }
         await this.sleep(500 * 2 ** attempt);
+      } finally {
+        if (lease !== null) {
+          await lease.release();
+        }
       }
     }
 

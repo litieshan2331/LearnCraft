@@ -77,6 +77,7 @@ export class RespRedisClient {
   private socket: net.Socket | null = null;
   private buffer = Buffer.alloc(0);
   private ready = false;
+  private commandTail: Promise<void> = Promise.resolve();
 
   constructor(options: { url: string; connectTimeoutMs?: number; commandTimeoutMs?: number }) {
     this.parts = parseRedisUrl(options.url);
@@ -86,6 +87,21 @@ export class RespRedisClient {
 
   /** 执行一条命令；失败时抛 RespRedisError，调用方负责降级。 */
   async command(...args: string[]): Promise<string | number | null> {
+    let release: () => void = () => undefined;
+    const previous = this.commandTail;
+    this.commandTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await this.commandInternal(args);
+    } finally {
+      release();
+    }
+  }
+
+  /** 在串行队列中执行 Redis 命令，避免共享 RESP 缓冲区被并发请求交叉读写。 */
+  private async commandInternal(args: readonly string[]): Promise<string | number | null> {
     await this.ensureConnected();
     const socket = this.socket;
     if (socket === null) {

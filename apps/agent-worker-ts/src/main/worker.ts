@@ -20,6 +20,7 @@ import {
   readCoreInternalClientOptions,
   readModelEgressAuditRetentionDays,
   readModelEgressOptions,
+  readModelRateLimitSettings,
   readTavilyToolSettings,
 } from '../bootstrap/config.js';
 import { PgAgentRunRepository } from '../infrastructure/database/agent-run-repository.js';
@@ -37,6 +38,7 @@ import { createReadinessChecker, startHealthServer } from '../interfaces/http/he
 import { createAgentRunProcessor } from '../interfaces/queue/agent-run-processor.js';
 import { RespRedisClient } from '../infrastructure/redis/resp-client.js';
 import { RedisAgentProgressPublisher } from '../infrastructure/redis/agent-progress-publisher.js';
+import { RedisModelRateLimiter } from '../infrastructure/redis/model-rate-limiter.js';
 import { createAssessmentGenerateWorkflow } from '../workflows/assessment-generate/index.js';
 import { createCardContentGenerateWorkflow } from '../workflows/card-content-generate/index.js';
 import { createPlanGenerateWorkflow } from '../workflows/plan-generate/index.js';
@@ -60,7 +62,18 @@ async function main(): Promise<void> {
   // 审计写入是出网的 fail-closed 前置条件：写不进审计就拒绝调用模型。
   const auditWriter = new PgModelEgressAuditRepository(pool, readModelEgressAuditRetentionDays());
   const egress = new SafeModelEgressClient(readModelEgressOptions(), auditWriter);
-  const gateway = new OpenAiCompatibleModelGateway(egress, Number(process.env.MODEL_GATEWAY_REQUEST_MAX_RETRIES ?? 5));
+  const rateLimitRedis = new RespRedisClient({
+    url: formatRedisConnection(queueConfigs.short.connection),
+    connectTimeoutMs: 2_000,
+    commandTimeoutMs: 2_000,
+  });
+  const rateLimiter = new RedisModelRateLimiter(rateLimitRedis, readModelRateLimitSettings());
+  const gateway = new OpenAiCompatibleModelGateway(
+    egress,
+    Number(process.env.MODEL_GATEWAY_REQUEST_MAX_RETRIES ?? 5),
+    undefined,
+    rateLimiter,
+  );
 
   // 联网工具：Key 或配额 Redis 缺失时不阻止启动，网关会把受控错误回传给模型（Python 同行为）。
   const tavilySettings = readTavilyToolSettings();
@@ -173,6 +186,7 @@ async function main(): Promise<void> {
     await Promise.all([workers.short.close(), workers.long.close()]);
     await pool.end();
     await readinessRedis.close();
+    await rateLimitRedis.close();
     await progressPublisher.close();
     await redisQuota?.close();
     console.log('[worker] 已关闭');
