@@ -60,6 +60,7 @@ import {
 } from './schema/index.js';
 import { PlanRecoveryNormalizationError, normalizeRecoveryDocument } from './recovery/index.js';
 import { PlanGenerationInputSchema } from './schema/index.js';
+import type { TraceWriter } from '../../application/services/trace-writer.js';
 export * from './schema/index.js';
 
 /** 路线输出的解析结果：通过时给出文档，失败时给出脱敏字段路径。 */
@@ -154,6 +155,8 @@ export interface PlanGenerationDeps {
   reactMaxTurns: number;
   /** 可选的实时进度上报端口（生成过程中的步骤/工具事件，不落库、不含模型原文）。 */
   progress?: AgentProgressReporter;
+  /** 完整模型与工具观测写入端口。 */
+  traceWriter?: TraceWriter;
 }
 
 export interface PlanGenerationResult {
@@ -212,6 +215,7 @@ export async function runPlanGenerate(
     exhaustedErrorCode: 'PLAN_MODEL_RECOVERY_INVALID',
     exhaustedMessage: '学习路线经过 ReAct 自纠后仍不符合路线合同。',
     onProgress: progress,
+    traceWriter: deps.traceWriter,
   });
 
   const plan = outcome.value;

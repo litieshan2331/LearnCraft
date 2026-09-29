@@ -3,7 +3,7 @@
 本目录承载 Web 侧唯一的 Drizzle 数据库工程：
 
 - `client.ts`：懒加载 PostgreSQL 连接池和 Drizzle 客户端；只允许服务端代码调用。
-- `schema/`：23 张 P0 表、外键、索引、CHECK 约束和关系定义的唯一 TypeScript 来源；其中 `model-connection.ts` 定义用户模型连接的加密凭据字段与默认连接约束。
+- `schema/`：P0 表、Agent 观测表、外键、索引、CHECK 约束和关系定义的唯一 TypeScript 来源；其中 `agent.ts` 的 `agentTraceEvents` 使用 JSONB 保存完整模型与工具内容。
 - `migrations/`：由 Drizzle Kit 生成的版本化 SQL；扩展、触发器等无法仅用 ORM 表达的对象以同一迁移中的 raw SQL 管理。
 
 具体 repository 仍归属各限界上下文的 `modules/<context>/infrastructure/`，Route Handler 与 React 组件不得直接访问本目录。

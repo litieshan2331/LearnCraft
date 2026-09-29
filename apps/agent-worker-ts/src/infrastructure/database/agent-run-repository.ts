@@ -20,6 +20,8 @@
  */
 
 import pg from 'pg';
+import type { TraceWriter } from '../../application/services/trace-writer.js';
+import { PgTraceWriter } from './agent-trace-writer.js';
 
 const { Pool } = pg;
 
@@ -147,11 +149,15 @@ function toExecutionState(row: AgentRunRow, shouldExecute: boolean): AgentRunExe
 }
 
 export class PgAgentRunRepository {
-  constructor(private readonly pool: PoolLike) {}
+  constructor(
+    private readonly pool: PoolLike,
+    readonly traceWriter: TraceWriter | undefined = undefined,
+  ) {}
 
   /** 以连接串创建默认连接池。 */
   static fromConnectionString(connectionString: string): PgAgentRunRepository {
-    return new PgAgentRunRepository(new Pool({ connectionString, max: 10 }));
+    const pool = new Pool({ connectionString, max: 10 });
+    return new PgAgentRunRepository(pool, new PgTraceWriter(pool));
   }
 
   /** 领取运行：加行锁、校验 trace、推进状态并追加事件；已终止的运行返回 shouldExecute=false。 */

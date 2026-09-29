@@ -56,6 +56,7 @@ import {
   type CardContentDocument,
 } from './schema/index.js';
 export * from './schema/index.js';
+import type { TraceWriter } from '../../application/services/trace-writer.js';
 
 /** 会话内解析：宽松规范化 + 严格校验；失败时返回 zod 字段路径供模型自纠。 */
 function parseCardContent(content: string): { value: CardContentDocument | null; paths: string[] } {
@@ -93,6 +94,8 @@ export interface CardContentGenerationDeps {
   reactMaxTurns: number;
   /** 可选的实时进度上报端口（生成过程中的步骤/工具事件，不落库、不含模型原文）。 */
   progress?: AgentProgressReporter;
+  /** 完整模型与工具观测写入端口。 */
+  traceWriter?: TraceWriter;
 }
 
 export interface CardContentGenerationResult {
@@ -151,6 +154,7 @@ export async function runCardContentGenerate(
     exhaustedErrorCode: 'CARD_CONTENT_OUTPUT_INVALID',
     exhaustedMessage: '节点知识内容经过 ReAct 自纠后仍不符合内容合同。',
     onProgress: progress,
+    traceWriter: deps.traceWriter,
   });
 
   const document = outcome.value;

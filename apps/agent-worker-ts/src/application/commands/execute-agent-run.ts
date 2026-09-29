@@ -24,6 +24,7 @@ import type { AgentRunExecutionState } from '../../infrastructure/database/agent
 import { CoreInternalClientError } from '../../acl/core-internal-client.js';
 import { CredentialDecryptionError } from '../../infrastructure/llm/credential-decryptor.js';
 import { ModelGatewayError } from '../../infrastructure/llm/model-gateway.js';
+import type { TraceWriter } from '../services/trace-writer.js';
 
 export const AGENT_RUN_RETRY_EXHAUSTED = 'AGENT_RUN_RETRY_EXHAUSTED';
 export const AGENT_RUN_UNEXPECTED_ERROR = 'AGENT_RUN_UNEXPECTED_ERROR';
@@ -95,6 +96,7 @@ export interface AgentRunRepositoryPort {
     delaySeconds: number;
     errorCode: string;
   }): Promise<void>;
+  traceWriter?: TraceWriter;
 }
 
 export type ExecuteAgentRunOutcome =
@@ -123,6 +125,13 @@ export async function executeAgentRun(input: {
     return { status: 'skipped', reason: 'cancelled' };
   }
 
+  await input.repository.traceWriter?.append({
+    runId: executionState.runId,
+    eventType: 'run.started',
+    startedAt: new Date(),
+    payload: { runType: executionState.runType, retryCount: input.retryCount },
+  });
+
   try {
     const workflow = input.workflows.resolve(executionState.runType);
     if (workflow === null) {
@@ -136,6 +145,12 @@ export async function executeAgentRun(input: {
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
       actualModelProfile: typeof modelId === 'string' && modelId.length > 0 ? modelId : null,
+    });
+    await input.repository.traceWriter?.append({
+      runId: executionState.runId,
+      eventType: 'run.completed',
+      finishedAt: new Date(),
+      payload: { outputSummary: result.outputSummary, usage: result.usage },
     });
     return { status: 'succeeded', runId: executionState.runId };
   } catch (error) {
@@ -197,6 +212,12 @@ export async function handleAgentRunFailure(input: {
         errorCode: AGENT_RUN_RETRY_EXHAUSTED,
         errorSummary: error.message,
       });
+      await input.repository.traceWriter?.append({
+        runId: input.runId,
+        eventType: 'run.failed',
+        finishedAt: new Date(),
+        payload: { errorCode: AGENT_RUN_RETRY_EXHAUSTED, error: error.message },
+      });
       return { action: 'failed', code: AGENT_RUN_RETRY_EXHAUSTED };
     }
     const nextRetryCount = input.retryCount + 1;
@@ -216,6 +237,12 @@ export async function handleAgentRunFailure(input: {
       errorCode: error.code,
       errorSummary: error.message,
     });
+    await input.repository.traceWriter?.append({
+      runId: input.runId,
+      eventType: 'run.failed',
+      finishedAt: new Date(),
+      payload: { errorCode: error.code, error: error.message },
+    });
     return { action: 'failed', code: error.code };
   }
 
@@ -224,6 +251,12 @@ export async function handleAgentRunFailure(input: {
     runId: input.runId,
     errorCode: AGENT_RUN_UNEXPECTED_ERROR,
     errorSummary: summary,
+  });
+  await input.repository.traceWriter?.append({
+    runId: input.runId,
+    eventType: 'run.failed',
+    finishedAt: new Date(),
+    payload: { errorCode: AGENT_RUN_UNEXPECTED_ERROR, error: summary },
   });
   return { action: 'failed', code: AGENT_RUN_UNEXPECTED_ERROR };
 }

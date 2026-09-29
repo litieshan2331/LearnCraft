@@ -43,6 +43,10 @@ const REQUIRED_AGENT_RUN_COLUMNS = [
 ];
 
 const REQUIRED_EVENT_COLUMNS = ['id', 'agent_run_id', 'sequence_no', 'event_type', 'payload_json', 'occurred_at'];
+const REQUIRED_TRACE_COLUMNS = [
+  'id', 'agent_run_id', 'sequence_no', 'event_type', 'turn_no', 'step_no', 'attempt_no',
+  'started_at', 'finished_at', 'input_tokens', 'output_tokens', 'payload_json', 'created_at',
+];
 
 /** 与真实表结构一致：模型名列是 default_model_id（不是 model_id）。 */
 interface ModelConnectionRow {
@@ -77,8 +81,10 @@ describe.skipIf(!enabled)('真实数据库只读冒烟', () => {
 
       const runColumns = columnsByTable.get('agent_runs') ?? new Set<string>();
       const eventColumns = columnsByTable.get('agent_run_events') ?? new Set<string>();
+      const traceColumns = columnsByTable.get('agent_trace_events') ?? new Set<string>();
       expect([...REQUIRED_AGENT_RUN_COLUMNS].filter((column) => !runColumns.has(column))).toEqual([]);
       expect([...REQUIRED_EVENT_COLUMNS].filter((column) => !eventColumns.has(column))).toEqual([]);
+      expect([...REQUIRED_TRACE_COLUMNS].filter((column) => !traceColumns.has(column))).toEqual([]);
       console.log(
         '  · agent_runs 列数=' + String(runColumns.size) + '，agent_run_events 列数=' + String(eventColumns.size),
       );

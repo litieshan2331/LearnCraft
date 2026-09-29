@@ -64,6 +64,13 @@
       "when": 1787663961862,
       "tag": "0008_plan_generate_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790652723361,
+      "tag": "0009_agent_trace_events",
+      "breakpoints": true
     }
   ]
 }

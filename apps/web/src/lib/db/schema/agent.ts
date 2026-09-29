@@ -125,3 +125,31 @@ export const agentRunEvents = agentSchema.table("agent_run_events", {
   check("ck_agent_run_events_sequence", sql`${table.sequenceNo} >= 1`),
   index("idx_agent_run_events_run_sequence").on(table.agentRunId, table.sequenceNo),
 ]);
+
+/** AgentRun 的完整模型与工具观测事件；内容以 JSONB 原样保存，随运行级联删除。 */
+export const agentTraceEvents = agentSchema.table("agent_trace_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  agentRunId: uuid("agent_run_id")
+    .notNull()
+    .references(() => agentRuns.id, { onDelete: "cascade" }),
+  sequenceNo: integer("sequence_no").notNull(),
+  eventType: varchar("event_type", { length: 80 }).notNull(),
+  turnNo: integer("turn_no"),
+  stepNo: integer("step_no"),
+  attemptNo: integer("attempt_no"),
+  startedAt: nullableTimestampColumn("started_at"),
+  finishedAt: nullableTimestampColumn("finished_at"),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  payloadJson: jsonb("payload_json").notNull().default({}),
+  createdAt: createdAtColumn(),
+}, (table) => [
+  unique("uq_agent_trace_events_sequence").on(table.agentRunId, table.sequenceNo),
+  check("ck_agent_trace_events_sequence", sql`${table.sequenceNo} >= 1`),
+  check("ck_agent_trace_events_turn", sql`${table.turnNo} is null or ${table.turnNo} >= 1`),
+  check("ck_agent_trace_events_step", sql`${table.stepNo} is null or ${table.stepNo} >= 1`),
+  check("ck_agent_trace_events_attempt", sql`${table.attemptNo} is null or ${table.attemptNo} >= 1`),
+  check("ck_agent_trace_events_input_tokens", sql`${table.inputTokens} is null or ${table.inputTokens} >= 0`),
+  check("ck_agent_trace_events_output_tokens", sql`${table.outputTokens} is null or ${table.outputTokens} >= 0`),
+  index("idx_agent_trace_events_run_sequence").on(table.agentRunId, table.sequenceNo),
+]);

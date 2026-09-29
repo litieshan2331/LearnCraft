@@ -50,6 +50,7 @@ import {
 } from '../shared/question-set-validation.js';
 import { buildUserPrompt, buildValidationFeedback, SYSTEM_PROMPT } from './prompts/index.js';
 import { AssessmentGenerationInputSchema } from './schema/index.js';
+import type { TraceWriter } from '../../application/services/trace-writer.js';
 export * from './schema/index.js';
 
 /** 内部接口端口：工作流只依赖这两个方法。 */
@@ -75,6 +76,8 @@ export interface AssessmentGenerationDeps {
   reactMaxTurns: number;
   /** 可选的实时进度上报端口（生成过程中的步骤/工具事件，不落库、不含模型原文）。 */
   progress?: AgentProgressReporter;
+  /** 完整模型与工具观测写入端口。 */
+  traceWriter?: TraceWriter;
 }
 
 export interface AssessmentGenerationResult {
@@ -133,6 +136,7 @@ export async function runAssessmentGenerate(
     exhaustedErrorCode: 'MODEL_STRUCTURED_OUTPUT_INVALID',
     exhaustedMessage: '题集结果经过 ReAct 自纠后仍不符合题集合同。',
     onProgress: progress,
+    traceWriter: deps.traceWriter,
   });
 
   const questionSet = outcome.value;

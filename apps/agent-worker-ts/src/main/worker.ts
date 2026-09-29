@@ -27,6 +27,7 @@ import {
   readModelFallbackSettings,
 } from '../bootstrap/config.js';
 import { PgAgentRunRepository } from '../infrastructure/database/agent-run-repository.js';
+import { PgTraceWriter } from '../infrastructure/database/agent-trace-writer.js';
 import { PgModelEgressAuditRepository } from '../infrastructure/database/model-egress-audit-repository.js';
 import { ModelCredentialDecryptor } from '../infrastructure/llm/credential-decryptor.js';
 import { OpenAiCompatibleModelGateway } from '../infrastructure/llm/model-gateway.js';
@@ -60,7 +61,8 @@ function requireDatabaseUrl(): string {
 async function main(): Promise<void> {
   const queueConfigs = readAgentQueuePoolConfigs();
   const pool = new pg.Pool({ connectionString: requireDatabaseUrl(), max: 12 });
-  const repository = new PgAgentRunRepository(pool);
+  const traceWriter = new PgTraceWriter(pool);
+  const repository = new PgAgentRunRepository(pool, traceWriter);
 
   const internalClient = new CoreInternalClient(readCoreInternalClientOptions());
   const decryptor = ModelCredentialDecryptor.fromEnvironment();
@@ -135,7 +137,7 @@ async function main(): Promise<void> {
   const createProgressReporter = (runId: string) => progressPublisher.createReporter(runId);
 
   const workflows = new AgentWorkflowRegistry();
-  const workflowDeps = { internalClient, decryptor, gateway, createToolGateway, maxToolCalls, createProgressReporter };
+  const workflowDeps = { internalClient, decryptor, gateway, createToolGateway, maxToolCalls, createProgressReporter, traceWriter };
   workflows.register('assessment_generate', createAssessmentGenerateWorkflow({
     ...workflowDeps,
     reactMaxTurns: reactMaxTurns.assessmentGenerate,

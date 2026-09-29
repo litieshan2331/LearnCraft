@@ -46,6 +46,7 @@ import {
   type AgentProgressReporter,
 } from './agent-progress.js';
 import { createAgentThinkingStream } from './agent-thinking-stream.js';
+import type { TraceWriter } from './trace-writer.js';
 
 export const TOOL_CALL_LIMIT_REACHED = 'TOOL_CALL_LIMIT_REACHED';
 
@@ -84,6 +85,8 @@ export interface ReactSessionInput<T> {
   exhaustedMessage: string;
   /** 可选的实时进度上报端口；缺省为空实现。 */
   onProgress?: AgentProgressReporter;
+  /** 完整轨迹写入端口；记录模型完成与 Tool 原始输入输出。 */
+  traceWriter?: TraceWriter;
 }
 
 export interface ReactSessionResult<T> {
@@ -156,6 +159,7 @@ export async function runReactAgentSession<T>(
     for (let turn = 1; turn <= input.maxTurns; turn += 1) {
       const toolsAvailable = toolCallCount < input.maxToolCalls;
       progress.report('turn.started', { turn, max_turns: input.maxTurns });
+      const modelStartedAt = new Date();
       const response = await input.complete({
         ...input.request,
         messages,
@@ -165,6 +169,30 @@ export async function runReactAgentSession<T>(
         // 流式思考增量：到达即透传，让前端实时显示。
         onReasoningDelta: (text: string) => {
           thinking.push(turn, text);
+        },
+      });
+
+      await input.traceWriter?.append({
+        runId: input.request.agentRunId,
+        eventType: 'llm.attempt.completed',
+        turnNo: turn,
+        attemptNo: turn,
+        startedAt: modelStartedAt,
+        finishedAt: new Date(),
+        inputTokens: response.usage.inputTokens,
+        outputTokens: response.usage.outputTokens,
+        payload: {
+          request: {
+            messages,
+            tools: toolsAvailable ? [TAVILY_SEARCH_TOOL] : [],
+            toolChoice: toolsAvailable ? 'auto' : 'none',
+            thinkingMode: input.request.thinkingMode ?? null,
+            responseFormat: input.request.responseFormat ?? 'text',
+            provider: input.request.connection.baseUrl,
+            model: input.request.connection.modelId,
+          },
+          output: response.message,
+          finishReason: response.finishReason,
         },
       });
 
@@ -191,6 +219,20 @@ export async function runReactAgentSession<T>(
             ...(query === null ? {} : { query }),
           });
 
+          const toolStartedAt = new Date();
+          await input.traceWriter?.append({
+            runId: input.request.agentRunId,
+            eventType: 'tool.started',
+            turnNo: turn,
+            stepNo: turn,
+            payload: {
+              callId: toolCall.id,
+              name: toolCall.name,
+              arguments: toolCall.argumentsJson,
+            },
+            startedAt: toolStartedAt,
+          });
+
           let result: ToolExecutionResult;
           if (index >= remainingCalls) {
             result = {
@@ -205,6 +247,20 @@ export async function runReactAgentSession<T>(
           }
 
           const sourceCount = toolSourceCount(result);
+          await input.traceWriter?.append({
+            runId: input.request.agentRunId,
+            eventType: 'tool.completed',
+            turnNo: turn,
+            stepNo: turn,
+            startedAt: toolStartedAt,
+            finishedAt: new Date(),
+            payload: {
+              callId: toolCall.id,
+              name: toolCall.name,
+              arguments: toolCall.argumentsJson,
+              result,
+            },
+          });
           progress.report('tool.completed', {
             turn,
             call_index: callIndex,
