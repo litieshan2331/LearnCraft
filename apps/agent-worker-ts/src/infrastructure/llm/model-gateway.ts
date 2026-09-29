@@ -24,6 +24,7 @@ import {
 } from './safe-egress-client.js';
 import { ModelRateLimitError, type ModelRateLimiter } from '../redis/model-rate-limiter.js';
 import type { FallbackTokenBudget } from '../redis/fallback-budget.js';
+import type { TraceWriter } from '../../application/services/trace-writer.js';
 
 /** 出网端口：网关只依赖它，测试可注入假实现。 */
 export interface ModelEgressPort {
@@ -70,6 +71,8 @@ export interface ModelUsage {
 
 export interface ModelCompletionRequest {
   agentRunId: string;
+  /** 当前 ReAct 轮次，仅用于观测定位，不会发送给 Provider。 */
+  turnNo?: number;
   connection: ModelProviderConnection;
   messages: readonly ModelMessage[];
   tools?: readonly ModelToolDefinition[];
@@ -159,27 +162,54 @@ export class OpenAiCompatibleModelGateway {
     private readonly rateLimiter: ModelRateLimiter | null = null,
     private readonly fallbackConnection: ModelProviderConnection | null = null,
     private readonly fallbackBudget: FallbackTokenBudget | null = null,
+    private readonly traceWriter: TraceWriter | null = null,
   ) {}
 
   /** 发起一次（含重试）模型调用，返回聚合后的完整响应。 */
   async complete(request: ModelCompletionRequest): Promise<ModelCompletionResponse> {
     const hasTools = (request.tools?.length ?? 0) > 0;
+    let primaryFailure: ModelGatewayError | null = null;
     try {
-      return await this.completeOnConnection(request, request.connection, hasTools);
+      return await this.completeOnConnection(request, request.connection, hasTools, 'primary');
     } catch (error) {
       if (!(error instanceof ModelGatewayError) || !isFallbackEligible(error.code) || this.fallbackConnection === null) {
         throw error;
       }
+      primaryFailure = error;
     }
     if (this.fallbackBudget !== null) {
       try {
         await this.fallbackBudget.allow();
       } catch {
+        await this.traceWriter?.append({
+          runId: request.agentRunId,
+          eventType: 'llm.fallback',
+          turnNo: request.turnNo,
+          payload: {
+            fromModel: request.connection.modelId,
+            toModel: this.fallbackConnection?.modelId ?? null,
+            reasonCode: 'MODEL_FALLBACK_BUDGET_UNAVAILABLE',
+            reason: primaryFailure?.message.slice(0, 1000) ?? '备用模型预算不可用或已达上限。',
+            blocked: true,
+          },
+        });
         throw new ModelGatewayError('MODEL_FALLBACK_BUDGET_UNAVAILABLE', '备用模型预算不可用或已达上限。', false);
       }
     }
+    await this.traceWriter?.append({
+      runId: request.agentRunId,
+      eventType: 'llm.fallback',
+      turnNo: request.turnNo,
+      payload: {
+        fromModel: request.connection.modelId,
+        toModel: this.fallbackConnection?.modelId ?? null,
+        reasonCode: primaryFailure?.code ?? 'MODEL_FALLBACK_REQUESTED',
+        reason: primaryFailure?.message.slice(0, 1000) ?? '主模型调用失败。',
+        blocked: false,
+      },
+    });
     const fallbackConnection = { ...this.fallbackConnection, ownerId: request.connection.ownerId };
-    const response = await this.completeOnConnection(request, fallbackConnection, hasTools);
+    const response = await this.completeOnConnection(request, fallbackConnection, hasTools, 'fallback');
     if (this.fallbackBudget !== null) {
       await this.fallbackBudget.record(response.usage.inputTokens + response.usage.outputTokens);
     }
@@ -191,11 +221,14 @@ export class OpenAiCompatibleModelGateway {
     request: ModelCompletionRequest,
     connection: ModelProviderConnection,
     hasTools: boolean,
+    route: 'primary' | 'fallback',
   ): Promise<ModelCompletionResponse> {
     const payload = this.buildPayload({ ...request, connection });
     let lastError: ModelGatewayError | null = null;
     for (let attempt = 0; attempt <= this.requestMaxRetries; attempt += 1) {
       let lease: { release(): Promise<void> } | null = null;
+      const attemptNo = attempt + 1;
+      const startedAt = new Date();
       try {
         if (this.rateLimiter !== null) {
           lease = await this.rateLimiter.acquire({
@@ -204,6 +237,19 @@ export class OpenAiCompatibleModelGateway {
             apiKey: connection.apiKey,
           });
         }
+        await this.traceWriter?.append({
+          runId: request.agentRunId,
+          eventType: 'llm.request.started',
+          turnNo: request.turnNo,
+          attemptNo,
+          startedAt,
+          payload: {
+            route,
+            providerBaseUrl: connection.baseUrl,
+            model: connection.modelId,
+            payload,
+          },
+        });
         const response = await this.egressClient.postOpenAiCompatibleSse({
           ownerId: connection.ownerId,
           modelConnectionId: connection.connectionId,
@@ -217,20 +263,63 @@ export class OpenAiCompatibleModelGateway {
         for await (const event of response.events) {
           accumulator.accept(event);
         }
-        return accumulator.finish();
+        const completed = accumulator.finish();
+        const finishedAt = new Date();
+        await this.traceWriter?.append({
+          runId: request.agentRunId,
+          eventType: 'llm.attempt.completed',
+          turnNo: request.turnNo,
+          attemptNo,
+          startedAt,
+          finishedAt,
+          inputTokens: completed.usage.inputTokens,
+          outputTokens: completed.usage.outputTokens,
+          payload: {
+            route,
+            model: connection.modelId,
+            response: completed.message,
+            finishReason: completed.finishReason,
+          },
+        });
+        return completed;
       } catch (error) {
         if (error instanceof ModelRateLimitError) {
-          throw new ModelGatewayError(error.code, error.message, true);
-        }
-        if (!(error instanceof ModelEgressRequestError)) {
-          throw error;
-        }
-        const mapped = toGatewayError(error, hasTools);
-        lastError = mapped;
-        if (!mapped.retryable || attempt === this.requestMaxRetries) {
+          const mapped = new ModelGatewayError(error.code, error.message, true);
+          await this.recordAttemptFailure(request, connection, route, attemptNo, startedAt, mapped);
           throw mapped;
         }
-        await this.sleep(500 * 2 ** attempt);
+        if (error instanceof ModelEgressRequestError) {
+          const mapped = toGatewayError(error, hasTools);
+          lastError = mapped;
+          await this.recordAttemptFailure(request, connection, route, attemptNo, startedAt, mapped);
+          if (!mapped.retryable || attempt === this.requestMaxRetries) {
+            throw mapped;
+          }
+          await this.traceWriter?.append({
+            runId: request.agentRunId,
+            eventType: 'llm.retry',
+            turnNo: request.turnNo,
+            attemptNo,
+            startedAt,
+            finishedAt: new Date(),
+            payload: {
+              route,
+              model: connection.modelId,
+              failedAttempt: attemptNo,
+              nextAttempt: attemptNo + 1,
+              delayMs: 500 * 2 ** attempt,
+              errorCode: mapped.code,
+            },
+          });
+          await this.sleep(500 * 2 ** attempt);
+          continue;
+        }
+        if (error instanceof ModelGatewayError) {
+          lastError = error;
+          await this.recordAttemptFailure(request, connection, route, attemptNo, startedAt, error);
+          throw error;
+        }
+        throw error;
       } finally {
         if (lease !== null) {
           await lease.release();
@@ -239,6 +328,32 @@ export class OpenAiCompatibleModelGateway {
     }
 
     throw lastError ?? new ModelGatewayError('MODEL_PROVIDER_RESPONSE_INVALID', '模型调用失败。', false);
+  }
+
+  /** 写入单次模型尝试失败事件，保留错误分类但不保存凭据。 */
+  private async recordAttemptFailure(
+    request: ModelCompletionRequest,
+    connection: ModelProviderConnection,
+    route: 'primary' | 'fallback',
+    attemptNo: number,
+    startedAt: Date,
+    error: ModelGatewayError,
+  ): Promise<void> {
+    await this.traceWriter?.append({
+      runId: request.agentRunId,
+      eventType: 'llm.attempt.failed',
+      turnNo: request.turnNo,
+      attemptNo,
+      startedAt,
+      finishedAt: new Date(),
+      payload: {
+        route,
+        model: connection.modelId,
+        errorCode: error.code,
+        retryable: error.retryable,
+        errorMessage: error.message.slice(0, 1000),
+      },
+    });
   }
 
   /** 构造 Provider 请求载荷；字段与 Python 的 _build_payload 一一对应。 */

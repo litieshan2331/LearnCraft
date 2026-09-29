@@ -93,6 +93,7 @@ async function main(): Promise<void> {
     rateLimiter,
     fallbackConnection,
     fallbackBudget,
+    traceWriter,
   );
 
   // 联网工具：Key 或配额 Redis 缺失时不阻止启动，网关会把受控错误回传给模型（Python 同行为）。

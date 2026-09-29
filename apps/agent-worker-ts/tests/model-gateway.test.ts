@@ -16,6 +16,7 @@ import {
 import { ModelEgressRequestError, type ModelEgressCallInput } from '../src/infrastructure/llm/safe-egress-client.js';
 import { ModelRateLimitError, type ModelRateLimiter } from '../src/infrastructure/redis/model-rate-limiter.js';
 import type { FallbackTokenBudget } from '../src/infrastructure/redis/fallback-budget.js';
+import type { AgentTraceEventInput, TraceWriter } from '../src/application/services/trace-writer.js';
 
 const CONNECTION = {
   ownerId: '11111111-2222-3333-4444-555555555555',
@@ -55,6 +56,14 @@ class FakeEgress implements ModelEgressPort {
         }
       })(),
     };
+  }
+}
+
+class FakeTraceWriter implements TraceWriter {
+  readonly events: AgentTraceEventInput[] = [];
+
+  async append(event: AgentTraceEventInput): Promise<void> {
+    this.events.push(event);
   }
 }
 
@@ -211,6 +220,119 @@ describe('错误分类与重试', () => {
     ]);
     expect(recorded).toEqual([20]);
     expect(egress.calls[2]?.apiKey).toBe('server-only-key');
+  });
+
+  it('主模型失败后记录回退事件和备用模型完成事件', async () => {
+    const fallbackConnection = { ...CONNECTION, connectionId: 'system-fallback', modelId: 'fallback-model', apiKey: 'server-only-key' };
+    const trace = new FakeTraceWriter();
+    const egress = new FakeEgress((input) => input.modelConnectionId === fallbackConnection.connectionId
+      ? [event({ content: '备用成功' })]
+      : new ModelEgressRequestError('MODEL_PROVIDER_HTTP_503', '主模型不可用', true));
+    const gateway = new OpenAiCompatibleModelGateway(
+      egress,
+      0,
+      async () => undefined,
+      null,
+      fallbackConnection,
+      null,
+      trace,
+    );
+
+    await gateway.complete(request());
+
+    expect(trace.events.map((item) => item.eventType)).toEqual([
+      'llm.request.started',
+      'llm.attempt.failed',
+      'llm.fallback',
+      'llm.request.started',
+      'llm.attempt.completed',
+    ]);
+    expect(trace.events[2]?.payload).toMatchObject({
+      fromModel: CONNECTION.modelId,
+      toModel: fallbackConnection.modelId,
+      reasonCode: 'MODEL_PROVIDER_HTTP_503',
+      blocked: false,
+    });
+    expect(JSON.stringify(trace.events[2]?.payload)).not.toContain(fallbackConnection.apiKey);
+  });
+
+  it('记录最终 Provider 载荷、正文、Thinking、用量和时间，且不保存 API Key', async () => {
+    const trace = new FakeTraceWriter();
+    const gateway = new OpenAiCompatibleModelGateway(
+      new FakeEgress(() => [
+        event({ reasoning_content: '思考' }),
+        event({ content: '答案' }),
+        { choices: [], usage: { prompt_tokens: 3, completion_tokens: 5 } },
+      ]),
+      0,
+      undefined,
+      null,
+      null,
+      null,
+      trace,
+    );
+
+    await gateway.complete(request({
+      turnNo: 2,
+      connection: { ...CONNECTION, modelId: 'deepseek-v4-chat' },
+      tools: [{ name: 'lookup', description: '查询', parameters: { type: 'object' } }],
+      thinkingMode: 'enabled',
+      responseFormat: 'json_object',
+    }));
+
+    const started = trace.events.find((item) => item.eventType === 'llm.request.started');
+    expect(started).toMatchObject({ turnNo: 2, attemptNo: 1 });
+    expect(started?.payload).toMatchObject({
+      route: 'primary',
+      model: 'deepseek-v4-chat',
+      payload: {
+        stream: true,
+        stream_options: { include_usage: true },
+        response_format: { type: 'json_object' },
+        thinking: { type: 'enabled' },
+      },
+    });
+    expect(JSON.stringify(started?.payload)).not.toContain(CONNECTION.apiKey);
+
+    const completed = trace.events.find((item) => item.eventType === 'llm.attempt.completed');
+    expect(completed?.startedAt).toBeInstanceOf(Date);
+    expect(completed?.finishedAt).toBeInstanceOf(Date);
+    expect(completed).toMatchObject({ inputTokens: 3, outputTokens: 5 });
+    expect(completed?.payload).toMatchObject({
+      response: { content: '答案', reasoningContent: '思考' },
+      finishReason: null,
+    });
+  });
+
+  it('记录失败和重试事件', async () => {
+    const trace = new FakeTraceWriter();
+    let calls = 0;
+    const gateway = new OpenAiCompatibleModelGateway(
+      new FakeEgress(() => {
+        calls += 1;
+        return calls === 1
+          ? new ModelEgressRequestError('MODEL_PROVIDER_HTTP_429', '限流', true)
+          : [event({ content: 'ok' })];
+      }),
+      1,
+      async () => undefined,
+      null,
+      null,
+      null,
+      trace,
+    );
+
+    await gateway.complete(request());
+
+    expect(trace.events.map((item) => item.eventType)).toEqual([
+      'llm.request.started',
+      'llm.attempt.failed',
+      'llm.retry',
+      'llm.request.started',
+      'llm.attempt.completed',
+    ]);
+    expect(trace.events[1]).toMatchObject({ attemptNo: 1, payload: { errorCode: 'MODEL_PROVIDER_HTTP_429', retryable: true } });
+    expect(trace.events[2]).toMatchObject({ payload: { failedAttempt: 1, nextAttempt: 2, delayMs: 500 } });
   });
 
   it('可重试错误按退避重试后成功', async () => {

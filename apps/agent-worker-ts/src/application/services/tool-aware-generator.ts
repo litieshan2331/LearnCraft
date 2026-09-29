@@ -159,9 +159,9 @@ export async function runReactAgentSession<T>(
     for (let turn = 1; turn <= input.maxTurns; turn += 1) {
       const toolsAvailable = toolCallCount < input.maxToolCalls;
       progress.report('turn.started', { turn, max_turns: input.maxTurns });
-      const modelStartedAt = new Date();
       const response = await input.complete({
         ...input.request,
+        turnNo: turn,
         messages,
         ...(toolsAvailable
           ? { tools: [TAVILY_SEARCH_TOOL], toolChoice: 'auto' as const }
@@ -169,30 +169,6 @@ export async function runReactAgentSession<T>(
         // 流式思考增量：到达即透传，让前端实时显示。
         onReasoningDelta: (text: string) => {
           thinking.push(turn, text);
-        },
-      });
-
-      await input.traceWriter?.append({
-        runId: input.request.agentRunId,
-        eventType: 'llm.attempt.completed',
-        turnNo: turn,
-        attemptNo: turn,
-        startedAt: modelStartedAt,
-        finishedAt: new Date(),
-        inputTokens: response.usage.inputTokens,
-        outputTokens: response.usage.outputTokens,
-        payload: {
-          request: {
-            messages,
-            tools: toolsAvailable ? [TAVILY_SEARCH_TOOL] : [],
-            toolChoice: toolsAvailable ? 'auto' : 'none',
-            thinkingMode: input.request.thinkingMode ?? null,
-            responseFormat: input.request.responseFormat ?? 'text',
-            provider: input.request.connection.baseUrl,
-            model: input.request.connection.modelId,
-          },
-          output: response.message,
-          finishReason: response.finishReason,
         },
       });
 

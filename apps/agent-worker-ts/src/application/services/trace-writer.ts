@@ -9,7 +9,11 @@ export type AgentTraceEventType =
   | 'run.started'
   | 'run.completed'
   | 'run.failed'
+  | 'llm.request.started'
   | 'llm.attempt.completed'
+  | 'llm.attempt.failed'
+  | 'llm.retry'
+  | 'llm.fallback'
   | 'tool.started'
   | 'tool.completed';
 
