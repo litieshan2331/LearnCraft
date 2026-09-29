@@ -5,7 +5,7 @@
  * - LearnLayout：使用 SessionGate 保护学习路由，提供稳定的工作台导航、背景氛围和内容容器。
  */
 
-import { Compass, Goal, Settings2 } from "lucide-react";
+import { Activity, Compass, Goal, Settings2 } from "lucide-react";
 import Link from "next/link";
 
 import { LogoutButton } from "@/modules/identity/presentation/components/logout-button";
@@ -15,6 +15,7 @@ import { Brand } from "@/shared/ui/brand";
 const navigationItems = [
   { href: "/onboarding", label: "学习起点", icon: Compass },
   { href: "/goals", label: "我的目标", icon: Goal },
+  { href: "/observability", label: "Agent 观测", icon: Activity },
   { href: "/settings/models", label: "模型连接", icon: Settings2 },
 ];
 
