@@ -13,3 +13,10 @@ AgentRun 状态机与幂等规则放 `domain`，任务投递用例放 `applicati
   （步骤级与工具级，**不含模型原文**）。这是**临时通道**：事件不落库、不重放，只在生成过程中存在；
   任务归属校验与状态查询一致，订阅不可用时仍返回正常 SSE 流（只发 keep-alive），前端回退到状态轮询。
 - `POST /api/v1/agent-runs/{agent_run_id}/cancel`：同源校验后取消 `queued` 或 `running` 任务。取消是协作式的，Worker 会在工作流边界检查 `cancelled` 状态；已经结束的任务返回 `409`，重复取消已取消任务返回当前快照。
+
+Agent 观测接口均需登录，且按 `agent_runs.owner_id` 隔离；其他用户的运行统一返回 404：
+
+- `GET /api/v1/observability/runs`：按 `run_type`、`status`、`goal_id`、`plan_id`、`created_from`、`created_to` 过滤；`cursor` 和 `limit` 分页，最多 100 条。
+- `GET /api/v1/observability/runs/{runId}`：运行摘要、时间与 Token/成本信息。
+- `GET /api/v1/observability/runs/{runId}/events?after=&limit=`：以运行内 `sequence_no` 为游标读取完整 JSONB 轨迹。
+- `GET /api/v1/observability/runs/{runId}/events/stream?after=`：从 `after` 或 `Last-Event-ID` 补发后轮询追加；SSE `id` 等于 `sequence_no`，运行结束且尾事件读尽后关闭。

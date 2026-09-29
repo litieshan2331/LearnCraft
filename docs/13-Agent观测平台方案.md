@@ -14,7 +14,7 @@
 - Tool 原始输入与输出；
 - 重试、模型回退、错误、时间戳和 Token 用量。
 
-第一期不做观测权限细分，所有已登录用户均可查看观测数据。删除学习路线时，硬删除该路线关联的 AgentRun 和全部观测事件。
+第一期不做观测角色权限细分，但每位登录用户只能查看自己的 AgentRun 和观测数据，所有查询均按 `owner_id` 隔离。删除学习路线时，硬删除该路线关联的 AgentRun 和全部观测事件。
 
 ## 二、总体方案
 
@@ -75,7 +75,7 @@ API Key、解密凭据和其他密钥不得写入 `payload_json`。Prompt、Tool
 - `GET /api/v1/observability/runs/{runId}/events?after=&limit=`：按 `sequence_no` 游标分页读取完整轨迹；
 - `GET /api/v1/observability/runs/{runId}/events/stream?after=`：SSE 实时追加事件，支持断线后按游标补发。
 
-第一期接口不按 `owner_id` 做权限过滤，但仍通过现有登录 Session 进入应用，避免把完整 Prompt 和模型内容暴露到未登录公网。
+第一期接口通过现有登录 Session 认证，并按 `agent_runs.owner_id` 过滤列表、摘要、事件分页及 SSE 补发/追加；不设置管理员等额外观测角色权限。其他用户的 `runId` 一律返回 404。
 
 ## 六、UI 移植
 
