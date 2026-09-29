@@ -9,6 +9,7 @@
 
 import { Activity, AlertCircle, ArrowLeft, ChevronRight, CircleCheck, CircleX, Clock3, LoaderCircle, RefreshCw, RotateCcw } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { TraceTrajectoryView, type TraceConnectionState, type TraceEvent } from "./trace-trajectory-view";
@@ -20,6 +21,7 @@ interface TraceRunSummary {
   output_tokens: number; estimated_cost_usd: string; retry_count: number; error_code: string | null;
   started_at: string | null; finished_at: string | null; created_at: string; updated_at: string;
   plan_title?: string | null;
+  plan_node_title?: string | null;
 }
 
 /** 解析 JSON 接口错误，保留用户可理解的服务端提示。 */
@@ -41,10 +43,32 @@ function statusLabel(value: string): string {
   return ({ queued: "排队中", running: "运行中", succeeded: "已完成", failed: "失败", cancelled: "已取消", expired: "已过期" } as Record<string, string>)[value] ?? value;
 }
 
+/** 为需要节点上下文的工作流生成可读内容节点标签。 */
+function runNodeLabel(run: Pick<TraceRunSummary, "run_type" | "plan_node_title" | "target_id">): string | null {
+  if (run.run_type !== "card_content_generate" && run.run_type !== "posttest_generate") return null;
+  return run.plan_node_title ?? run.target_id;
+}
+
 /** 格式化列表中的相对可读时间。 */
 function formatDate(value: string | null): string {
   if (!value) return "时间未知";
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+/** 返回进入观测模块前的页面；没有可返回历史时使用安全回退地址。 */
+function BackToPreviousButton({ fallbackHref }: Readonly<{ fallbackHref: string }>) {
+  const router = useRouter();
+
+  /** 优先回退浏览器历史，避免用户从节点进入观测后丢失上下文。 */
+  function handleBack(): void {
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push(fallbackHref);
+  }
+
+  return <button className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" onClick={handleBack} type="button"><ArrowLeft aria-hidden className="size-3.5" />返回上次页面</button>;
 }
 
 /** 运行列表页：支持首屏加载、空状态、错误和游标加载更多。 */
@@ -77,15 +101,15 @@ export function ObservabilityRunsPage() {
   }, [loadRuns]);
 
   return (
-    <main className="relative mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 sm:py-12 lg:px-10">
-      <header className="rounded-[1.5rem] border border-border/80 bg-card/80 p-5 shadow-[0_24px_70px_-46px_rgba(23,53,58,0.5)] backdrop-blur sm:p-8">
-        <p className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium tracking-[0.14em] text-primary"><Activity aria-hidden className="size-3.5" />AGENT OBSERVABILITY</p>
-        <div className="mt-5 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><h1 className="font-heading text-4xl font-medium tracking-tight sm:text-5xl">Agent 观测</h1><p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">查看你自己的 AgentRun 轨迹、最终 Prompt、模型输出、Thinking、Tool 调用和重试时间线。</p></div><button aria-label="刷新观测运行" className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-border bg-background/70 px-4 text-sm hover:bg-secondary" disabled={loading} onClick={() => void loadRuns(null, false)} type="button"><RefreshCw aria-hidden className={loading ? "size-4 animate-spin" : "size-4"} />刷新</button></div>
+    <main className="relative mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7">
+      <div className="mb-3"><BackToPreviousButton fallbackHref="/goals" /></div>
+      <header className="border-b border-border/70 pb-4">
+        <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-[0.16em] text-primary"><Activity aria-hidden className="size-3" />AGENT OBSERVABILITY</p><h1 className="mt-2 font-heading text-3xl font-medium tracking-tight">Agent 观测</h1><p className="mt-1 text-xs text-muted-foreground">按运行查看最终 Prompt、模型输出、Thinking、Tool 调用和重试时间线。</p></div><button aria-label="刷新观测运行" className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs hover:bg-secondary" disabled={loading} onClick={() => void loadRuns(null, false)} type="button"><RefreshCw aria-hidden className={loading ? "size-3 animate-spin" : "size-3"} />刷新</button></div>
       </header>
       {error ? <div className="mt-6 flex items-start gap-3 rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"><AlertCircle aria-hidden className="mt-0.5 size-4 shrink-0" /><div><p className="font-medium">无法读取观测运行</p><p className="mt-1">{error}</p></div></div> : null}
       {loading ? <LoadingRuns /> : null}
       {!loading && !error && runs.length === 0 ? <EmptyRuns /> : null}
-      {!loading && runs.length > 0 ? <section className="mt-6 space-y-3">{runs.map((run) => <RunListCard key={run.id} run={run} />)}{cursor ? <button className="mx-auto flex h-11 items-center gap-2 rounded-xl border border-border bg-card px-5 text-sm hover:bg-secondary" disabled={loadingMore} onClick={() => void loadRuns(cursor, true)} type="button">{loadingMore ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <ChevronRight aria-hidden className="size-4" />}加载更多</button> : <p className="py-4 text-center text-xs text-muted-foreground">已加载全部观测运行</p>}</section> : null}
+      {!loading && runs.length > 0 ? <section className="mt-4 overflow-hidden rounded-lg border border-border/80 bg-card/70">{runs.map((run) => <RunListCard key={run.id} run={run} />)}{cursor ? <button className="mx-auto my-3 flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs hover:bg-secondary" disabled={loadingMore} onClick={() => void loadRuns(cursor, true)} type="button">{loadingMore ? <LoaderCircle aria-hidden className="size-3 animate-spin" /> : <ChevronRight aria-hidden className="size-3" />}加载更多</button> : <p className="py-3 text-center text-[11px] text-muted-foreground">已加载全部观测运行</p>}</section> : null}
     </main>
   );
 }
@@ -93,7 +117,8 @@ export function ObservabilityRunsPage() {
 /** 单条观测运行卡片，作为列表到 DSH 风格轨迹页的入口。 */
 function RunListCard({ run }: Readonly<{ run: TraceRunSummary }>) {
   const statusClass = run.status === "succeeded" ? "text-primary bg-primary/10 border-primary/20" : run.status === "failed" ? "text-destructive bg-destructive/10 border-destructive/20" : "text-foreground bg-secondary border-border";
-  return <Link className="group block rounded-[1.25rem] border border-border/80 bg-card/80 p-5 shadow-[0_18px_50px_-42px_rgba(23,53,58,0.5)] transition-all hover:-translate-y-0.5 hover:border-primary/35 sm:p-6" href={`/observability/${run.id}`}><div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0"><p className="text-xs font-medium tracking-[0.14em] text-primary">{runTypeLabel(run.run_type)}</p><h2 className="mt-2 truncate font-heading text-2xl font-medium tracking-tight">{run.goal_title}</h2><p className="mt-2 text-xs text-muted-foreground">{run.id}</p></div><span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${statusClass}`}>{run.status === "succeeded" ? <CircleCheck aria-hidden className="size-3.5" /> : run.status === "failed" ? <CircleX aria-hidden className="size-3.5" /> : <Clock3 aria-hidden className="size-3.5" />}{statusLabel(run.status)}</span></div><div className="mt-5 grid gap-3 rounded-2xl bg-secondary/50 p-4 text-xs text-muted-foreground sm:grid-cols-4"><span>创建于 {formatDate(run.created_at)}</span><span>输入 {run.input_tokens.toLocaleString()} tokens</span><span>输出 {run.output_tokens.toLocaleString()} tokens</span><span>{run.retry_count} 次重试</span></div></Link>;
+  const nodeLabel = runNodeLabel(run);
+  return <Link className="group grid grid-cols-[minmax(0,1.7fr)_minmax(10rem,1fr)_auto] items-center gap-3 border-b border-border/60 px-3 py-2.5 transition-colors last:border-b-0 hover:bg-secondary/35 sm:grid-cols-[minmax(0,1.8fr)_minmax(13rem,1fr)_auto]" href={`/observability/${run.id}`}><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><span className="shrink-0 text-[10px] font-medium tracking-[0.08em] text-primary">{runTypeLabel(run.run_type)}</span><span className="truncate text-sm font-medium">{run.goal_title}</span></div><p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">{run.id}</p></div><div className="min-w-0 text-[11px] text-muted-foreground"><span className="block truncate">{nodeLabel ? `内容节点 · ${nodeLabel}` : `创建于 ${formatDate(run.created_at)}`}</span><span className="mt-1 block truncate">{nodeLabel ? formatDate(run.created_at) : `输入 ${run.input_tokens.toLocaleString()} · 输出 ${run.output_tokens.toLocaleString()} · 重试 ${run.retry_count}`}</span></div><div className="flex flex-col items-end gap-1"><span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusClass}`}>{run.status === "succeeded" ? <CircleCheck aria-hidden className="size-3" /> : run.status === "failed" ? <CircleX aria-hidden className="size-3" /> : <Clock3 aria-hidden className="size-3" />}{statusLabel(run.status)}</span><span className="text-[10px] text-muted-foreground">{run.input_tokens.toLocaleString()} in · {run.output_tokens.toLocaleString()} out · {run.retry_count} retry</span></div></Link>;
 }
 
 /** 运行列表加载骨架。 */
@@ -169,10 +194,11 @@ export function ObservabilityRunDetailPage({ runId }: Readonly<{ runId: string }
     return () => { active = false; source?.close(); if (reconnectTimer.current !== null) window.clearTimeout(reconnectTimer.current); };
   }, [loading, run, runId]);
 
-  if (loading) return <main className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 sm:py-12 lg:px-10"><LoadingDetail /></main>;
-  if (error || !run) return <main className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 sm:py-12 lg:px-10"><div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-6 text-sm text-destructive"><AlertCircle aria-hidden className="mb-3 size-5" /><p className="font-medium">无法加载观测详情</p><p className="mt-2">{error ?? "任务不存在或你无权访问。"}</p><Link className="mt-5 inline-flex items-center gap-2 underline" href="/observability"><ArrowLeft aria-hidden className="size-4" />返回观测列表</Link></div></main>;
+  if (loading) return <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7"><LoadingDetail /></main>;
+  if (error || !run) return <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7"><div className="rounded-lg border border-destructive/25 bg-destructive/5 p-5 text-sm text-destructive"><AlertCircle aria-hidden className="mb-3 size-4" /><p className="font-medium">无法加载观测详情</p><p className="mt-2">{error ?? "任务不存在或你无权访问。"}</p><Link className="mt-4 inline-flex items-center gap-2 underline" href="/observability"><ArrowLeft aria-hidden className="size-4" />返回观测列表</Link></div></main>;
   const resumeSequence = events.at(-1)?.sequence_no ?? 0;
-  return <main className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 sm:py-12 lg:px-10"><div className="flex flex-wrap items-center justify-between gap-3"><Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" href="/observability"><ArrowLeft aria-hidden className="size-4" />返回观测列表</Link><button className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs hover:bg-secondary" onClick={() => void loadInitial()} type="button"><RotateCcw aria-hidden className="size-3.5" />重新读取</button></div><header className="mt-5 rounded-[1.5rem] border border-border/80 bg-card/80 p-5 shadow-[0_24px_70px_-46px_rgba(23,53,58,0.5)] sm:p-8"><div className="flex flex-wrap items-start justify-between gap-5"><div><p className="text-xs font-medium tracking-[0.14em] text-primary">{runTypeLabel(run.run_type)}</p><h1 className="mt-3 font-heading text-3xl font-medium tracking-tight sm:text-4xl">{run.goal_title}</h1><p className="mt-2 break-all text-xs text-muted-foreground">runId · {run.id}</p></div><span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">{statusLabel(run.status)}</span></div><div className="mt-6 grid gap-3 text-xs text-muted-foreground sm:grid-cols-4"><span>开始 {formatDate(run.started_at)}</span><span>结束 {formatDate(run.finished_at)}</span><span>输入 {run.input_tokens.toLocaleString()} tokens</span><span>输出 {run.output_tokens.toLocaleString()} tokens</span></div></header>{connectionState === "disconnected" ? <div className="mt-4 flex items-center gap-2 rounded-xl border border-chart-4/30 bg-chart-4/10 px-4 py-3 text-xs text-foreground"><WifiOffIcon />实时连接已断开，正在从序号 {resumeSequence + 1} 自动续传。</div> : null}<div className="mt-6"><TraceTrajectoryView connectionState={connectionState} events={events} /></div></main>;
+  const nodeLabel = runNodeLabel(run);
+  return <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><BackToPreviousButton fallbackHref="/observability" /><Link className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" href="/observability">观测列表</Link></div><button className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-[11px] hover:bg-secondary" onClick={() => void loadInitial()} type="button"><RotateCcw aria-hidden className="size-3" />重新读取</button></div><header className="mt-4 border-b border-border/70 pb-3"><div className="flex flex-wrap items-center gap-x-3 gap-y-1"><span className="text-[10px] font-medium tracking-[0.12em] text-primary">{runTypeLabel(run.run_type)}</span><h1 className="truncate font-heading text-xl font-medium tracking-tight">{run.goal_title}</h1><span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{statusLabel(run.status)}</span></div><div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground"><span className="font-mono">runId · {run.id}</span>{nodeLabel ? <span className="truncate text-primary">内容节点 · {nodeLabel}</span> : null}<span>开始 {formatDate(run.started_at)}</span><span>结束 {formatDate(run.finished_at)}</span><span>{run.input_tokens.toLocaleString()} in · {run.output_tokens.toLocaleString()} out · {run.retry_count} retry</span></div></header>{connectionState === "disconnected" ? <div className="mt-3 flex items-center gap-2 rounded-md border border-chart-4/30 bg-chart-4/10 px-3 py-2 text-[11px] text-foreground"><WifiOffIcon />实时连接已断开，正在从序号 {resumeSequence + 1} 自动续传。</div> : null}<div className="mt-3"><TraceTrajectoryView connectionState={connectionState} events={events} /></div></main>;
 }
 
 /** 详情页加载骨架，保持时间线区域尺寸稳定。 */

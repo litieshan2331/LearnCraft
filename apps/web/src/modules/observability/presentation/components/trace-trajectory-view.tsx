@@ -1,14 +1,14 @@
 /**
- * LearnCraft Agent 轨迹展示层（移植 DSH ui-trajectory 的纯展示结构）。
+ * LearnCraft Agent 轨迹紧凑展示层，复刻 DSH 的 toolbar、时间概览、事件 ledger 和右侧详情面板。
  *
- * 调用顺序：`TraceTrajectoryView` 通过工具栏筛选事件，`groupEventsByTurn` 按轮次分组，
- * `TraceEventRow` 展示时间线和摘要，选中后由 `TraceJsonViewer` 展开完整 Prompt、Thinking、Tool 输入/输出。
+ * 调用顺序：`TraceTrajectoryView` 筛选并选择事件；`TraceEventRow` 展示紧凑行；
+ * `TraceDetailPanel` 按标签读取 Prompt、模型结果、Tool 原始数据和计时信息。
  */
 
 "use client";
 
-import { ChevronDown, ChevronRight, CircleAlert, Clock3, Search, Wifi, WifiOff } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, Clock3, Search, Wifi, WifiOff } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { TraceJsonViewer } from "./trace-json-viewer";
 
@@ -27,15 +27,14 @@ export interface TraceEvent {
 }
 
 export type TraceConnectionState = "connecting" | "live" | "disconnected" | "closed";
+type DetailTab = "overview" | "request" | "result" | "tool" | "timing";
 
-/** 将事件按 turn 分组；没有轮次的运行级事件归入“运行”。 */
+/** 将事件按 turn 分组；没有轮次的运行级事件归入生命周期组。 */
 function groupEventsByTurn(events: readonly TraceEvent[]): Array<{ key: string; label: string; events: TraceEvent[] }> {
   const groups = new Map<string, TraceEvent[]>();
   for (const event of events) {
     const key = event.turn_no === null ? "run" : `turn-${event.turn_no}`;
-    const current = groups.get(key) ?? [];
-    current.push(event);
-    groups.set(key, current);
+    groups.set(key, [...(groups.get(key) ?? []), event]);
   }
   return [...groups.entries()].map(([key, grouped]) => ({
     key,
@@ -44,27 +43,27 @@ function groupEventsByTurn(events: readonly TraceEvent[]): Array<{ key: string; 
   }));
 }
 
-/** 将事件类型转换为用户可扫描的中文标签。 */
+/** 将事件类型转换为用户可扫描的短标签。 */
 function eventLabel(eventType: string): string {
-  const labels: Record<string, string> = {
+  return ({
     "run.started": "运行开始", "run.completed": "运行完成", "run.failed": "运行失败",
     "llm.request.started": "模型请求", "llm.attempt.completed": "模型完成",
     "llm.attempt.failed": "模型失败", "llm.retry": "模型重试", "llm.fallback": "模型回退",
     "tool.started": "工具开始", "tool.completed": "工具完成",
-  };
-  return labels[eventType] ?? eventType;
+  } as Record<string, string>)[eventType] ?? eventType;
 }
 
-/** 返回事件类型对应的视觉颜色。 */
+/** 返回事件类型对应的紧凑色标。 */
 function eventTone(eventType: string): string {
-  if (eventType.includes("failed")) return "border-destructive/30 bg-destructive/10 text-destructive";
-  if (eventType.includes("retry") || eventType.includes("fallback")) return "border-chart-4/40 bg-chart-4/15 text-foreground";
-  if (eventType.startsWith("llm")) return "border-primary/25 bg-primary/10 text-primary";
-  if (eventType.startsWith("tool")) return "border-chart-2/30 bg-chart-2/10 text-foreground";
-  return "border-border bg-secondary/70 text-muted-foreground";
+  if (eventType.includes("failed")) return "bg-destructive";
+  if (eventType.includes("retry") || eventType.includes("fallback")) return "bg-chart-4";
+  // 模型使用青绿色，工具使用高辨识度的紫色；两者在事件圆点和时间轴中保持一致。
+  if (eventType.startsWith("llm")) return "bg-teal-500";
+  if (eventType.startsWith("tool")) return "bg-violet-500";
+  return "bg-muted-foreground/50";
 }
 
-/** 格式化事件时间和耗时，缺少结束时间时不虚构耗时。 */
+/** 格式化时间和耗时；缺少结束时间时只显示开始时间。 */
 function formatEventTiming(event: TraceEvent): string {
   const started = event.started_at ? new Date(event.started_at) : null;
   const finished = event.finished_at ? new Date(event.finished_at) : null;
@@ -75,7 +74,18 @@ function formatEventTiming(event: TraceEvent): string {
   return `${time} · ${Math.max(0, finished.getTime() - started.getTime())} ms`;
 }
 
-/** 获取事件卡片中的简短标题。 */
+/** 按运行摘要顶部使用的本地时区格式显示事件时间，避免直接展示 UTC ISO 字符串。 */
+function formatTraceTimestamp(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  }).format(date);
+}
+
+/** 从 payload 中提取事件摘要，避免在 ledger 行内展开 JSON。 */
 function eventSummary(event: TraceEvent): string {
   const payload = event.payload;
   const model = typeof payload.model === "string" ? payload.model : null;
@@ -84,78 +94,75 @@ function eventSummary(event: TraceEvent): string {
   return errorCode ?? name ?? model ?? eventLabel(event.event_type);
 }
 
-/** 单条轨迹事件卡片，点击后展示完整 JSONB。 */
-function TraceEventRow({ event, selected, onSelect }: Readonly<{ event: TraceEvent; selected: boolean; onSelect: () => void }>) {
-  const response = event.payload.response;
-  const requestPayload = event.payload.payload;
-  return (
-    <article className={`rounded-2xl border bg-card/85 transition-colors ${selected ? "border-primary/50 shadow-[0_14px_35px_-28px_rgba(36,122,128,0.9)]" : "border-border/75"}`}>
-      <button className="flex w-full items-start gap-3 p-4 text-left" onClick={onSelect} type="button">
-        <span className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl border text-xs font-medium ${eventTone(event.event_type)}`}>{event.sequence_no}</span>
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2"><span className="font-medium">{eventLabel(event.event_type)}</span><span className={`rounded-full border px-2 py-0.5 text-[10px] ${eventTone(event.event_type)}`}>{event.event_type}</span></span>
-          <span className="mt-1 block truncate text-xs text-muted-foreground">{eventSummary(event)}</span>
-          <span className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground"><span className="inline-flex items-center gap-1"><Clock3 aria-hidden className="size-3" />{formatEventTiming(event)}</span>{event.input_tokens !== null || event.output_tokens !== null ? <span>Token {event.input_tokens ?? 0} / {event.output_tokens ?? 0}</span> : null}{event.attempt_no !== null ? <span>尝试 {event.attempt_no}</span> : null}</span>
-        </span>
-        {selected ? <ChevronDown aria-hidden className="mt-1 size-4 shrink-0 text-primary" /> : <ChevronRight aria-hidden className="mt-1 size-4 shrink-0 text-muted-foreground" />}
-      </button>
-      {selected ? (
-        <div className="space-y-3 border-t border-border/70 bg-background/35 p-4">
-          {requestPayload !== undefined ? <TraceJsonViewer label="实际 Provider 请求（最终 Prompt / 配置）" value={requestPayload} /> : null}
-          {response !== undefined ? <TraceJsonViewer label="模型正文、Thinking 与 Tool Calls" value={response} /> : null}
-          {event.payload.arguments !== undefined ? <TraceJsonViewer label="Tool 原始输入" value={event.payload.arguments} /> : null}
-          {event.payload.result !== undefined ? <TraceJsonViewer label="Tool 原始输出" value={event.payload.result} /> : null}
-          <TraceJsonViewer label="事件完整 Payload" value={event.payload} />
-        </div>
-      ) : null}
-    </article>
-  );
+/** 返回 payload 的指定字段，并让详情面板明确显示未提供。 */
+function payloadValue(event: TraceEvent, key: string): unknown {
+  return event.payload[key];
 }
 
-/** DSH 风格的轨迹时间线、事件表和详情检查器。 */
+/** 读取事件 Token；优先使用事件列，兼容旧事件中仅写入 payload.usage 的记录。 */
+function eventTokenValue(event: TraceEvent, kind: "input" | "output"): number | null {
+  const direct = kind === "input" ? event.input_tokens : event.output_tokens;
+  if (direct !== null) return direct;
+  const usage = event.payload.usage;
+  if (typeof usage !== "object" || usage === null) return null;
+  const record = usage as Record<string, unknown>;
+  const value = kind === "input"
+    ? record.inputTokens ?? record.input_tokens ?? record.prompt_tokens
+    : record.outputTokens ?? record.output_tokens ?? record.completion_tokens;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** DSH 风格的一行事件 ledger。 */
+function TraceEventRow({ event, selected, onSelect }: Readonly<{ event: TraceEvent; selected: boolean; onSelect: () => void }>) {
+  const inputTokens = eventTokenValue(event, "input");
+  const outputTokens = eventTokenValue(event, "output");
+  return <button className={`grid w-full grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2 border-b px-2.5 py-2 text-left transition-colors last:border-b-0 ${selected ? "border-primary/30 bg-primary/10" : "border-border/55 hover:bg-secondary/35"}`} onClick={onSelect} type="button"><span className={`relative grid size-5 place-items-center rounded-full text-[9px] font-medium text-primary-foreground ${eventTone(event.event_type)}`}>{event.sequence_no}</span><span className="min-w-0"><span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-xs font-medium">{eventLabel(event.event_type)}</span><span className="truncate font-mono text-[9px] text-muted-foreground">{event.event_type}</span></span><span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{eventSummary(event)}</span></span><span className="flex shrink-0 items-center gap-2 text-[9px] text-muted-foreground"><span className="hidden items-center gap-1 sm:inline-flex"><Clock3 aria-hidden className="size-2.5" />{formatEventTiming(event)}</span>{inputTokens !== null || outputTokens !== null ? <span>{inputTokens ?? 0}/{outputTokens ?? 0}</span> : null}{event.attempt_no !== null ? <span>#{event.attempt_no}</span> : null}{selected ? <ChevronDown aria-hidden className="size-3 text-primary" /> : <ChevronRight aria-hidden className="size-3" />}</span></button>;
+}
+
+/** 右侧固定详情面板，按 DSH 的 Overview/Request/Result/Tool/Timing 分栏。 */
+function TraceDetailPanel({ event }: Readonly<{ event: TraceEvent | null }>) {
+  const [tab, setTab] = useState<DetailTab>("overview");
+  useEffect(() => setTab("overview"), [event?.sequence_no]);
+  const tabs: Array<{ id: DetailTab; label: string }> = [
+    { id: "overview", label: "概述" }, { id: "request", label: "请求" },
+    { id: "result", label: "结果" }, { id: "tool", label: "Tool" }, { id: "timing", label: "计时" },
+  ];
+  if (!event) return <aside className="min-h-[280px] border-l border-border/70 bg-card/45 p-3 text-[11px] text-muted-foreground lg:min-h-0 lg:sticky lg:top-0">选择左侧事件查看详情</aside>;
+  const response = payloadValue(event, "response");
+  const request = payloadValue(event, "payload");
+  const inputTokens = eventTokenValue(event, "input");
+  const outputTokens = eventTokenValue(event, "output");
+  return <aside className="min-h-[280px] border-l border-border/70 bg-card/45 lg:sticky lg:top-0 lg:max-h-[calc(100vh-10rem)] lg:min-h-0"><div className="flex items-center justify-between border-b border-border/60 px-3 py-2"><div className="min-w-0"><p className="truncate text-xs font-medium">#{event.sequence_no} · {eventLabel(event.event_type)}</p><p className="truncate font-mono text-[9px] text-muted-foreground">{event.event_type}</p></div><span className="rounded bg-secondary px-1.5 py-0.5 text-[9px] text-muted-foreground">{event.turn_no === null ? "运行" : `T${event.turn_no}`}</span></div><div className="flex overflow-x-auto border-b border-border/60 px-1">{tabs.map((item) => <button className={`shrink-0 px-2 py-1.5 text-[10px] ${tab === item.id ? "border-b-2 border-primary font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}`} key={item.id} onClick={() => setTab(item.id)} type="button">{item.label}</button>)}</div><div className="space-y-2 overflow-auto p-2.5">{tab === "overview" ? <><div className="grid grid-cols-2 gap-1.5 text-[10px]"><span className="rounded border border-border/60 bg-background/35 px-2 py-1.5">时间<br /><b className="font-normal text-foreground">{formatEventTiming(event)}</b></span><span className="rounded border border-border/60 bg-background/35 px-2 py-1.5">Token<br /><b className="font-normal text-foreground">{inputTokens ?? "未提供"} / {outputTokens ?? "未提供"}</b></span><span className="rounded border border-border/60 bg-background/35 px-2 py-1.5">轮次<br /><b className="font-normal text-foreground">{event.turn_no ?? "未提供"}</b></span><span className="rounded border border-border/60 bg-background/35 px-2 py-1.5">尝试<br /><b className="font-normal text-foreground">{event.attempt_no ?? "未提供"}</b></span></div><TraceJsonViewer label="事件摘要" value={event.payload} /></> : null}{tab === "request" ? <><TraceJsonViewer label="实际 Provider 请求（最终 Prompt / 配置）" value={request} /><TraceJsonViewer label="完整请求事件" value={event.payload} /></> : null}{tab === "result" ? <><TraceJsonViewer label="模型正文、Thinking 与 Tool Calls" value={response} /><TraceJsonViewer label="完整结果事件" value={event.payload} /></> : null}{tab === "tool" ? <><TraceJsonViewer label="Tool 原始输入" value={payloadValue(event, "arguments")} /><TraceJsonViewer label="Tool 原始输出" value={payloadValue(event, "result")} /></> : null}{tab === "timing" ? <><TraceJsonViewer label="时间字段" value={{ started_at: formatTraceTimestamp(event.started_at), finished_at: formatTraceTimestamp(event.finished_at), created_at: formatTraceTimestamp(event.created_at), duration_ms: event.started_at && event.finished_at ? Math.max(0, new Date(event.finished_at).getTime() - new Date(event.started_at).getTime()) : null }} /><TraceJsonViewer label="用量" value={{ input_tokens: inputTokens, output_tokens: outputTokens }} /></> : null}</div></aside>;
+}
+
+/** DSH 风格轨迹页：toolbar、时间概览、紧凑事件表和固定详情面板。 */
 export function TraceTrajectoryView({ events, connectionState }: Readonly<{ events: readonly TraceEvent[]; connectionState: TraceConnectionState }>) {
   const [query, setQuery] = useState("");
   const [selectedSequence, setSelectedSequence] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const filteredEvents = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return events;
-    return events.filter((event) => JSON.stringify(event).toLowerCase().includes(normalized));
+    return normalized ? events.filter((event) => JSON.stringify(event).toLowerCase().includes(normalized)) : events;
   }, [events, query]);
   const groups = useMemo(() => groupEventsByTurn(filteredEvents), [filteredEvents]);
+  // 生命周期是独立的 run 分组，不应计入用户实际看到的模型/工具轮次。
+  // 使用 key 判断而不是 groups.length - 1，兼容无生命周期事件和空轨迹。
+  const turnCount = groups.filter((group) => group.key !== "run").length;
+  const selectedEvent = events.find((event) => event.sequence_no === selectedSequence) ?? null;
+
+  /** 新事件到达或搜索改变时，保持详情面板有一个可查看事件。 */
+  useEffect(() => {
+    if (filteredEvents.length === 0) {
+      setSelectedSequence(null);
+      return;
+    }
+    if (!filteredEvents.some((event) => event.sequence_no === selectedSequence)) setSelectedSequence(filteredEvents[0].sequence_no);
+  }, [filteredEvents, selectedSequence]);
 
   /** 切换一个轮次分组的折叠状态。 */
   function toggleGroup(key: string): void {
-    setCollapsed((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
+    setCollapsed((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   }
 
-  return (
-    <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,25rem)]">
-      <div className="min-w-0 rounded-[1.35rem] border border-border/80 bg-card/75 p-4 shadow-[0_24px_70px_-52px_rgba(23,53,58,0.65)] sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
-          <div><p className="text-xs font-medium tracking-[0.16em] text-primary">TRAJECTORY</p><p className="mt-1 text-sm text-muted-foreground">{events.length} 条已落库事件</p></div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">{connectionState === "live" || connectionState === "connecting" ? <Wifi aria-hidden className="size-3.5 text-primary" /> : <WifiOff aria-hidden className="size-3.5 text-chart-4" />}{connectionState === "live" ? "实时连接" : connectionState === "connecting" ? "正在连接" : connectionState === "disconnected" ? "连接断开，自动续传" : "已结束"}</div>
-        </div>
-        <label className="mt-4 flex items-center gap-2 rounded-xl border border-border/80 bg-background/60 px-3 py-2 text-sm"><Search aria-hidden className="size-4 text-muted-foreground" /><input className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground" onChange={(event) => setQuery(event.target.value)} placeholder="搜索 Prompt、模型、Tool 或错误码" value={query} /></label>
-        <div className="mt-5 space-y-4">
-          {groups.length === 0 ? <div className="rounded-2xl border border-dashed border-primary/25 bg-background/45 px-5 py-12 text-center text-sm text-muted-foreground">没有匹配的轨迹事件</div> : groups.map((group) => (
-            <section key={group.key}>
-              <button className="mb-2 flex w-full items-center gap-2 px-1 text-left text-sm font-medium" onClick={() => toggleGroup(group.key)} type="button">{collapsed.has(group.key) ? <ChevronRight aria-hidden className="size-4 text-primary" /> : <ChevronDown aria-hidden className="size-4 text-primary" />}<span>{group.label}</span><span className="text-xs font-normal text-muted-foreground">{group.events.length} 条</span></button>
-              {!collapsed.has(group.key) ? <div className="space-y-2 border-l-2 border-primary/15 pl-3">{group.events.map((event) => <TraceEventRow event={event} key={event.sequence_no} onSelect={() => setSelectedSequence((current) => current === event.sequence_no ? null : event.sequence_no)} selected={selectedSequence === event.sequence_no} />)}</div> : null}
-            </section>
-          ))}
-        </div>
-      </div>
-      <aside className="h-fit rounded-[1.35rem] border border-border/80 bg-card/75 p-5 shadow-[0_24px_70px_-52px_rgba(23,53,58,0.65)] lg:sticky lg:top-6">
-        <p className="text-xs font-medium tracking-[0.16em] text-primary">INSPECTOR</p>
-        <h2 className="mt-2 font-heading text-2xl font-medium">轨迹检查器</h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">点击左侧事件查看完整请求、模型输出、Thinking 和 Tool 原始数据。</p>
-        {selectedSequence === null ? <div className="mt-6 rounded-xl border border-dashed border-border px-4 py-5 text-sm text-muted-foreground"><CircleAlert aria-hidden className="mb-2 size-4 text-primary" />选择一条事件开始检查。</div> : <p className="mt-6 text-sm text-muted-foreground">当前选中事件 #{selectedSequence}，详情已在左侧展开。</p>}
-      </aside>
-    </section>
-  );
+  return <section className="overflow-hidden rounded-lg border border-border/80 bg-card/70"><div className="flex h-9 items-center gap-1 border-b border-border/70 bg-card/80 px-2"><span className="px-2 text-[10px] font-medium text-foreground">Trajectory</span><span className="text-[10px] text-muted-foreground">{events.length} events</span><span className="mx-1 h-3.5 w-px bg-border" /><span className="hidden items-center gap-1 text-[10px] text-muted-foreground sm:inline-flex"><Clock3 aria-hidden className="size-3" />{turnCount} turns</span><span className="hidden text-[10px] text-muted-foreground md:inline">· 按时间顺序</span><span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">{connectionState === "live" || connectionState === "connecting" ? <Wifi aria-hidden className="size-3 text-primary" /> : <WifiOff aria-hidden className="size-3 text-chart-4" />}{connectionState === "live" ? "实时" : connectionState === "connecting" ? "连接中" : connectionState === "disconnected" ? "断线续传" : "已结束"}</span></div><div className="flex h-9 items-center gap-2 border-b border-border/60 bg-background/35 px-2.5"><label className="flex min-w-0 flex-1 items-center gap-1.5"><Search aria-hidden className="size-3 shrink-0 text-muted-foreground" /><input className="min-w-0 flex-1 bg-transparent text-[10px] outline-none placeholder:text-muted-foreground" onChange={(event) => setQuery(event.target.value)} placeholder="搜索 Prompt、模型、Tool 或错误码" value={query} /></label><span className="shrink-0 text-[9px] text-muted-foreground">{filteredEvents.length}/{events.length}</span></div><div className="flex h-11 items-center gap-2 border-b border-border/60 bg-background/35 px-2.5"><div className="flex shrink-0 items-center gap-1 text-[9px] text-muted-foreground"><span>时间</span><span className="rounded bg-secondary px-1.5 py-0.5">{events.length ? formatEventTiming(events[0]) : "—"}</span></div><div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden rounded bg-secondary/45 px-1.5 py-2">{events.length ? events.map((event) => <button aria-label={`选择事件 ${event.sequence_no}`} className={`h-3 min-w-[3px] flex-1 rounded-sm ${eventTone(event.event_type)} ${selectedSequence === event.sequence_no ? "ring-2 ring-primary ring-offset-1 ring-offset-background" : "opacity-65 hover:opacity-100"}`} key={event.sequence_no} onClick={() => setSelectedSequence(event.sequence_no)} type="button" />) : <span className="px-2 text-[10px] text-muted-foreground">暂无事件</span>}</div><span className="shrink-0 text-[9px] text-muted-foreground">{events.length ? formatEventTiming(events.at(-1)!) : "—"}</span></div><div className="grid min-h-[360px] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,25rem)]"><div className="min-w-0 bg-background/20"><div className="flex h-8 items-center gap-3 border-b border-border/60 px-2.5 text-[9px] uppercase tracking-[0.08em] text-muted-foreground"><span className="w-5">#</span><span className="flex-1">事件 / 摘要</span><span>时间 · token · 尝试</span></div>{groups.length === 0 ? <div className="px-4 py-14 text-center text-xs text-muted-foreground">没有匹配的轨迹事件</div> : groups.map((group) => <section key={group.key}><button className="flex w-full items-center gap-1.5 border-b border-border/60 bg-secondary/25 px-2.5 py-1.5 text-left text-[10px] font-medium" onClick={() => toggleGroup(group.key)} type="button">{collapsed.has(group.key) ? <ChevronRight aria-hidden className="size-3 text-primary" /> : <ChevronDown aria-hidden className="size-3 text-primary" />}<span>{group.label}</span><span className="font-normal text-muted-foreground">{group.events.length}</span></button>{collapsed.has(group.key) ? null : group.events.map((event) => <TraceEventRow event={event} key={event.sequence_no} onSelect={() => setSelectedSequence(event.sequence_no)} selected={selectedSequence === event.sequence_no} />)}</section>)}</div><TraceDetailPanel event={selectedEvent} /></div></section>;
 }

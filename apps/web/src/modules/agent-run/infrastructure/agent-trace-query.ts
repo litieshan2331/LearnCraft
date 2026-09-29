@@ -50,6 +50,13 @@ const runColumns = {
   goalTitle: learningGoals.title,
 };
 
+/** 观测列表所需的路线节点标题；仅对节点目标运行命中。 */
+const traceNodeJoin = (ownerId: string) => and(
+  eq(planNodes.id, agentRuns.targetId),
+  eq(agentRuns.targetType, "plan_node"),
+  eq(planNodes.ownerId, ownerId),
+);
+
 /** 列出符合过滤条件的运行；额外取一行判定是否还有下一页。 */
 export async function listTraceRuns(filter: TraceRunFilter) {
   const conditions: SQL[] = [eq(agentRuns.ownerId, filter.ownerId)];
@@ -75,8 +82,20 @@ export async function listTraceRuns(filter: TraceRunFilter) {
     )!);
   }
 
-  const rows = await getDatabase().select(runColumns).from(agentRuns)
+  const rows = await getDatabase().select({
+    ...runColumns,
+    planTitle: learningPlans.title,
+    planNodeTitle: planNodes.title,
+  }).from(agentRuns)
     .innerJoin(learningGoals, and(eq(learningGoals.id, agentRuns.goalId), eq(learningGoals.ownerId, filter.ownerId)))
+    .leftJoin(planNodes, traceNodeJoin(filter.ownerId))
+    .leftJoin(learningPlans, and(
+      eq(learningPlans.ownerId, filter.ownerId),
+      or(
+        eq(learningPlans.id, planNodes.planId),
+        sql`${learningPlans.id}::text = ${agentRuns.outputSummaryJson}->>'learning_plan_id'`,
+      ),
+    ))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(agentRuns.createdAt), desc(agentRuns.id))
     .limit(filter.limit + 1);
@@ -85,12 +104,20 @@ export async function listTraceRuns(filter: TraceRunFilter) {
 
 /** 查找当前用户的运行摘要，包含路线标题（若存在）。 */
 export async function findTraceRun(ownerId: string, runId: string) {
-  const [row] = await getDatabase().select({ ...runColumns, planTitle: learningPlans.title })
+  const [row] = await getDatabase().select({
+    ...runColumns,
+    planTitle: learningPlans.title,
+    planNodeTitle: planNodes.title,
+  })
     .from(agentRuns)
     .innerJoin(learningGoals, and(eq(learningGoals.id, agentRuns.goalId), eq(learningGoals.ownerId, ownerId)))
+    .leftJoin(planNodes, traceNodeJoin(ownerId))
     .leftJoin(learningPlans, and(
-      sql`${learningPlans.id}::text = ${agentRuns.outputSummaryJson}->>'learning_plan_id'`,
       eq(learningPlans.ownerId, ownerId),
+      or(
+        eq(learningPlans.id, planNodes.planId),
+        sql`${learningPlans.id}::text = ${agentRuns.outputSummaryJson}->>'learning_plan_id'`,
+      ),
     ))
     .where(and(eq(agentRuns.ownerId, ownerId), eq(agentRuns.id, runId))).limit(1);
   return row ?? null;
@@ -111,7 +138,7 @@ export async function listTraceEvents(ownerId: string, runId: string, after: num
 
 /** 查询运行状态，供 SSE 判断已结束时是否关闭连接。 */
 export async function findTraceRunStatus(ownerId: string, runId: string): Promise<string | null> {
-  const [row] = await getDatabase().select({ status: agentRuns.status })
-    .from(agentRuns).where(and(eq(agentRuns.ownerId, ownerId), eq(agentRuns.id, runId))).limit(1);
-  return row?.status ?? null;
+  // 与详情摘要使用同一套 owner/目标关联查询，避免事件接口与摘要接口对同一运行得出不一致结果。
+  const run = await findTraceRun(ownerId, runId);
+  return run?.status ?? null;
 }

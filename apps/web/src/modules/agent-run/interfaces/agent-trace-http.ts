@@ -96,6 +96,7 @@ export function presentTraceRun(run: {
   outputTokens: number; estimatedCostUsd: string; retryCount: number; errorCode: string | null;
   startedAt: Date | null; finishedAt: Date | null; createdAt: Date; updatedAt: Date;
   planTitle?: string | null;
+  planNodeTitle?: string | null;
 }) {
   return {
     id: run.id,
@@ -119,6 +120,7 @@ export function presentTraceRun(run: {
     created_at: run.createdAt.toISOString(),
     updated_at: run.updatedAt.toISOString(),
     ...(run.planTitle !== undefined ? { plan_title: run.planTitle } : {}),
+    ...(run.planNodeTitle !== undefined ? { plan_node_title: run.planNodeTitle } : {}),
   };
 }
 

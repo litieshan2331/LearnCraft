@@ -150,6 +150,8 @@ export async function executeAgentRun(input: {
       runId: executionState.runId,
       eventType: 'run.completed',
       finishedAt: new Date(),
+      inputTokens: result.usage.inputTokens,
+      outputTokens: result.usage.outputTokens,
       payload: { outputSummary: result.outputSummary, usage: result.usage },
     });
     return { status: 'succeeded', runId: executionState.runId };
