@@ -138,7 +138,10 @@ export async function listTraceEvents(ownerId: string, runId: string, after: num
 
 /** 查询运行状态，供 SSE 判断已结束时是否关闭连接。 */
 export async function findTraceRunStatus(ownerId: string, runId: string): Promise<string | null> {
-  // 与详情摘要使用同一套 owner/目标关联查询，避免事件接口与摘要接口对同一运行得出不一致结果。
-  const run = await findTraceRun(ownerId, runId);
-  return run?.status ?? null;
+  // 事件分页/SSE 只需确认运行归属和状态，不依赖目标、路线或节点关联。
+  const [row] = await getDatabase().select({ status: agentRuns.status })
+    .from(agentRuns)
+    .where(and(eq(agentRuns.ownerId, ownerId), eq(agentRuns.id, runId)))
+    .limit(1);
+  return row?.status ?? null;
 }
