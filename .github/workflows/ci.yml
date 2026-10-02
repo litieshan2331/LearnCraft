@@ -125,8 +125,12 @@ jobs:
           # 生产编排里的必填变量都用占位值填充，仅用于验证配置能否展开。
           text = pathlib.Path("infra/compose.production.yaml").read_text(encoding="utf-8")
           names = sorted(set(re.findall(r"\$\{([A-Z][A-Z0-9_]*)", text)))
+          values = {
+              name: ("3000" if name == "WEB_PORT" else "6379" if name.endswith("_PORT") else "ci-placeholder")
+              for name in names
+          }
           pathlib.Path("infra/.env.ci").write_text(
-              "".join(f"{name}=ci-placeholder\n" for name in names), encoding="utf-8"
+              "".join(f"{name}={values[name]}\n" for name in names), encoding="utf-8"
           )
           print(f"{len(names)} 个变量已生成占位值")
           PY
