@@ -74,7 +74,7 @@ services:
 
   minio:
     # 仅用于本地 P0 开发；该固定旧镜像不能直接作为生产对象存储方案。
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     restart: unless-stopped
     environment:
