@@ -7,7 +7,7 @@
       "title": "起点适配",
       "layer": "context",
       "priority": 10,
-      "summary": "根据学习者水平、背景、前测结果和时间约束调整教学起点与难度。",
+      "summary": "在工作流确定的难度和字段范围内，调整面向学习者的表达深度与语言负担。",
       "workflows": ["assessment_generate", "plan_generate", "card_content_generate", "posttest_generate"],
       "path": "learner-starting-point/SKILL.md",
       "sources": [
@@ -20,7 +20,7 @@
       "title": "概念搭桥",
       "layer": "content",
       "priority": 20,
-      "summary": "从具体问题和代码情境出发建立抽象概念，再说明适用边界和迁移方式。",
+      "summary": "在工作流已有字段中组织具体问题、概念关系和适用边界，提升理解清晰度。",
       "workflows": ["assessment_generate", "plan_generate", "card_content_generate"],
       "path": "concept-bridging/SKILL.md",
       "sources": [
@@ -33,7 +33,7 @@
       "title": "示例陪读",
       "layer": "content",
       "priority": 30,
-      "summary": "按入口文件、调用顺序、状态变化和预期结果组织可读且可验证的代码示例。",
+      "summary": "只在节点内容工作流允许时补充入口、调用顺序、状态变化和结果的陪读表达。",
       "workflows": ["card_content_generate", "posttest_generate"],
       "path": "example-guidance/SKILL.md",
       "sources": [
@@ -46,7 +46,7 @@
       "title": "误区修复",
       "layer": "repair",
       "priority": 40,
-      "summary": "把错误拆成理解、步骤或粗心问题，给出证据、验证路径和最小修复。",
+      "summary": "在已有内容、题目或标准字段中，用具体克制的语言表达误区和修复依据。",
       "workflows": ["assessment_generate", "plan_generate", "card_content_generate", "posttest_generate"],
       "path": "misconception-repair/SKILL.md",
       "sources": [

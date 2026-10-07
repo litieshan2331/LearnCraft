@@ -46,7 +46,7 @@ apps/agent-worker-ts/Skills/
 └─ misconception-repair/SKILL.md
 ```
 
-每个文件只描述教学行为，不定义新的 API、数据库字段或模型工具。`README.md` 记录来源链接、许可证、改写范围和版本日期。
+每个文件只描述风格、讲解重点和人格边界，不定义新的 API、数据库字段或模型工具。工作流决定角色、事实来源、生成步骤、输出字段和校验合同；Skill 不能改变这些内容。`README.md` 记录来源链接、许可证、改写范围和版本日期。
 
 ## 五、已实现的 Agent Worker 接入方式
 
@@ -54,7 +54,7 @@ apps/agent-worker-ts/Skills/
 2. `selectForWorkflow` 按 `context → content → repair` 层级和优先级选择 Skill。
 3. 只有 `buildPromptSection` 才读取选中的 `SKILL.md`；未选中的正文不会进入上下文。
 4. 选中的规则通过 `appendLearningSkillsToToolSection` 注入现有 `SYSTEM_PROMPT` 的 `#工具调用` 子区块。
-5. Skill 是内部教学规则，不是 MCP 工具，不增加 Tavily 调用次数，也不能改变既有 JSON 合同。
+5. Skill 是工作流的内部风格补充，不是 MCP 工具，不增加 Tavily 调用次数，也不能改变既有 JSON 合同。
 6. Tavily 仍只用于近期版本、API 或不确定事实的核对；外部资料继续写入 `source_refs`。
 
 ## 六、工作流启用范围

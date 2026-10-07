@@ -28,8 +28,23 @@ interface TraceRunSummary {
 async function requestJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { cache: "no-store" });
   const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-  if (!response.ok) throw new Error(body?.error?.message ?? "观测数据读取失败，请稍后重试。");
+  if (!response.ok) throw new Error(body?.error?.message ?? `观测接口请求失败（HTTP ${response.status}）。`);
   return body as T;
+}
+
+/** 在开发路由刚完成编译或网络短暂抖动时重试观测请求。 */
+async function requestJsonWithRetry<T>(url: string, maxAttempts = 4): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      return await requestJson<T>(url);
+    } catch (requestError) {
+      lastError = requestError;
+      if (attempt === maxAttempts - 1) break;
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("观测数据读取失败，请稍后重试。");
 }
 
 /** 将运行类型转换为界面标签。 */
@@ -133,19 +148,33 @@ export function ObservabilityRunDetailPage({ runId }: Readonly<{ runId: string }
   const [events, setEvents] = useState<TraceEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [eventsError, setEventsError] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<TraceConnectionState>("connecting");
   const lastSequence = useRef(0);
   const reconnectTimer = useRef<number | null>(null);
 
   /** 读取运行摘要与首批历史轨迹。 */
   const loadInitial = useCallback(async (): Promise<void> => {
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setEventsError(null);
     try {
-      const [summary, page] = await Promise.all([
+      const [summaryResult, eventsResult] = await Promise.allSettled([
         requestJson<TraceRunSummary>(`/api/v1/observability/runs/${runId}`),
-        requestJson<{ items: TraceEvent[]; next_cursor: number | null }>(`/api/v1/observability/runs/${runId}/events?limit=100`),
+        requestJsonWithRetry<{ items: TraceEvent[]; next_cursor: number | null }>(`/api/v1/observability/runs/${runId}/events?limit=100`),
       ]);
-      setRun(summary); setEvents(page.items); lastSequence.current = page.items.at(-1)?.sequence_no ?? 0;
+      if (summaryResult.status === "rejected") {
+        throw summaryResult.reason;
+      }
+
+      const summary = summaryResult.value;
+      setRun(summary);
+      if (eventsResult.status === "fulfilled") {
+        setEvents(eventsResult.value.items);
+        lastSequence.current = eventsResult.value.items.at(-1)?.sequence_no ?? 0;
+      } else {
+        setEvents([]);
+        lastSequence.current = 0;
+        setEventsError(eventsResult.reason instanceof Error ? eventsResult.reason.message : "观测轨迹暂时无法加载，请稍后重试。");
+      }
       setConnectionState(["succeeded", "failed", "cancelled", "expired"].includes(summary.status) ? "closed" : "connecting");
     } catch (loadError) { setError(loadError instanceof Error ? loadError.message : "观测详情读取失败，请稍后重试。"); }
     finally { setLoading(false); }
@@ -198,7 +227,7 @@ export function ObservabilityRunDetailPage({ runId }: Readonly<{ runId: string }
   if (error || !run) return <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7"><div className="rounded-lg border border-destructive/25 bg-destructive/5 p-5 text-sm text-destructive"><AlertCircle aria-hidden className="mb-3 size-4" /><p className="font-medium">无法加载观测详情</p><p className="mt-2">{error ?? "任务不存在或你无权访问。"}</p><Link className="mt-4 inline-flex items-center gap-2 underline" href="/observability"><ArrowLeft aria-hidden className="size-4" />返回观测列表</Link></div></main>;
   const resumeSequence = events.at(-1)?.sequence_no ?? 0;
   const nodeLabel = runNodeLabel(run);
-  return <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><BackToPreviousButton fallbackHref="/observability" /><Link className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" href="/observability">观测列表</Link></div><button className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-[11px] hover:bg-secondary" onClick={() => void loadInitial()} type="button"><RotateCcw aria-hidden className="size-3" />重新读取</button></div><header className="mt-4 border-b border-border/70 pb-3"><div className="flex flex-wrap items-center gap-x-3 gap-y-1"><span className="text-[10px] font-medium tracking-[0.12em] text-primary">{runTypeLabel(run.run_type)}</span><h1 className="truncate font-heading text-xl font-medium tracking-tight">{run.goal_title}</h1><span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{statusLabel(run.status)}</span></div><div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground"><span className="font-mono">runId · {run.id}</span>{nodeLabel ? <span className="truncate text-primary">内容节点 · {nodeLabel}</span> : null}<span>开始 {formatDate(run.started_at)}</span><span>结束 {formatDate(run.finished_at)}</span><span>{run.input_tokens.toLocaleString()} in · {run.output_tokens.toLocaleString()} out · {run.retry_count} retry</span></div></header>{connectionState === "disconnected" ? <div className="mt-3 flex items-center gap-2 rounded-md border border-chart-4/30 bg-chart-4/10 px-3 py-2 text-[11px] text-foreground"><WifiOffIcon />实时连接已断开，正在从序号 {resumeSequence + 1} 自动续传。</div> : null}<div className="mt-3"><TraceTrajectoryView connectionState={connectionState} events={events} /></div></main>;
+  return <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><BackToPreviousButton fallbackHref="/observability" /><Link className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" href="/observability">观测列表</Link></div><button className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-[11px] hover:bg-secondary" onClick={() => void loadInitial()} type="button"><RotateCcw aria-hidden className="size-3" />重新读取</button></div><header className="mt-4 border-b border-border/70 pb-3"><div className="flex flex-wrap items-center gap-x-3 gap-y-1"><span className="text-[10px] font-medium tracking-[0.12em] text-primary">{runTypeLabel(run.run_type)}</span><h1 className="truncate font-heading text-xl font-medium tracking-tight">{run.goal_title}</h1><span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{statusLabel(run.status)}</span></div><div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground"><span className="font-mono">runId · {run.id}</span>{nodeLabel ? <span className="truncate text-primary">内容节点 · {nodeLabel}</span> : null}<span>开始 {formatDate(run.started_at)}</span><span>结束 {formatDate(run.finished_at)}</span><span>{run.input_tokens.toLocaleString()} in · {run.output_tokens.toLocaleString()} out · {run.retry_count} retry</span></div></header>{connectionState === "disconnected" ? <div className="mt-3 flex items-center gap-2 rounded-md border border-chart-4/30 bg-chart-4/10 px-3 py-2 text-[11px] text-foreground"><WifiOffIcon />实时连接已断开，正在从序号 {resumeSequence + 1} 自动续传。</div> : null}{eventsError ? <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-chart-4/30 bg-chart-4/10 px-3 py-2 text-[11px] text-foreground"><span>观测轨迹暂时无法加载：{eventsError}</span><button className="shrink-0 underline" onClick={() => void loadInitial()} type="button">重试</button></div> : null}<div className="mt-3"><TraceTrajectoryView connectionState={connectionState} events={events} /></div></main>;
 }
 
 /** 详情页加载骨架，保持时间线区域尺寸稳定。 */
