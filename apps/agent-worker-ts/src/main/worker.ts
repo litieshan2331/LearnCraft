@@ -12,6 +12,7 @@ import pg from 'pg';
 
 import { CoreInternalClient } from '../acl/core-internal-client.js';
 import { AgentWorkflowRegistry } from '../application/services/agent-workflow-registry.js';
+import { createLearningSkillsLoader } from '../application/services/learning-skills.js';
 import {
   formatRedisConnection,
   readAgentQueuePoolConfigs,
@@ -59,6 +60,8 @@ function requireDatabaseUrl(): string {
 }
 
 async function main(): Promise<void> {
+  // Worker 启动时先校验索引；生成任务只会在工作流执行时读取选中的 Skill 正文。
+  const learningSkills = createLearningSkillsLoader();
   const queueConfigs = readAgentQueuePoolConfigs();
   const pool = new pg.Pool({ connectionString: requireDatabaseUrl(), max: 12 });
   const traceWriter = new PgTraceWriter(pool);
@@ -138,7 +141,16 @@ async function main(): Promise<void> {
   const createProgressReporter = (runId: string) => progressPublisher.createReporter(runId);
 
   const workflows = new AgentWorkflowRegistry();
-  const workflowDeps = { internalClient, decryptor, gateway, createToolGateway, maxToolCalls, createProgressReporter, traceWriter };
+  const workflowDeps = {
+    internalClient,
+    decryptor,
+    gateway,
+    createToolGateway,
+    maxToolCalls,
+    createProgressReporter,
+    traceWriter,
+    learningSkills,
+  };
   workflows.register('assessment_generate', createAssessmentGenerateWorkflow({
     ...workflowDeps,
     reactMaxTurns: reactMaxTurns.assessmentGenerate,

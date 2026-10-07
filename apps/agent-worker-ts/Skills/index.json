@@ -1,0 +1,59 @@
+{
+  "schema_version": "learncraft.skills.index.v1",
+  "default_detail": "summary",
+  "skills": [
+    {
+      "id": "learner-starting-point",
+      "title": "起点适配",
+      "layer": "context",
+      "priority": 10,
+      "summary": "根据学习者水平、背景、前测结果和时间约束调整教学起点与难度。",
+      "workflows": ["assessment_generate", "plan_generate", "card_content_generate", "posttest_generate"],
+      "path": "learner-starting-point/SKILL.md",
+      "sources": [
+        "https://github.com/unix2dos/skills/blob/main/learnlm-inspired-tutor/SKILL.md",
+        "https://github.com/GarethManning/education-agent-skills/blob/main/skills/ai-learning-science/adaptive-hint-sequence-designer/SKILL.md"
+      ]
+    },
+    {
+      "id": "concept-bridging",
+      "title": "概念搭桥",
+      "layer": "content",
+      "priority": 20,
+      "summary": "从具体问题和代码情境出发建立抽象概念，再说明适用边界和迁移方式。",
+      "workflows": ["assessment_generate", "plan_generate", "card_content_generate"],
+      "path": "concept-bridging/SKILL.md",
+      "sources": [
+        "https://github.com/lowwwbank/anything-to-course",
+        "https://github.com/GarethManning/education-agent-skills/blob/main/skills/student-learning/transfer-bridge/SKILL.md"
+      ]
+    },
+    {
+      "id": "example-guidance",
+      "title": "示例陪读",
+      "layer": "content",
+      "priority": 30,
+      "summary": "按入口文件、调用顺序、状态变化和预期结果组织可读且可验证的代码示例。",
+      "workflows": ["card_content_generate", "posttest_generate"],
+      "path": "example-guidance/SKILL.md",
+      "sources": [
+        "https://github.com/GarethManning/education-agent-skills/blob/main/skills/ai-learning-science/digital-worked-example-sequence/SKILL.md",
+        "https://github.com/bstellato/ai-teaching-skills"
+      ]
+    },
+    {
+      "id": "misconception-repair",
+      "title": "误区修复",
+      "layer": "repair",
+      "priority": 40,
+      "summary": "把错误拆成理解、步骤或粗心问题，给出证据、验证路径和最小修复。",
+      "workflows": ["assessment_generate", "plan_generate", "card_content_generate", "posttest_generate"],
+      "path": "misconception-repair/SKILL.md",
+      "sources": [
+        "https://github.com/GarethManning/education-agent-skills/blob/main/skills/ai-learning-science/ai-feedback-design-principles/SKILL.md",
+        "https://github.com/GarethManning/education-agent-skills/blob/main/skills/self-regulated-learning/error-analysis-protocol/SKILL.md",
+        "https://github.com/GarethManning/education-agent-skills/blob/main/skills/student-learning/stuck-and-error-diagnosis-coach/SKILL.md"
+      ]
+    }
+  ]
+}

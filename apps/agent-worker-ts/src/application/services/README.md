@@ -12,6 +12,8 @@
 - `agent-thinking-stream.ts`：`AgentThinkingStream` / `createAgentThinkingStream` —— 思考原文上报：
   `push` 把流式增量**实时透传**（不缓冲、不合并、无阈值、无总量限制），`completeTurn` 上报该轮权威整段；
   只有工具调用需要缓冲完整结构化结果，思考流不做缓冲；供 ReAct 循环调用，不落库、不写日志。
+- `learning-skills.ts`：`FileLearningSkills` —— 读取 `Skills/index.json`，按工作流和层级选择教学 Skill，
+  仅在选中时加载对应 `SKILL.md`，并将规则插入现有提示词的工具调用区块。
 
 约束：注册表只做路由，不包含业务规则；未注册的 `run_type` 由命令层转为
 `AGENT_RUN_WORKFLOW_NOT_REGISTERED` 的不可重试失败，绝不伪造成功结果（与 Python 的 BaseAgent 一致）。

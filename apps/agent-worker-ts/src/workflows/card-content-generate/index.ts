@@ -32,6 +32,10 @@
 import type { ToolGatewayPort } from '../../application/services/tool-aware-generator.js';
 import { runReactAgentSession } from '../../application/services/tool-aware-generator.js';
 import {
+  appendLearningSkillsToToolSection,
+  type LearningSkillsPort,
+} from '../../application/services/learning-skills.js';
+import {
   createNoopAgentProgressReporter,
   type AgentProgressReporter,
 } from '../../application/services/agent-progress.js';
@@ -96,6 +100,8 @@ export interface CardContentGenerationDeps {
   progress?: AgentProgressReporter;
   /** 完整模型与工具观测写入端口。 */
   traceWriter?: TraceWriter;
+  /** 按工作流分层加载的教学 Skill；未提供时保持旧提示词行为。 */
+  learningSkills?: LearningSkillsPort;
 }
 
 export interface CardContentGenerationResult {
@@ -139,7 +145,13 @@ export async function runCardContentGenerate(
   };
 
   const messages = [
-    { role: 'system' as const, content: SYSTEM_PROMPT },
+    {
+      role: 'system' as const,
+      content: appendLearningSkillsToToolSection(
+        SYSTEM_PROMPT,
+        deps.learningSkills?.buildPromptSection('card_content_generate') ?? '',
+      ),
+    },
     { role: 'user' as const, content: buildUserPrompt(value) },
   ];
 
