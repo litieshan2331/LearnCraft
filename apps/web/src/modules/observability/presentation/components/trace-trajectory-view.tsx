@@ -22,7 +22,7 @@ export interface TraceEvent {
   finished_at: string | null;
   input_tokens: number | null;
   output_tokens: number | null;
-  payload: Record<string, unknown>;
+  payload: unknown;
   created_at: string;
 }
 
@@ -95,21 +95,23 @@ function formatTraceTimestamp(value: string | null): string | null {
 /** 从 payload 中提取事件摘要，避免在 ledger 行内展开 JSON。 */
 function eventSummary(event: TraceEvent): string {
   const payload = event.payload;
+  if (!isRecord(payload)) return eventLabel(event.event_type);
   const model = typeof payload.model === "string" ? payload.model : null;
   const name = typeof payload.name === "string" ? payload.name : null;
-  const errorCode = typeof payload.errorCode === "string" ? payload.errorCode : null;
+  const errorCode = typeof payload.errorCode === "string" ? payload.errorCode : typeof payload.error_code === "string" ? payload.error_code : null;
   return errorCode ?? name ?? model ?? eventLabel(event.event_type);
 }
 
 /** 返回 payload 的指定字段，并让详情面板明确显示未提供。 */
 function payloadValue(event: TraceEvent, key: string): unknown {
-  return event.payload[key];
+  return isRecord(event.payload) ? event.payload[key] : undefined;
 }
 
 /** 读取事件 Token；优先使用事件列，兼容旧事件中仅写入 payload.usage 的记录。 */
 function eventTokenValue(event: TraceEvent, kind: "input" | "output"): number | null {
   const direct = kind === "input" ? event.input_tokens : event.output_tokens;
   if (direct !== null) return direct;
+  if (!isRecord(event.payload)) return null;
   const usage = event.payload.usage;
   if (typeof usage !== "object" || usage === null) return null;
   const record = usage as Record<string, unknown>;
@@ -117,6 +119,11 @@ function eventTokenValue(event: TraceEvent, kind: "input" | "output"): number | 
     ? record.inputTokens ?? record.input_tokens ?? record.prompt_tokens
     : record.outputTokens ?? record.output_tokens ?? record.completion_tokens;
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** 判断 JSON payload 是否为可按字段读取的对象。 */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** DSH 风格的一行事件 ledger。 */
@@ -134,7 +141,7 @@ function TraceDetailPanel({ event }: Readonly<{ event: TraceEvent | null }>) {
     { id: "result", label: "结果" }, { id: "tool", label: "Tool" }, { id: "timing", label: "计时" },
   ];
   if (!event) return <aside className="min-h-[280px] border-l border-border/70 bg-card/45 p-3 text-[11px] text-muted-foreground lg:min-h-0 lg:sticky lg:top-0">选择左侧事件查看详情</aside>;
-  const response = payloadValue(event, "response");
+  const response = payloadValue(event, "response") ?? payloadValue(event, "outputSummary");
   const request = payloadValue(event, "payload");
   const inputTokens = eventTokenValue(event, "input");
   const outputTokens = eventTokenValue(event, "output");
@@ -164,5 +171,5 @@ export function TraceTrajectoryView({ events, connectionState }: Readonly<{ even
     setCollapsed((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   }
 
-  return <section className="overflow-hidden rounded-lg border border-border/80 bg-card/70"><div className="flex h-9 items-center gap-1 border-b border-border/70 bg-card/80 px-2"><span className="px-2 text-[10px] font-medium text-foreground">Trajectory</span><span className="text-[10px] text-muted-foreground">{events.length} events</span><span className="mx-1 h-3.5 w-px bg-border" /><span className="hidden items-center gap-1 text-[10px] text-muted-foreground sm:inline-flex"><Clock3 aria-hidden className="size-3" />{turnCount} turns</span><span className="hidden text-[10px] text-muted-foreground md:inline">· 按时间顺序</span><span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">{connectionState === "live" || connectionState === "connecting" ? <Wifi aria-hidden className="size-3 text-primary" /> : <WifiOff aria-hidden className="size-3 text-chart-4" />}{connectionState === "live" ? "实时" : connectionState === "connecting" ? "连接中" : connectionState === "disconnected" ? "断线续传" : "已结束"}</span></div><div className="flex h-9 items-center gap-2 border-b border-border/60 bg-background/35 px-2.5"><label className="flex min-w-0 flex-1 items-center gap-1.5"><Search aria-hidden className="size-3 shrink-0 text-muted-foreground" /><input className="min-w-0 flex-1 bg-transparent text-[10px] outline-none placeholder:text-muted-foreground" onChange={(event) => setQuery(event.target.value)} placeholder="搜索 Prompt、模型、Tool 或错误码" value={query} /></label><span className="shrink-0 text-[9px] text-muted-foreground">{filteredEvents.length}/{events.length}</span></div><div className="flex h-11 items-center gap-2 border-b border-border/60 bg-background/35 px-2.5"><div className="flex shrink-0 items-center gap-1 text-[9px] text-muted-foreground"><span>时间</span><span className="rounded bg-secondary px-1.5 py-0.5">{events.length ? formatEventTiming(events[0]) : "—"}</span></div><div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden rounded bg-secondary/45 px-1.5 py-2">{events.length ? events.map((event) => <button aria-label={`选择事件 ${event.sequence_no}`} className={`h-3 min-w-[3px] flex-1 rounded-sm ${eventTone(event.event_type)} ${visibleSelectedSequence === event.sequence_no ? "ring-2 ring-primary ring-offset-1 ring-offset-background" : "opacity-65 hover:opacity-100"}`} key={event.sequence_no} onClick={() => setSelectedSequence(event.sequence_no)} type="button" />) : <span className="px-2 text-[10px] text-muted-foreground">暂无事件</span>}</div><span className="shrink-0 text-[9px] text-muted-foreground">{events.length ? formatEventTiming(events.at(-1)!) : "—"}</span></div><div className="grid min-h-[360px] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,25rem)]"><div className="min-w-0 bg-background/20"><div className="flex h-8 items-center gap-3 border-b border-border/60 px-2.5 text-[9px] uppercase tracking-[0.08em] text-muted-foreground"><span className="w-5">#</span><span className="flex-1">事件 / 摘要</span><span>时间 · token · 尝试</span></div>{groups.length === 0 ? <div className="px-4 py-14 text-center text-xs text-muted-foreground">没有匹配的轨迹事件</div> : groups.map((group) => <section key={group.key}><button className="flex w-full items-center gap-1.5 border-b border-border/60 bg-secondary/25 px-2.5 py-1.5 text-left text-[10px] font-medium" onClick={() => toggleGroup(group.key)} type="button">{collapsed.has(group.key) ? <ChevronRight aria-hidden className="size-3 text-primary" /> : <ChevronDown aria-hidden className="size-3 text-primary" />}<span>{group.label}</span><span className="font-normal text-muted-foreground">{group.events.length}</span></button>{collapsed.has(group.key) ? null : group.events.map((event) => <TraceEventRow event={event} key={event.sequence_no} onSelect={() => setSelectedSequence(event.sequence_no)} selected={visibleSelectedSequence === event.sequence_no} />)}</section>)}</div><TraceDetailPanel event={selectedEvent} key={selectedEvent?.sequence_no ?? "empty"} /></div></section>;
+  return <section className="overflow-hidden rounded-lg border border-border/80 bg-card/70"><div className="flex h-9 items-center gap-1 border-b border-border/70 bg-card/80 px-2"><span className="px-2 text-[10px] font-medium text-foreground">Trajectory</span><span className="text-[10px] text-muted-foreground">{events.length} events</span><span className="mx-1 h-3.5 w-px bg-border" /><span className="hidden items-center gap-1 text-[10px] text-muted-foreground sm:inline-flex"><Clock3 aria-hidden className="size-3" />{turnCount} turns</span><span className="hidden text-[10px] text-muted-foreground md:inline">· 按时间顺序</span><span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">{connectionState === "live" || connectionState === "connecting" ? <Wifi aria-hidden className="size-3 text-primary" /> : <WifiOff aria-hidden className="size-3 text-chart-4" />}{connectionState === "live" ? "实时" : connectionState === "connecting" ? "连接中" : connectionState === "disconnected" ? "断线续传" : "已结束"}</span></div><div className="flex h-9 items-center gap-2 border-b border-border/60 bg-background/35 px-2.5"><label className="flex min-w-0 flex-1 items-center gap-1.5"><Search aria-hidden className="size-3 shrink-0 text-muted-foreground" /><input className="min-w-0 flex-1 bg-transparent text-[10px] outline-none placeholder:text-muted-foreground" onChange={(event) => setQuery(event.target.value)} placeholder="搜索 Prompt、模型、Tool 或错误码" value={query} /></label><span className="shrink-0 text-[9px] text-muted-foreground">{filteredEvents.length}/{events.length}</span></div><div className="flex h-11 items-center gap-2 border-b border-border/60 bg-background/35 px-2.5"><div className="flex shrink-0 items-center gap-1 text-[9px] text-muted-foreground"><span>时间</span><span className="rounded bg-secondary px-1.5 py-0.5">{filteredEvents.length ? formatEventTiming(filteredEvents[0]) : "—"}</span></div><div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden rounded bg-secondary/45 px-1.5 py-2">{filteredEvents.length ? filteredEvents.map((event) => <button aria-label={`选择事件 ${event.sequence_no}`} className={`h-3 min-w-[3px] flex-1 rounded-sm ${eventTone(event.event_type)} ${visibleSelectedSequence === event.sequence_no ? "ring-2 ring-primary ring-offset-1 ring-offset-background" : "opacity-65 hover:opacity-100"}`} key={event.sequence_no} onClick={() => setSelectedSequence(event.sequence_no)} type="button" />) : <span className="px-2 text-[10px] text-muted-foreground">暂无事件</span>}</div><span className="shrink-0 text-[9px] text-muted-foreground">{filteredEvents.length ? formatEventTiming(filteredEvents.at(-1)!) : "—"}</span></div><div className="grid min-h-[360px] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,25rem)]"><div className="min-w-0 bg-background/20"><div className="flex h-8 items-center gap-3 border-b border-border/60 px-2.5 text-[9px] uppercase tracking-[0.08em] text-muted-foreground"><span className="w-5">#</span><span className="flex-1">事件 / 摘要</span><span>时间 · token · 尝试</span></div>{groups.length === 0 ? <div className="px-4 py-14 text-center text-xs text-muted-foreground">没有匹配的轨迹事件</div> : groups.map((group) => <section key={group.key}><button className="flex w-full items-center gap-1.5 border-b border-border/60 bg-secondary/25 px-2.5 py-1.5 text-left text-[10px] font-medium" onClick={() => toggleGroup(group.key)} type="button">{collapsed.has(group.key) ? <ChevronRight aria-hidden className="size-3 text-primary" /> : <ChevronDown aria-hidden className="size-3 text-primary" />}<span>{group.label}</span><span className="font-normal text-muted-foreground">{group.events.length}</span></button>{collapsed.has(group.key) ? null : group.events.map((event) => <TraceEventRow event={event} key={event.sequence_no} onSelect={() => setSelectedSequence(event.sequence_no)} selected={visibleSelectedSequence === event.sequence_no} />)}</section>)}</div><TraceDetailPanel event={selectedEvent} key={selectedEvent?.sequence_no ?? "empty"} /></div></section>;
 }
