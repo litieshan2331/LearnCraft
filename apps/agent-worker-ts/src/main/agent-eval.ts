@@ -129,7 +129,9 @@ async function runBusinessCase(
 ): Promise<EvaluationRunCaseResult> {
   const startedAt = new Date().toISOString();
   try {
-    const execution = await runEvaluationCase({ ownerId, evaluationCase, runId: runId + '-' + evaluationCase.case_id }, deps);
+    // 出网审计表的 agent_run_id 是 PostgreSQL uuid；评测运行报告 ID 允许使用可读字符串，
+    // 但传给现有业务工作流的运行 ID 必须保持 UUID，才能写入审计记录。
+    const execution = await runEvaluationCase({ ownerId, evaluationCase, runId: randomUUID() }, deps);
     return EvaluationRunCaseResultSchema.parse({
       schema_version: 'agent_eval.run_case.v1',
       run_id: execution.runId,

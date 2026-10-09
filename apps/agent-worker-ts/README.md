@@ -97,7 +97,8 @@ node scripts/agent-eval-command.mjs score `
 
 也可以使用根目录快捷命令 `pnpm eval:build`、`pnpm eval:run -- ...` 和 `pnpm eval:score -- ...`；
 如果本机 pnpm 正在修复依赖链接，优先使用上面的 `node scripts/...` 写法。`build` 只负责契约校验和标准化，
-评测集草稿仍需先放在 `evals/datasets/default.json`，并在提交真实评测前人工复核。
+评测集草稿仍需先放在 `evals/datasets/default.json`，并在提交真实评测前人工复核。启动器会自动读取
+`infra/.env`；当前 PowerShell 中已经设置的同名变量优先于文件配置，也可以用 `AGENT_EVAL_ENV_FILE` 指定其它文件。
 
 ## 进程与环境变量
 

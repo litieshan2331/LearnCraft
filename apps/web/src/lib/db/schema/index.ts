@@ -9,6 +9,7 @@ export * from "./agent";
 export * from "./assessment";
 export * from "./content";
 export * from "./identity";
+export * from "./learning-assistant";
 export * from "./model-connection";
 export * from "./platform";
 export * from "./planning";

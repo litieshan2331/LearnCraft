@@ -22,6 +22,12 @@ import {
   contentSources,
 } from "./content";
 import { authSessions, users } from "./identity";
+import {
+  learningAssistantConversations,
+  learningAssistantMessages,
+  learningAssistantRuns,
+  learningExperienceMemories,
+} from "./learning-assistant";
 import { modelConnectionEgressAudits, userModelConnections } from "./model-connection";
 import { adaptationEvents, learningPlans, planNodePrerequisites, planNodes } from "./planning";
 import { codeRuns } from "./practice";
@@ -255,3 +261,73 @@ export const agentRunEventsRelations = relations(agentRunEvents, ({ one }) => ({
     references: [agentRuns.id],
   }),
 }));
+
+export const learningAssistantConversationsRelations = relations(
+  learningAssistantConversations,
+  ({ one, many }) => ({
+    owner: one(users, {
+      fields: [learningAssistantConversations.ownerId],
+      references: [users.id],
+    }),
+    goal: one(learningGoals, {
+      fields: [learningAssistantConversations.goalId],
+      references: [learningGoals.id],
+    }),
+    sourceAssessmentAnswer: one(assessmentAnswers, {
+      fields: [learningAssistantConversations.sourceAssessmentAnswerId],
+      references: [assessmentAnswers.id],
+    }),
+    messages: many(learningAssistantMessages),
+    runs: many(learningAssistantRuns),
+    memories: many(learningExperienceMemories),
+  }));
+
+export const learningAssistantMessagesRelations = relations(
+  learningAssistantMessages,
+  ({ one, many }) => ({
+    conversation: one(learningAssistantConversations, {
+      fields: [learningAssistantMessages.conversationId],
+      references: [learningAssistantConversations.id],
+    }),
+    triggeredRuns: many(learningAssistantRuns),
+  }));
+
+export const learningAssistantRunsRelations = relations(
+  learningAssistantRuns,
+  ({ one, many }) => ({
+    conversation: one(learningAssistantConversations, {
+      fields: [learningAssistantRuns.conversationId],
+      references: [learningAssistantConversations.id],
+    }),
+    owner: one(users, {
+      fields: [learningAssistantRuns.ownerId],
+      references: [users.id],
+    }),
+    triggerMessage: one(learningAssistantMessages, {
+      fields: [learningAssistantRuns.triggerMessageId],
+      references: [learningAssistantMessages.id],
+    }),
+    memories: many(learningExperienceMemories),
+  }));
+
+export const learningExperienceMemoriesRelations = relations(
+  learningExperienceMemories,
+  ({ one }) => ({
+    owner: one(users, {
+      fields: [learningExperienceMemories.ownerId],
+      references: [users.id],
+    }),
+    conversation: one(learningAssistantConversations, {
+      fields: [learningExperienceMemories.conversationId],
+      references: [learningAssistantConversations.id],
+    }),
+    sourceAssessmentAnswer: one(assessmentAnswers, {
+      fields: [learningExperienceMemories.sourceAssessmentAnswerId],
+      references: [assessmentAnswers.id],
+    }),
+    sourceRun: one(learningAssistantRuns, {
+      fields: [learningExperienceMemories.sourceRunId],
+      references: [learningAssistantRuns.id],
+    }),
+  }),
+);

@@ -24,6 +24,7 @@
 
 ```powershell
 node scripts/agent-eval-command.mjs build
+$env:DATABASE_URL = "postgresql://learncraft:<POSTGRES_PASSWORD>@127.0.0.1:5432/learncraft"
 node scripts/agent-eval-command.mjs run --owner-id <用户UUID> --dataset evals/datasets/built.json --output evals/runs/smoke-001
 node scripts/agent-eval-command.mjs score --owner-id <用户UUID> --dataset evals/datasets/built.json --output evals/runs/smoke-001
 ```
