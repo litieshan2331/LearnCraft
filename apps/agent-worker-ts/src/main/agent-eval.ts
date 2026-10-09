@@ -1,13 +1,14 @@
 /**
  * 独立 Agent 评测进程入口。
  *
- * 调用顺序：main 解析 CLI → 读取并校验评测集 → 装配业务模型网关和 owner-id 默认模型读取器 →
- * 逐条调用现有四类工作流 → 调用独立 Judge → 将单次结果和汇总报告写入 output 目录。
- * 业务模型沿用现有受控出网网关；Judge 只使用 AGENT_EVAL_JUDGE_* 环境变量。
+ * 调用顺序：main 解析 build/run/score CLI；build 校验并标准化评测集，run 装配业务模型网关并保存候选结果，
+ * score 读取候选结果后调用独立 Judge 并生成加权报告。业务模型沿用现有受控出网网关；Judge 只使用
+ * AGENT_EVAL_JUDGE_* 环境变量。
  */
 
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 import pg from 'pg';
@@ -20,22 +21,30 @@ import { SafeModelEgressClient } from '../infrastructure/llm/safe-egress-client.
 import {
   AgentEvalCliError,
   formatAgentEvalCliUsage,
-  parseAgentEvalCliArgs,
+  parseAgentEvalCommandArgs,
 } from '../evaluation/cli.js';
 import { createJudgeClient } from '../evaluation/judge.js';
 import {
-  evaluateCaseWithJudge,
+  runEvaluationCase,
+  scoreEvaluationCaseWithJudge,
   PgOwnerModelConnectionReader,
   type EvaluationBusinessDeps,
 } from '../evaluation/runner.js';
+import { readEvaluationDataset, writeEvaluationDataset } from '../evaluation/dataset.js';
 import {
+  buildEvaluationRunReport,
   buildEvaluationReport,
   writeEvaluationCaseResult,
+  writeEvaluationRunCaseResult,
+  writeEvaluationRunReport,
   writeEvaluationReport,
 } from '../evaluation/report.js';
 import {
-  EvaluationDatasetSchema,
+  EvaluationRunCaseResultSchema,
+  EvaluationRunReportSchema,
   type EvaluationCaseResult,
+  type EvaluationCase,
+  type EvaluationRunCaseResult,
 } from '../evaluation/schema/index.js';
 
 /** 判断当前模块是否由 Node 作为独立进程入口直接执行。 */
@@ -43,43 +52,27 @@ function isMainModule(): boolean {
   return process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 }
 
-/** 解析参数并执行完整离线评测。 */
+/** 根据 build、run、score 三阶段命令执行评测流程。 */
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
-  const parsed = parseAgentEvalCliArgs(argv);
+  const parsed = parseAgentEvalCommandArgs(argv);
   if ('help' in parsed) {
     console.log(formatAgentEvalCliUsage());
     return;
   }
-  const dataset = await readEvaluationDataset(parsed.datasetPath);
-  const judge = createJudgeClient();
-  const pool = new pg.Pool({ connectionString: requireDatabaseUrl(), max: 8 });
-  try {
-    const businessDeps = createBusinessDeps(pool);
-    const startedAt = new Date().toISOString();
-    const reportRunId = 'agent-eval-' + Date.now().toString(36);
-    const results: EvaluationCaseResult[] = [];
-    for (const evaluationCase of dataset.cases) {
-      const result = await evaluateCaseWithJudge(
-        { ownerId: parsed.ownerId, evaluationCase, judgeClient: judge },
-        businessDeps,
-      );
-      results.push(result);
-      await writeEvaluationCaseResult(parsed.outputDir, result);
-      console.log('[agent-eval] case=' + result.case_id + ' status=' + result.status);
-    }
-    const report = buildEvaluationReport({
-      runId: reportRunId,
-      ownerId: parsed.ownerId,
-      datasetVersion: dataset.dataset_version,
-      judgeModel: judge.modelName(),
-      results,
-      startedAt,
-    });
-    const reportPath = await writeEvaluationReport(parsed.outputDir, report);
-    console.log('[agent-eval] 报告已写入：' + reportPath);
-  } finally {
-    await pool.end();
+  if (parsed.command === 'build') {
+    const dataset = await readEvaluationDataset(parsed.inputPath);
+    const outputPath = await writeEvaluationDataset(parsed.datasetPath, dataset);
+    console.log('[agent-eval] 评测集已构建并校验：' + outputPath);
+    return;
   }
+  if (parsed.ownerId === undefined) {
+    throw new AgentEvalCliError('命令 ' + parsed.command + ' 缺少 --owner-id。');
+  }
+  if (parsed.command === 'run') {
+    await runBusinessEvaluation(parsed.ownerId, parsed.datasetPath, parsed.outputDir);
+    return;
+  }
+  await scoreBusinessEvaluation(parsed.ownerId, parsed.datasetPath, parsed.outputDir);
 }
 
 /** 必须配置数据库连接，以便读取 owner-id 默认模型并复用业务出网审计。 */
@@ -91,29 +84,131 @@ function requireDatabaseUrl(): string {
   return value;
 }
 
-/** 读取 JSON 或 JSONL 评测集并通过统一契约校验。 */
-async function readEvaluationDataset(path: string) {
-  const content = await readFile(resolve(path), 'utf8');
-  let raw: unknown;
-  if (path.toLowerCase().endsWith('.jsonl')) {
-    const cases = content
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-      .map((line) => JSON.parse(line) as unknown);
-    const first = cases[0];
-    if (!isRecord(first) || typeof first.dataset_version !== 'string') {
-      throw new Error('JSONL 评测集首行必须包含 dataset_version。');
+/** 只调用业务模型并把候选结果写入 outputDir，供 score 阶段复用。 */
+async function runBusinessEvaluation(
+  ownerId: string,
+  datasetPath: string,
+  outputDir: string,
+): Promise<void> {
+  const dataset = await readEvaluationDataset(datasetPath);
+  const pool = new pg.Pool({ connectionString: requireDatabaseUrl(), max: 8 });
+  const startedAt = new Date().toISOString();
+  const runId = 'agent-eval-' + Date.now().toString(36);
+  const results: EvaluationRunCaseResult[] = [];
+  const fileNames: string[] = [];
+  try {
+    const deps = createBusinessDeps(pool);
+    for (const evaluationCase of dataset.cases) {
+      const result = await runBusinessCase(ownerId, evaluationCase, deps, runId);
+      const path = await writeEvaluationRunCaseResult(outputDir, result);
+      results.push(result);
+      fileNames.push(basename(path));
+      console.log('[agent-eval] run case=' + result.case_id + ' status=' + result.status);
     }
-    raw = { schema_version: 'agent_eval.dataset.v1', dataset_version: first.dataset_version, cases };
-  } else {
-    raw = JSON.parse(content) as unknown;
+  } finally {
+    await pool.end();
   }
-  const parsed = EvaluationDatasetSchema.safeParse(raw);
-  if (!parsed.success) {
-    throw new Error('评测集不符合 agent_eval.dataset.v1 契约。');
+  const report = buildEvaluationRunReport({
+    runId,
+    ownerId,
+    datasetVersion: dataset.dataset_version,
+    results,
+    fileNames,
+    startedAt,
+  });
+  const reportPath = await writeEvaluationRunReport(outputDir, report);
+  console.log('[agent-eval] 业务运行报告已写入：' + reportPath);
+}
+
+/** 执行单条业务工作流并转换为可落盘的候选结果。 */
+async function runBusinessCase(
+  ownerId: string,
+  evaluationCase: EvaluationCase,
+  deps: EvaluationBusinessDeps,
+  runId: string,
+): Promise<EvaluationRunCaseResult> {
+  const startedAt = new Date().toISOString();
+  try {
+    const execution = await runEvaluationCase({ ownerId, evaluationCase, runId: runId + '-' + evaluationCase.case_id }, deps);
+    return EvaluationRunCaseResultSchema.parse({
+      schema_version: 'agent_eval.run_case.v1',
+      run_id: execution.runId,
+      case_id: execution.caseId,
+      owner_id: ownerId,
+      run_type: execution.runType,
+      business_model: execution.businessModel,
+      candidate_output: execution.candidateOutput,
+      structure_check: execution.structureCheck,
+      output_summary: execution.outputSummary,
+      status: execution.structureCheck.passed ? 'completed' : 'invalid',
+      error: execution.structureCheck.passed ? null : '候选输出未通过结构合同校验。',
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    return EvaluationRunCaseResultSchema.parse({
+      schema_version: 'agent_eval.run_case.v1',
+      run_id: runId + '-' + evaluationCase.case_id + '-' + randomUUID().slice(0, 8),
+      case_id: evaluationCase.case_id,
+      owner_id: ownerId,
+      run_type: evaluationCase.run_type,
+      business_model: { connection_id: 'unknown', model_id: 'unknown' },
+      candidate_output: null,
+      structure_check: { passed: false, errors: ['业务工作流执行失败。'] },
+      output_summary: null,
+      status: 'failed',
+      error: error instanceof Error ? error.message.slice(0, 1_000) : String(error).slice(0, 1_000),
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+    });
   }
-  return parsed.data;
+}
+
+/** 读取 run 阶段候选结果，调用 Judge 并把评分与汇总报告写入 scores 子目录。 */
+async function scoreBusinessEvaluation(
+  ownerId: string,
+  datasetPath: string,
+  outputDir: string,
+): Promise<void> {
+  const dataset = await readEvaluationDataset(datasetPath);
+  const runReport = JSON.parse(await readFile(join(resolve(outputDir), 'run.json'), 'utf8')) as unknown;
+  const parsedRunReport = EvaluationRunReportSchema.parse(runReport);
+  if (parsedRunReport.owner_id !== ownerId) {
+    throw new Error('run.json 的 owner_id 与 --owner-id 不一致。');
+  }
+  if (parsedRunReport.dataset_version !== dataset.dataset_version) {
+    throw new Error('run.json 的 dataset_version 与当前评测集不一致。');
+  }
+  const judge = createJudgeClient();
+  const scoreDir = join(resolve(outputDir), 'scores');
+  const results: EvaluationCaseResult[] = [];
+  for (const item of parsedRunReport.cases) {
+    const raw = JSON.parse(await readFile(join(resolve(outputDir), item.file_name), 'utf8')) as unknown;
+    const runResult = EvaluationRunCaseResultSchema.parse(raw);
+    const evaluationCase = dataset.cases.find((candidate) => candidate.case_id === runResult.case_id);
+    if (evaluationCase === undefined) {
+      throw new Error('run 结果找不到对应评测用例：' + runResult.case_id);
+    }
+    const result = await scoreEvaluationCaseWithJudge({
+      ownerId,
+      evaluationCase,
+      runResult,
+      judgeClient: judge,
+    });
+    results.push(result);
+    await writeEvaluationCaseResult(scoreDir, result);
+    console.log('[agent-eval] score case=' + result.case_id + ' status=' + result.status);
+  }
+  const report = buildEvaluationReport({
+    runId: parsedRunReport.run_id,
+    ownerId,
+    datasetVersion: dataset.dataset_version,
+    judgeModel: judge.modelName(),
+    results,
+    startedAt: parsedRunReport.started_at,
+  });
+  const reportPath = await writeEvaluationReport(scoreDir, report);
+  console.log('[agent-eval] 评分报告已写入：' + reportPath);
 }
 
 /** 装配现有业务模型网关和按 owner-id 读取默认模型的适配器。 */
@@ -134,11 +229,6 @@ function createBusinessDeps(pool: pg.Pool): EvaluationBusinessDeps {
       card_content_generate: reactTurns.cardContentGenerate,
     },
   };
-}
-
-/** 判断未知值是否为非数组对象。 */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** 处理独立进程入口错误并返回非零退出码。 */

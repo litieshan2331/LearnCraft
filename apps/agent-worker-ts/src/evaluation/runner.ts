@@ -276,6 +276,74 @@ export async function evaluateCaseWithJudge(input: {
   }
 }
 
+/** 对已经落盘的候选结果执行 Judge 评分，不重新调用业务模型。 */
+export async function scoreEvaluationCaseWithJudge(input: {
+  ownerId: string;
+  evaluationCase: EvaluationCase;
+  runResult: {
+    run_id: string;
+    case_id: string;
+    run_type: EvaluationRunType;
+    business_model: { connection_id: string; model_id: string };
+    candidate_output: unknown;
+    structure_check: EvaluationStructureCheck;
+    started_at: string;
+    finished_at: string;
+    status: 'completed' | 'invalid' | 'failed';
+    error: string | null;
+  };
+  judgeClient: JudgeClientPort;
+}): Promise<EvaluationCaseResult> {
+  const runResult = input.runResult;
+  const base = {
+    schema_version: 'agent_eval.case_result.v1' as const,
+    run_id: runResult.run_id,
+    case_id: runResult.case_id,
+    owner_id: input.ownerId,
+    run_type: runResult.run_type,
+    business_model: runResult.business_model,
+    judge_model: getJudgeModel(input.judgeClient),
+    candidate_output: runResult.candidate_output,
+    structure_check: runResult.structure_check,
+    started_at: runResult.started_at,
+    finished_at: new Date().toISOString(),
+  };
+  if (runResult.status !== 'completed' || !runResult.structure_check.passed) {
+    return EvaluationCaseResultSchema.parse({
+      ...base,
+      scores: null,
+      weighted_score: null,
+      percentage_score: null,
+      status: runResult.status === 'invalid' ? 'invalid' : 'failed',
+      error: runResult.error ?? '业务模型运行结果未达到可评分状态。',
+    });
+  }
+  try {
+    const scores = await input.judgeClient.scoreCandidate({
+      evaluationCase: input.evaluationCase,
+      candidateOutput: runResult.candidate_output,
+    });
+    const weightedScore = calculateWeightedScore(scores);
+    return EvaluationCaseResultSchema.parse({
+      ...base,
+      scores,
+      weighted_score: weightedScore,
+      percentage_score: (weightedScore / 5) * 100,
+      status: 'scored',
+      error: null,
+    });
+  } catch (error) {
+    return EvaluationCaseResultSchema.parse({
+      ...base,
+      scores: null,
+      weighted_score: null,
+      percentage_score: null,
+      status: 'failed',
+      error: error instanceof Error ? error.message.slice(0, 1_000) : String(error).slice(0, 1_000),
+    });
+  }
+}
+
 /** 按 3/2/2/2/1 权重计算 1–5 加权平均分。 */
 export function calculateWeightedScore(scores: EvaluationScores): number {
   const weighted = (

@@ -11,6 +11,7 @@ import {
   DEFAULT_AGENT_EVAL_DATASET_PATH,
   DEFAULT_AGENT_EVAL_OUTPUT_DIR,
   formatAgentEvalCliUsage,
+  parseAgentEvalCommandArgs,
   parseAgentEvalCliArgs,
 } from '../src/evaluation/cli.js';
 
@@ -45,5 +46,26 @@ describe('parseAgentEvalCliArgs', () => {
   it('缺少 owner-id 或遇到未知参数时抛出 CLI 错误', () => {
     expect(() => parseAgentEvalCliArgs([])).toThrow(AgentEvalCliError);
     expect(() => parseAgentEvalCliArgs(['--unknown'])).toThrow(AgentEvalCliError);
+  });
+});
+
+describe('parseAgentEvalCommandArgs', () => {
+  it('解析 build、run、score 三阶段命令', () => {
+    expect(parseAgentEvalCommandArgs(['build', '--input', 'draft.json', '--dataset', 'built.json'])).toEqual({
+      command: 'build',
+      inputPath: 'draft.json',
+      datasetPath: 'built.json',
+      outputDir: 'evals/runs',
+    });
+    expect(parseAgentEvalCommandArgs(['run', '--owner-id', OWNER_ID])).toMatchObject({
+      command: 'run',
+      ownerId: OWNER_ID,
+      datasetPath: 'evals/datasets/built.json',
+    });
+    expect(parseAgentEvalCommandArgs(['score', '--owner-id=' + OWNER_ID, '--output', 'runs/001'])).toMatchObject({
+      command: 'score',
+      ownerId: OWNER_ID,
+      outputDir: 'runs/001',
+    });
   });
 });

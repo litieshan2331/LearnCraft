@@ -20,6 +20,17 @@
 
 运行器使用该用户当前的默认模型连接调用业务工作流；Judge 使用 `AGENT_EVAL_JUDGE_*` 四个环境变量，二者完全隔离。
 
+仓库根目录提供三个可重复执行的阶段命令：
+
+```powershell
+node scripts/agent-eval-command.mjs build
+node scripts/agent-eval-command.mjs run --owner-id <用户UUID> --dataset evals/datasets/built.json --output evals/runs/smoke-001
+node scripts/agent-eval-command.mjs score --owner-id <用户UUID> --dataset evals/datasets/built.json --output evals/runs/smoke-001
+```
+
+`build` 校验并标准化 `evals/datasets/default.json`，`run` 只生成并保存业务 Agent 候选结果，`score` 读取候选结果并调用 Judge；
+三阶段分开保存，便于先人工检查候选输出，再重复评分。
+
 ## 三、处理流程
 
 ```text

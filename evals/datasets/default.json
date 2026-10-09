@@ -1,0 +1,134 @@
+{
+  "schema_version": "agent_eval.dataset.v1",
+  "dataset_version": "smoke-v1",
+  "cases": [
+    {
+      "case_id": "smoke-assessment-typescript",
+      "dataset_version": "smoke-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "TypeScript",
+        "question_count": 10,
+        "difficulty": "normal",
+        "kind": "diagnostic"
+      },
+      "learner_profile": { "current_level": "beginner" },
+      "reference_facts": ["TypeScript 是 JavaScript 的超集。"],
+      "required_knowledge_points": ["类型注解", "基础类型"],
+      "acceptable_answer_points": ["能解释类型注解的用途。"],
+      "scoring_rubric": {
+        "correctness": "事实、答案和解析正确。",
+        "completeness": "覆盖要求的知识点。",
+        "relevance": "围绕 TypeScript 入门目标。",
+        "readability": "题干、选项和解析清楚易读。",
+        "teaching_adaptation": "题目难度适合初学者。"
+      },
+      "tags": ["smoke", "assessment"]
+    },
+    {
+      "case_id": "smoke-plan-typescript",
+      "dataset_version": "smoke-v1",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-typescript-smoke",
+          "topic": "TypeScript",
+          "title": "TypeScript 入门",
+          "description": "学习 TypeScript 类型系统和常用开发方式。",
+          "desired_outcome": "能够写出基础的类型安全代码。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "beginner",
+          "weekly_minutes": 120,
+          "background_summary": null
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "assessment-typescript-smoke",
+          "score_percent": 40,
+          "mastery_summary": { "type_annotations": "needs_practice" }
+        }
+      },
+      "learner_profile": { "current_level": "beginner" },
+      "reference_facts": ["TypeScript 是 JavaScript 的超集。"],
+      "required_knowledge_points": ["类型注解", "接口", "联合类型"],
+      "acceptable_answer_points": ["路线按知识依赖排序。", "每章有可验证的完成标准。"],
+      "scoring_rubric": {
+        "correctness": "知识依赖、顺序和技术事实正确。",
+        "completeness": "覆盖目标和关键知识点。",
+        "relevance": "路线围绕 TypeScript 入门。",
+        "readability": "章节标题和说明清楚。",
+        "teaching_adaptation": "粒度、难度和时间适合初学者。"
+      },
+      "tags": ["smoke", "plan"]
+    },
+    {
+      "case_id": "smoke-card-content-typescript",
+      "dataset_version": "smoke-v1",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "typescript-smoke-session",
+        "goal": { "topic": "TypeScript", "desired_outcome": "能够写出基础类型安全代码。" },
+        "learner_profile": { "current_level": "beginner" },
+        "learning_plan": { "title": "TypeScript 入门路线" },
+        "plan_node": {
+          "id": "33333333-3333-4333-8333-333333333333",
+          "title": "类型注解",
+          "summary": "学习变量、函数和对象的类型注解。"
+        }
+      },
+      "learner_profile": { "current_level": "beginner" },
+      "reference_facts": ["类型注解用于表达变量、参数和返回值的预期类型。"],
+      "required_knowledge_points": ["类型注解", "参数类型", "返回值类型"],
+      "acceptable_answer_points": ["解释类型注解的作用。", "示例能够对应章节目标。"],
+      "scoring_rubric": {
+        "correctness": "概念、示例代码和因果关系正确。",
+        "completeness": "包含基础解释、示例、误区和教学记忆。",
+        "relevance": "内容聚焦当前节点。",
+        "readability": "分段、代码和调用顺序清楚。",
+        "teaching_adaptation": "解释和示例适合初学者。"
+      },
+      "tags": ["smoke", "card-content"]
+    },
+    {
+      "case_id": "smoke-posttest-typescript",
+      "dataset_version": "smoke-v1",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "TypeScript",
+        "question_count": 5,
+        "difficulty": "normal",
+        "kind": "post_test",
+        "plan_node_id": "33333333-3333-4333-8333-333333333333",
+        "source_card_content_id": "44444444-4444-4444-8444-444444444444",
+        "card_content_context": {
+          "plan_node_id": "33333333-3333-4333-8333-333333333333",
+          "card_content_id": "44444444-4444-4444-8444-444444444444",
+          "foundation": "类型注解用于表达变量、参数和返回值的预期类型。",
+          "worked_example": { "entry_file": "src/index.ts" },
+          "pitfalls_debug": [
+            { "title": "把类型注解当成运行时校验", "cause": "类型信息主要在编译阶段使用。", "fix": "对外部输入仍要进行运行时校验。" }
+          ],
+          "teaching_memory": {
+            "key_concepts": ["类型注解", "参数类型", "返回值类型"],
+            "common_mistakes": ["忽略外部输入的运行时校验"],
+            "assessment_targets": ["能够写出简单类型注解"]
+          }
+        }
+      },
+      "learner_profile": { "current_level": "beginner" },
+      "reference_facts": ["类型注解用于表达变量、参数和返回值的预期类型。"],
+      "required_knowledge_points": ["类型注解", "参数类型", "返回值类型"],
+      "acceptable_answer_points": ["题目只考查节点内容。", "解析解释答案原因。"],
+      "scoring_rubric": {
+        "correctness": "题目、答案和解析正确。",
+        "completeness": "覆盖节点关键知识点。",
+        "relevance": "只考查已学习的节点内容。",
+        "readability": "题干、选项和解析清楚。",
+        "teaching_adaptation": "难度和迁移要求适合初学者。"
+      },
+      "tags": ["smoke", "posttest"]
+    }
+  ]
+}

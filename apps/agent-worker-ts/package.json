@@ -18,6 +18,9 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "pnpm clean && esbuild src/main/worker.ts src/main/dispatcher.ts src/main/agent-eval.ts --bundle --platform=node --format=esm --target=node22 --outdir=dist --sourcemap --external:pg --external:bullmq --external:zod --external:undici --external:@modelcontextprotocol/sdk",
     "eval:agent": "node dist/agent-eval.js",
+    "eval:build": "node dist/agent-eval.js build",
+    "eval:run": "node dist/agent-eval.js run",
+    "eval:score": "node dist/agent-eval.js score",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

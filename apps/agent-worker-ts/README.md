@@ -73,6 +73,32 @@ pnpm --filter @learncraft/agent-worker-ts typecheck
 pnpm --filter @learncraft/agent-worker-ts test
 ```
 
+### 三阶段 Agent 评测命令
+
+仓库根目录提供三个不依赖 pnpm 重新链接的命令。每次命令会先用现有 `esbuild` 生成最新的评测入口，
+因此可以直接在 Windows PowerShell 中重复执行：
+
+```powershell
+# 1. 校验并标准化评测集草稿，生成 evals/datasets/built.json
+node scripts/agent-eval-command.mjs build
+
+# 2. 使用 owner-id 的默认模型生成候选结果，写入 evals/runs/smoke-001
+node scripts/agent-eval-command.mjs run `
+  --owner-id <用户UUID> `
+  --dataset evals/datasets/built.json `
+  --output evals/runs/smoke-001
+
+# 3. 读取候选结果，调用独立 Judge，写入 evals/runs/smoke-001/scores
+node scripts/agent-eval-command.mjs score `
+  --owner-id <用户UUID> `
+  --dataset evals/datasets/built.json `
+  --output evals/runs/smoke-001
+```
+
+也可以使用根目录快捷命令 `pnpm eval:build`、`pnpm eval:run -- ...` 和 `pnpm eval:score -- ...`；
+如果本机 pnpm 正在修复依赖链接，优先使用上面的 `node scripts/...` 写法。`build` 只负责契约校验和标准化，
+评测集草稿仍需先放在 `evals/datasets/default.json`，并在提交真实评测前人工复核。
+
 ## 进程与环境变量
 
 两个进程入口均为独立 Node 进程，不暴露公网：

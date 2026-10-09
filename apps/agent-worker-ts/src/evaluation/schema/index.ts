@@ -163,6 +163,56 @@ export const EvaluationReportSchema = z
   })
   .strict();
 
+/** 业务模型运行阶段的单条候选结果契约。 */
+export const EvaluationRunCaseResultSchema = z
+  .object({
+    schema_version: z.literal('agent_eval.run_case.v1'),
+    run_id: z.string().min(1).max(200),
+    case_id: z.string().min(1).max(200),
+    owner_id: z.uuid(),
+    run_type: EvaluationRunTypeSchema,
+    business_model: z
+      .object({
+        connection_id: z.string().min(1),
+        model_id: z.string().min(1),
+      })
+      .strict(),
+    candidate_output: z.unknown(),
+    structure_check: EvaluationStructureCheckSchema,
+    output_summary: z.record(z.string(), z.unknown()).nullable(),
+    status: z.enum(['completed', 'invalid', 'failed']),
+    error: z.string().min(1).nullable(),
+    started_at: z.string().min(1),
+    finished_at: z.string().min(1),
+  })
+  .strict();
+
+/** 运行阶段汇总报告中的单条文件索引。 */
+export const EvaluationRunReportCaseSchema = z
+  .object({
+    case_id: z.string().min(1).max(200),
+    status: z.enum(['completed', 'invalid', 'failed']),
+    file_name: z.string().min(1).max(300),
+  })
+  .strict();
+
+/** 业务模型运行阶段的汇总报告契约。 */
+export const EvaluationRunReportSchema = z
+  .object({
+    schema_version: z.literal('agent_eval.run_report.v1'),
+    run_id: z.string().min(1).max(200),
+    owner_id: z.uuid(),
+    dataset_version: z.string().min(1).max(100),
+    total_cases: z.number().int().nonnegative(),
+    completed_cases: z.number().int().nonnegative(),
+    invalid_cases: z.number().int().nonnegative(),
+    failed_cases: z.number().int().nonnegative(),
+    cases: z.array(EvaluationRunReportCaseSchema),
+    started_at: z.string().min(1),
+    finished_at: z.string().min(1),
+  })
+  .strict();
+
 export type EvaluationRunType = z.infer<typeof EvaluationRunTypeSchema>;
 export type EvaluationCase = z.infer<typeof EvaluationCaseSchema>;
 export type EvaluationDataset = z.infer<typeof EvaluationDatasetSchema>;
@@ -171,3 +221,5 @@ export type EvaluationStructureCheck = z.infer<typeof EvaluationStructureCheckSc
 export type EvaluationScores = z.infer<typeof EvaluationScoresSchema>;
 export type EvaluationCaseResult = z.infer<typeof EvaluationCaseResultSchema>;
 export type EvaluationReport = z.infer<typeof EvaluationReportSchema>;
+export type EvaluationRunCaseResult = z.infer<typeof EvaluationRunCaseResultSchema>;
+export type EvaluationRunReport = z.infer<typeof EvaluationRunReportSchema>;

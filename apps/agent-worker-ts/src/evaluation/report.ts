@@ -17,8 +17,12 @@ import { join, resolve } from 'node:path';
 import {
   EvaluationCaseResultSchema,
   EvaluationReportSchema,
+  EvaluationRunCaseResultSchema,
+  EvaluationRunReportSchema,
   type EvaluationCaseResult,
   type EvaluationReport,
+  type EvaluationRunCaseResult,
+  type EvaluationRunReport,
 } from './schema/index.js';
 
 /** 构造汇总报告所需的输入。 */
@@ -69,6 +73,39 @@ export function buildEvaluationReport(input: EvaluationReportInput): EvaluationR
   });
 }
 
+/** 构造业务模型运行阶段的汇总报告，供后续 score 命令读取候选文件。 */
+export function buildEvaluationRunReport(input: {
+  runId: string;
+  ownerId: string;
+  datasetVersion: string;
+  results: readonly EvaluationRunCaseResult[];
+  fileNames: readonly string[];
+  startedAt: string;
+  finishedAt?: string;
+}): EvaluationRunReport {
+  const results = input.results.map((result) => EvaluationRunCaseResultSchema.parse(result));
+  if (results.length !== input.fileNames.length) {
+    throw new Error('运行结果数量与候选文件索引数量不一致。');
+  }
+  return EvaluationRunReportSchema.parse({
+    schema_version: 'agent_eval.run_report.v1',
+    run_id: input.runId,
+    owner_id: input.ownerId,
+    dataset_version: input.datasetVersion,
+    total_cases: results.length,
+    completed_cases: results.filter((result) => result.status === 'completed').length,
+    invalid_cases: results.filter((result) => result.status === 'invalid').length,
+    failed_cases: results.filter((result) => result.status === 'failed').length,
+    cases: results.map((result, index) => ({
+      case_id: result.case_id,
+      status: result.status,
+      file_name: input.fileNames[index]!,
+    })),
+    started_at: input.startedAt,
+    finished_at: input.finishedAt ?? new Date().toISOString(),
+  });
+}
+
 /** 将单条结果写入 outputDir，并返回实际文件路径。 */
 export async function writeEvaluationCaseResult(
   outputDir: string,
@@ -92,6 +129,33 @@ export async function writeEvaluationReport(
   const directory = resolve(outputDir);
   await mkdir(directory, { recursive: true });
   const path = join(directory, 'report.json');
+  await writeJsonAtomically(path, parsed);
+  return path;
+}
+
+/** 将单条业务模型候选结果写入运行目录。 */
+export async function writeEvaluationRunCaseResult(
+  outputDir: string,
+  result: EvaluationRunCaseResult,
+): Promise<string> {
+  const parsed = EvaluationRunCaseResultSchema.parse(result);
+  const directory = resolve(outputDir);
+  await mkdir(directory, { recursive: true });
+  const safeCaseId = parsed.case_id.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = join(directory, parsed.run_id + '-' + safeCaseId + '.json');
+  await writeJsonAtomically(path, parsed);
+  return path;
+}
+
+/** 将业务模型运行汇总报告写入运行目录的 run.json。 */
+export async function writeEvaluationRunReport(
+  outputDir: string,
+  report: EvaluationRunReport,
+): Promise<string> {
+  const parsed = EvaluationRunReportSchema.parse(report);
+  const directory = resolve(outputDir);
+  await mkdir(directory, { recursive: true });
+  const path = join(directory, 'run.json');
   await writeJsonAtomically(path, parsed);
   return path;
 }

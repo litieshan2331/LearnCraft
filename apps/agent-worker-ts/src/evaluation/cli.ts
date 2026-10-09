@@ -15,7 +15,20 @@ import { z } from 'zod';
 
 /** 评测集和结果目录的默认路径。 */
 export const DEFAULT_AGENT_EVAL_DATASET_PATH = 'evals/datasets/default.json';
+export const DEFAULT_AGENT_EVAL_BUILT_DATASET_PATH = 'evals/datasets/built.json';
 export const DEFAULT_AGENT_EVAL_OUTPUT_DIR = 'evals/runs';
+
+/** 评测工具支持的三个阶段。 */
+export type AgentEvalCommand = 'build' | 'run' | 'score';
+
+/** 三阶段命令的解析结果。 */
+export interface AgentEvalCommandOptions {
+  command: AgentEvalCommand;
+  ownerId?: string;
+  inputPath: string;
+  datasetPath: string;
+  outputDir: string;
+}
 
 /** 评测进程解析后的命令行配置。 */
 export interface AgentEvalCliOptions {
@@ -126,12 +139,91 @@ export function parseAgentEvalCliArgs(
 /** 生成独立评测进程的命令行帮助文本。 */
 export function formatAgentEvalCliUsage(): string {
   return [
-    '用法：agent-eval --owner-id <用户UUID> [--dataset <评测集文件>] [--output <结果目录>]',
+    '用法：',
+    '  agent-eval build [--input <草稿文件>] [--dataset <已构建评测集>]',
+    '  agent-eval run --owner-id <用户UUID> [--dataset <评测集文件>] [--output <运行目录>]',
+    '  agent-eval score --owner-id <用户UUID> [--dataset <评测集文件>] [--output <运行目录>]',
+    '  agent-eval --owner-id <用户UUID> [--dataset <评测集文件>] [--output <运行目录>]',
     '',
     '选项：',
     '  --owner-id <用户UUID>       使用该用户当前的默认模型连接。',
-    '  --dataset <评测集文件>      默认：' + DEFAULT_AGENT_EVAL_DATASET_PATH,
+    '  --input <草稿文件>          build 阶段输入；默认：' + DEFAULT_AGENT_EVAL_DATASET_PATH,
+    '  --dataset <评测集文件>      run/score 默认：evals/datasets/built.json。',
     '  --output <结果目录>         默认：' + DEFAULT_AGENT_EVAL_OUTPUT_DIR,
     '  --help                     显示帮助。',
   ].join('\n');
+}
+
+/** 解析 build/run/score 三阶段命令；旧的 --owner-id 形式仍按 run 兼容。 */
+export function parseAgentEvalCommandArgs(
+  argv: readonly string[],
+): AgentEvalCommandOptions | { help: true } {
+  const first = argv[0];
+  if (first === '--help' || first === '-h') {
+    return { help: true };
+  }
+  const command: AgentEvalCommand = first === 'build' || first === 'run' || first === 'score'
+    ? first
+    : 'run';
+  if (command === 'run' && command !== first) {
+    const legacy = parseAgentEvalCliArgs(argv);
+    if ('help' in legacy) {
+      return legacy;
+    }
+    return {
+      command: 'run',
+      ownerId: legacy.ownerId,
+      inputPath: legacy.datasetPath,
+      datasetPath: legacy.datasetPath,
+      outputDir: legacy.outputDir,
+    };
+  }
+  return parseCommandOptions(command, argv.slice(1));
+}
+
+/** 解析指定阶段的参数并校验 owner-id。 */
+function parseCommandOptions(
+  command: AgentEvalCommand,
+  argv: readonly string[],
+): AgentEvalCommandOptions | { help: true } {
+  let ownerId: string | undefined;
+  let inputPath = DEFAULT_AGENT_EVAL_DATASET_PATH;
+  let datasetPath = DEFAULT_AGENT_EVAL_BUILT_DATASET_PATH;
+  let outputDir = DEFAULT_AGENT_EVAL_OUTPUT_DIR;
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === '--help' || argument === '-h') {
+      return { help: true };
+    }
+    const match = /^(--owner-id|--input|--dataset|--output)(?:=(.*))?$/.exec(argument ?? '');
+    if (match === null) {
+      throw new AgentEvalCliError('未知参数：' + String(argument) + '。使用 --help 查看用法。');
+    }
+    const optionName = match[1]!;
+    const inlineValue = match[2];
+    const parsedValue = readOptionValue(argv, index, optionName, inlineValue);
+    index = parsedValue.nextIndex;
+    if (optionName === '--owner-id') {
+      if (ownerId !== undefined) {
+        throw new AgentEvalCliError('参数 --owner-id 只能指定一次。');
+      }
+      ownerId = parsedValue.value;
+    } else if (optionName === '--input') {
+      inputPath = parsedValue.value;
+    } else if (optionName === '--dataset') {
+      datasetPath = parsedValue.value;
+    } else {
+      outputDir = parsedValue.value;
+    }
+  }
+  if (command !== 'build') {
+    if (ownerId === undefined) {
+      throw new AgentEvalCliError('缺少必需参数 --owner-id。');
+    }
+    const parsedOwnerId = z.uuid().safeParse(ownerId);
+    if (!parsedOwnerId.success) {
+      throw new AgentEvalCliError('参数 --owner-id 必须是合法 UUID。');
+    }
+  }
+  return { command, ownerId, inputPath, datasetPath, outputDir };
 }
