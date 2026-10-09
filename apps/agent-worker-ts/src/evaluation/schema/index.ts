@@ -167,6 +167,7 @@ export type EvaluationRunType = z.infer<typeof EvaluationRunTypeSchema>;
 export type EvaluationCase = z.infer<typeof EvaluationCaseSchema>;
 export type EvaluationDataset = z.infer<typeof EvaluationDatasetSchema>;
 export type EvaluationDimensionScore = z.infer<typeof EvaluationDimensionScoreSchema>;
+export type EvaluationStructureCheck = z.infer<typeof EvaluationStructureCheckSchema>;
 export type EvaluationScores = z.infer<typeof EvaluationScoresSchema>;
 export type EvaluationCaseResult = z.infer<typeof EvaluationCaseResultSchema>;
 export type EvaluationReport = z.infer<typeof EvaluationReportSchema>;
