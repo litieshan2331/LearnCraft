@@ -1,0 +1,3087 @@
+{
+  "schema_version": "agent_eval.dataset.v1",
+  "dataset_version": "regression-40-v1",
+  "cases": [
+    {
+      "case_id": "reg40-assessment-01-typescript",
+      "dataset_version": "regression-40-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "TypeScript 类型安全基础",
+        "title": "TypeScript 类型安全基础诊断前测",
+        "description": "学习基础类型和类型推断、函数参数与返回值类型、接口与对象建模、联合类型及收窄，并理解类型断言不能替代外部输入的运行时校验。暂不学习框架或高级类型编程。",
+        "desired_outcome": "能够为小型 JavaScript 数据处理模块补充 TypeScript 类型，读懂常见类型错误并区分编译期检查与运行时校验。",
+        "question_count": 12,
+        "difficulty": "hard",
+        "kind": "diagnostic"
+      },
+      "learner_profile": {},
+      "reference_facts": [
+        "TypeScript 类型注解和接口在编译输出中被擦除，不会自动校验外部数据。",
+        "联合类型的安全使用需要结合具体类型判断；类型断言本身不会生成运行时检查。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 12 道独立可读的单选题，每题答案唯一，解析与答案一致。",
+        "根据主题、描述和目标选择具有诊断价值的核心概念、常见错误和应用考点，不要求覆盖输入未指定的额外清单。",
+        "相邻题的正确选项字母不同，正确答案位置尽量均衡，并避免明显可预测的排列规律。",
+        "没有整体编程经验或画像时，以 beginner 为默认水平。",
+        "本题量安排 11 道当前水平题及 1 道提高题；仅提高题允许跨到高一级。normal 和 hard 均保留这个配额。",
+        "hard 在当前水平内增加组合、调试、边界与迁移复杂度；不能仅凭复杂术语或多个考点把题判为跨级。"
+      ],
+      "scoring_rubric": {
+        "correctness": "技术事实、代码语义、唯一正确选项与解析准确；参考事实用于核对准确性，不是额外必测清单。",
+        "completeness": "题量及每题字段齐全，考点覆盖输入目标的主要方面；只因明确遗漏扣分，不以复杂考点数量或提高题比例重复扣分。",
+        "relevance": "围绕「TypeScript 类型安全基础」和输入学习目标出题，遵守描述中的范围边界。",
+        "readability": "题干可独立理解，代码、选项和解析清楚；各选项表达与长度不应明显泄露正确答案。",
+        "teaching_adaptation": "按初学者的实际作答能力判断；12 题安排 1 道提高题。hard 提高当前水平内的应用复杂度；跨级判断必须说明前置能力和题干支持，不凭术语名称。检查答案分布对诊断性的影响。"
+      },
+      "tags": [
+        "regression",
+        "typescript",
+        "assessment",
+        "beginner",
+        "hard",
+        "questions-12",
+        "missing-profile"
+      ]
+    },
+    {
+      "case_id": "reg40-assessment-02-python",
+      "dataset_version": "regression-40-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "Python 数据处理入门",
+        "title": "Python 数据处理入门诊断前测",
+        "description": "学习 Python 的基本数据类型、条件分支、循环、函数、列表与字典，并使用输入检查处理简单的数据清洗任务。只使用稳定的 Python 3 语法和标准库，不引入数据分析框架。",
+        "desired_outcome": "能够把一组分数整理成有效数据，使用函数和循环计算统计结果，并处理空输入。",
+        "question_count": 10,
+        "difficulty": "normal",
+        "kind": "diagnostic",
+        "overall_experience": "beginner",
+        "background": "刚开始学习编程，能读懂变量赋值和简单加法，还不熟悉循环与函数。"
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "overall_experience": "beginner",
+        "background_summary": "刚开始学习编程，能读懂变量赋值和简单加法，还不熟悉循环与函数。"
+      },
+      "reference_facts": [
+        "Python 函数没有执行带值的 return 时返回 None；print 展示内容并不等于返回计算结果。",
+        "Python 列表的有效非负索引从 0 开始；遍历空列表时循环体不执行。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 10 道独立可读的单选题，每题答案唯一，解析与答案一致。",
+        "根据主题、描述和目标选择具有诊断价值的核心概念、常见错误和应用考点，不要求覆盖输入未指定的额外清单。",
+        "相邻题的正确选项字母不同，正确答案位置尽量均衡，并避免明显可预测的排列规律。",
+        "按照整体编程经验 beginner 确定学习者水平。",
+        "本题量安排 9 道当前水平题及 1 道提高题；仅提高题允许跨到高一级。normal 和 hard 均保留这个配额。",
+        "normal 以当前水平的核心概念、常见错误和简单应用为主；必要的术语有足够题干或代码支持。"
+      ],
+      "scoring_rubric": {
+        "correctness": "技术事实、代码语义、唯一正确选项与解析准确；参考事实用于核对准确性，不是额外必测清单。",
+        "completeness": "题量及每题字段齐全，考点覆盖输入目标的主要方面；只因明确遗漏扣分，不以复杂考点数量或提高题比例重复扣分。",
+        "relevance": "围绕「Python 数据处理入门」和输入学习目标出题，遵守描述中的范围边界。",
+        "readability": "题干可独立理解，代码、选项和解析清楚；各选项表达与长度不应明显泄露正确答案。",
+        "teaching_adaptation": "按初学者的实际作答能力判断；10 题安排 1 道提高题。hard 提高当前水平内的应用复杂度；跨级判断必须说明前置能力和题干支持，不凭术语名称。检查答案分布对诊断性的影响。"
+      },
+      "tags": [
+        "regression",
+        "python",
+        "assessment",
+        "beginner",
+        "normal",
+        "questions-10"
+      ]
+    },
+    {
+      "case_id": "reg40-assessment-03-javascript",
+      "dataset_version": "regression-40-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "JavaScript 异步流程",
+        "title": "JavaScript 异步流程诊断前测",
+        "description": "学习 Promise 状态与链式返回、async/await、异步错误传播、事件循环中的同步代码与微任务顺序，以及顺序执行和 Promise.all 并发聚合。不考运行环境特有的定时器细节或框架 API。",
+        "desired_outcome": "能够组织多个异步数据读取任务，说明成功和失败路径，并根据任务依赖选择顺序执行或并发聚合。",
+        "question_count": 14,
+        "difficulty": "hard",
+        "kind": "diagnostic",
+        "overall_experience": "intermediate",
+        "background": "熟悉 JavaScript 函数、数组和对象，写过简单页面，但对 Promise 链和错误传播没有系统理解。"
+      },
+      "learner_profile": {
+        "current_level": "intermediate",
+        "overall_experience": "intermediate",
+        "background_summary": "熟悉 JavaScript 函数、数组和对象，写过简单页面，但对 Promise 链和错误传播没有系统理解。"
+      },
+      "reference_facts": [
+        "async 函数调用返回 Promise；await 在当前异步函数内等待兑现值或传播拒绝原因，不会阻塞整个线程。",
+        "Promise.all 在全部输入兑现时按输入顺序形成结果数组，任意输入拒绝时聚合结果会拒绝。",
+        "同一执行上下文中的同步代码先于已经排入微任务队列的 Promise 回调执行。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 14 道独立可读的单选题，每题答案唯一，解析与答案一致。",
+        "根据主题、描述和目标选择具有诊断价值的核心概念、常见错误和应用考点，不要求覆盖输入未指定的额外清单。",
+        "相邻题的正确选项字母不同，正确答案位置尽量均衡，并避免明显可预测的排列规律。",
+        "按照整体编程经验 intermediate 确定学习者水平。",
+        "本题量安排 13 道当前水平题及 1 道提高题；仅提高题允许跨到高一级。normal 和 hard 均保留这个配额。",
+        "hard 在当前水平内增加组合、调试、边界与迁移复杂度；不能仅凭复杂术语或多个考点把题判为跨级。"
+      ],
+      "scoring_rubric": {
+        "correctness": "技术事实、代码语义、唯一正确选项与解析准确；参考事实用于核对准确性，不是额外必测清单。",
+        "completeness": "题量及每题字段齐全，考点覆盖输入目标的主要方面；只因明确遗漏扣分，不以复杂考点数量或提高题比例重复扣分。",
+        "relevance": "围绕「JavaScript 异步流程」和输入学习目标出题，遵守描述中的范围边界。",
+        "readability": "题干可独立理解，代码、选项和解析清楚；各选项表达与长度不应明显泄露正确答案。",
+        "teaching_adaptation": "按中级的实际作答能力判断；14 题安排 1 道提高题。hard 提高当前水平内的应用复杂度；跨级判断必须说明前置能力和题干支持，不凭术语名称。检查答案分布对诊断性的影响。"
+      },
+      "tags": [
+        "regression",
+        "javascript",
+        "assessment",
+        "intermediate",
+        "hard",
+        "questions-14"
+      ]
+    },
+    {
+      "case_id": "reg40-assessment-04-java",
+      "dataset_version": "regression-40-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "Java 面向对象基础",
+        "title": "Java 面向对象基础诊断前测",
+        "description": "学习 Java 的类与对象、构造方法、实例字段与方法、封装、组合、基本继承和接口，通过小型商品与购物车示例掌握对象职责。只使用 Java 基础语法，不引入框架。",
+        "desired_outcome": "能够设计职责明确的简单类，通过对象组合完成商品信息管理，并解释每个实例的独立状态。",
+        "question_count": 15,
+        "difficulty": "normal",
+        "kind": "diagnostic",
+        "overall_experience": "beginner",
+        "background": "能阅读变量、条件和循环，尚不熟悉类、实例、构造方法和字段访问。"
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "overall_experience": "beginner",
+        "background_summary": "能阅读变量、条件和循环，尚不熟悉类、实例、构造方法和字段访问。"
+      },
+      "reference_facts": [
+        "构造方法没有返回类型，与类同名；new 创建对象并调用构造方法。",
+        "不同对象各自拥有实例字段；static 字段属于类，不是每个实例的独立字段。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 15 道独立可读的单选题，每题答案唯一，解析与答案一致。",
+        "根据主题、描述和目标选择具有诊断价值的核心概念、常见错误和应用考点，不要求覆盖输入未指定的额外清单。",
+        "相邻题的正确选项字母不同，正确答案位置尽量均衡，并避免明显可预测的排列规律。",
+        "按照整体编程经验 beginner 确定学习者水平。",
+        "本题量安排 13 道当前水平题及 2 道提高题；仅提高题允许跨到高一级。normal 和 hard 均保留这个配额。",
+        "normal 以当前水平的核心概念、常见错误和简单应用为主；必要的术语有足够题干或代码支持。"
+      ],
+      "scoring_rubric": {
+        "correctness": "技术事实、代码语义、唯一正确选项与解析准确；参考事实用于核对准确性，不是额外必测清单。",
+        "completeness": "题量及每题字段齐全，考点覆盖输入目标的主要方面；只因明确遗漏扣分，不以复杂考点数量或提高题比例重复扣分。",
+        "relevance": "围绕「Java 面向对象基础」和输入学习目标出题，遵守描述中的范围边界。",
+        "readability": "题干可独立理解，代码、选项和解析清楚；各选项表达与长度不应明显泄露正确答案。",
+        "teaching_adaptation": "按初学者的实际作答能力判断；15 题安排 2 道提高题。hard 提高当前水平内的应用复杂度；跨级判断必须说明前置能力和题干支持，不凭术语名称。检查答案分布对诊断性的影响。"
+      },
+      "tags": [
+        "regression",
+        "java",
+        "assessment",
+        "beginner",
+        "normal",
+        "questions-15"
+      ]
+    },
+    {
+      "case_id": "reg40-assessment-05-go",
+      "dataset_version": "regression-40-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "Go 数据处理与错误处理",
+        "title": "Go 数据处理与错误处理诊断前测",
+        "description": "学习 Go 的切片与 map、函数与多返回值、显式 error 处理、结构体和接口，以及 defer 资源释放。围绕数据读取和汇总组织代码，不引入 goroutine、channel 或框架。",
+        "desired_outcome": "能够使用 Go 实现带输入检查和错误返回的数据汇总模块，并解释切片与资源管理中的常见边界。",
+        "question_count": 20,
+        "difficulty": "normal",
+        "kind": "diagnostic",
+        "overall_experience": "intermediate",
+        "background": "有其他语言开发经验，能读懂 Go 基础语法，但对切片共享、显式错误处理和接口仍不熟悉。"
+      },
+      "learner_profile": {
+        "current_level": "intermediate",
+        "overall_experience": "intermediate",
+        "background_summary": "有其他语言开发经验，能读懂 Go 基础语法，但对切片共享、显式错误处理和接口仍不熟悉。"
+      },
+      "reference_facts": [
+        "append 返回更新后的切片；扩容时可能分配新的底层数组，不能假设底层数组总是相同。",
+        "Go 常用多返回值返回结果和 error，调用方需要显式处理非 nil 错误。",
+        "defer 调用在包围它的函数返回时执行，多次 defer 通常按后进先出顺序执行。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 20 道独立可读的单选题，每题答案唯一，解析与答案一致。",
+        "根据主题、描述和目标选择具有诊断价值的核心概念、常见错误和应用考点，不要求覆盖输入未指定的额外清单。",
+        "相邻题的正确选项字母不同，正确答案位置尽量均衡，并避免明显可预测的排列规律。",
+        "按照整体编程经验 intermediate 确定学习者水平。",
+        "本题量安排 18 道当前水平题及 2 道提高题；仅提高题允许跨到高一级。normal 和 hard 均保留这个配额。",
+        "normal 以当前水平的核心概念、常见错误和简单应用为主；必要的术语有足够题干或代码支持。"
+      ],
+      "scoring_rubric": {
+        "correctness": "技术事实、代码语义、唯一正确选项与解析准确；参考事实用于核对准确性，不是额外必测清单。",
+        "completeness": "题量及每题字段齐全，考点覆盖输入目标的主要方面；只因明确遗漏扣分，不以复杂考点数量或提高题比例重复扣分。",
+        "relevance": "围绕「Go 数据处理与错误处理」和输入学习目标出题，遵守描述中的范围边界。",
+        "readability": "题干可独立理解，代码、选项和解析清楚；各选项表达与长度不应明显泄露正确答案。",
+        "teaching_adaptation": "按中级的实际作答能力判断；20 题安排 2 道提高题。hard 提高当前水平内的应用复杂度；跨级判断必须说明前置能力和题干支持，不凭术语名称。检查答案分布对诊断性的影响。"
+      },
+      "tags": [
+        "regression",
+        "go",
+        "assessment",
+        "intermediate",
+        "normal",
+        "questions-20"
+      ]
+    },
+    {
+      "case_id": "reg40-assessment-06-c",
+      "dataset_version": "regression-40-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "C 语言数组与内存基础",
+        "title": "C 语言数组与内存基础诊断前测",
+        "description": "学习 C 的函数、数组、指针、数组长度传递、字符串终止符，以及基本栈内存生命周期。使用小型整数数组示例，强调边界有效性，不讨论操作系统专属接口或复杂指针技巧。",
+        "desired_outcome": "能够编写不越界的整数数组处理函数，明确传入长度，并解释数组与指针在函数参数中的区别。",
+        "question_count": 10,
+        "difficulty": "hard",
+        "kind": "diagnostic",
+        "overall_experience": "beginner",
+        "background": "刚学过 C 的整数、条件和循环，尚不能可靠区分数组长度、指针和内存有效范围。"
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "overall_experience": "beginner",
+        "background_summary": "刚学过 C 的整数、条件和循环，尚不能可靠区分数组长度、指针和内存有效范围。"
+      },
+      "reference_facts": [
+        "C 数组的有效索引必须处于元素范围内；越界访问属于未定义行为，不能保证固定结果。",
+        "函数参数中的数组声明会调整为指针类型，不能用该参数的 sizeof 得到调用方数组的元素个数。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 10 道独立可读的单选题，每题答案唯一，解析与答案一致。",
+        "根据主题、描述和目标选择具有诊断价值的核心概念、常见错误和应用考点，不要求覆盖输入未指定的额外清单。",
+        "相邻题的正确选项字母不同，正确答案位置尽量均衡，并避免明显可预测的排列规律。",
+        "按照整体编程经验 beginner 确定学习者水平。",
+        "本题量安排 9 道当前水平题及 1 道提高题；仅提高题允许跨到高一级。normal 和 hard 均保留这个配额。",
+        "hard 在当前水平内增加组合、调试、边界与迁移复杂度；不能仅凭复杂术语或多个考点把题判为跨级。"
+      ],
+      "scoring_rubric": {
+        "correctness": "技术事实、代码语义、唯一正确选项与解析准确；参考事实用于核对准确性，不是额外必测清单。",
+        "completeness": "题量及每题字段齐全，考点覆盖输入目标的主要方面；只因明确遗漏扣分，不以复杂考点数量或提高题比例重复扣分。",
+        "relevance": "围绕「C 语言数组与内存基础」和输入学习目标出题，遵守描述中的范围边界。",
+        "readability": "题干可独立理解，代码、选项和解析清楚；各选项表达与长度不应明显泄露正确答案。",
+        "teaching_adaptation": "按初学者的实际作答能力判断；10 题安排 1 道提高题。hard 提高当前水平内的应用复杂度；跨级判断必须说明前置能力和题干支持，不凭术语名称。检查答案分布对诊断性的影响。"
+      },
+      "tags": [
+        "regression",
+        "c",
+        "assessment",
+        "beginner",
+        "hard",
+        "questions-10"
+      ]
+    },
+    {
+      "case_id": "reg40-assessment-07-sql",
+      "dataset_version": "regression-40-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "SQL 查询与数据汇总",
+        "title": "SQL 查询与数据汇总诊断前测",
+        "description": "学习 SELECT 与 WHERE、INNER JOIN 与 LEFT JOIN、GROUP BY 与 HAVING、NULL 的处理、参数化查询和基础索引判断。示例使用标准 SQL 常见语义，不依赖数据库独有函数。",
+        "desired_outcome": "能够编写订单与用户的关联汇总查询，检查空值与重复连接带来的偏差，并使用参数化查询传递输入。",
+        "question_count": 15,
+        "difficulty": "hard",
+        "kind": "diagnostic",
+        "overall_experience": "intermediate",
+        "background": "会写单表 SELECT 和 WHERE，尚不熟悉连接、分组聚合、NULL 和查询结果验证。"
+      },
+      "learner_profile": {
+        "current_level": "intermediate",
+        "overall_experience": "intermediate",
+        "background_summary": "会写单表 SELECT 和 WHERE，尚不熟悉连接、分组聚合、NULL 和查询结果验证。"
+      },
+      "reference_facts": [
+        "WHERE 过滤参与分组的行，HAVING 过滤聚合后的分组；表达空值判断应使用 IS NULL 或 IS NOT NULL。",
+        "COUNT(*) 统计行数，COUNT(column) 不统计该列为 NULL 的行；SUM 通常忽略 NULL。",
+        "连接可能因为匹配关系而增加结果行数，不能把 JOIN 后每行都当成唯一业务实体。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 15 道独立可读的单选题，每题答案唯一，解析与答案一致。",
+        "根据主题、描述和目标选择具有诊断价值的核心概念、常见错误和应用考点，不要求覆盖输入未指定的额外清单。",
+        "相邻题的正确选项字母不同，正确答案位置尽量均衡，并避免明显可预测的排列规律。",
+        "按照整体编程经验 intermediate 确定学习者水平。",
+        "本题量安排 13 道当前水平题及 2 道提高题；仅提高题允许跨到高一级。normal 和 hard 均保留这个配额。",
+        "hard 在当前水平内增加组合、调试、边界与迁移复杂度；不能仅凭复杂术语或多个考点把题判为跨级。"
+      ],
+      "scoring_rubric": {
+        "correctness": "技术事实、代码语义、唯一正确选项与解析准确；参考事实用于核对准确性，不是额外必测清单。",
+        "completeness": "题量及每题字段齐全，考点覆盖输入目标的主要方面；只因明确遗漏扣分，不以复杂考点数量或提高题比例重复扣分。",
+        "relevance": "围绕「SQL 查询与数据汇总」和输入学习目标出题，遵守描述中的范围边界。",
+        "readability": "题干可独立理解，代码、选项和解析清楚；各选项表达与长度不应明显泄露正确答案。",
+        "teaching_adaptation": "按中级的实际作答能力判断；15 题安排 2 道提高题。hard 提高当前水平内的应用复杂度；跨级判断必须说明前置能力和题干支持，不凭术语名称。检查答案分布对诊断性的影响。"
+      },
+      "tags": [
+        "regression",
+        "sql",
+        "assessment",
+        "intermediate",
+        "hard",
+        "questions-15"
+      ]
+    },
+    {
+      "case_id": "reg40-assessment-08-http",
+      "dataset_version": "regression-40-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "HTTP 与 JSON 接口调用",
+        "title": "HTTP 与 JSON 接口调用诊断前测",
+        "description": "学习 HTTP 请求与响应、方法和状态码、请求头与 JSON、fetch 的异步调用、错误分类和空响应处理。使用固定响应示例，不依赖真实服务或认证配置。",
+        "desired_outcome": "能够读取一个 JSON 接口响应，先检查 HTTP 状态再解析数据，正确处理网络失败和没有响应体的情况。",
+        "question_count": 12,
+        "difficulty": "normal",
+        "kind": "diagnostic",
+        "overall_experience": "beginner",
+        "background": "能阅读 JavaScript 对象和函数，刚开始接触前后端接口，还不能区分状态码、网络失败和 JSON 解析。"
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "overall_experience": "beginner",
+        "background_summary": "能阅读 JavaScript 对象和函数，刚开始接触前后端接口，还不能区分状态码、网络失败和 JSON 解析。"
+      },
+      "reference_facts": [
+        "fetch 通常不会仅因 HTTP 4xx 或 5xx 拒绝 Promise，需要检查 Response.ok 或 status；网络失败可能使 Promise 拒绝。",
+        "HTTP 204 响应不包含响应内容，不能默认所有成功响应都有可解析的 JSON。",
+        "Content-Type 描述内容类型，但本身不保证 JSON 的业务字段有效。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 12 道独立可读的单选题，每题答案唯一，解析与答案一致。",
+        "根据主题、描述和目标选择具有诊断价值的核心概念、常见错误和应用考点，不要求覆盖输入未指定的额外清单。",
+        "相邻题的正确选项字母不同，正确答案位置尽量均衡，并避免明显可预测的排列规律。",
+        "按照整体编程经验 beginner 确定学习者水平。",
+        "本题量安排 11 道当前水平题及 1 道提高题；仅提高题允许跨到高一级。normal 和 hard 均保留这个配额。",
+        "normal 以当前水平的核心概念、常见错误和简单应用为主；必要的术语有足够题干或代码支持。"
+      ],
+      "scoring_rubric": {
+        "correctness": "技术事实、代码语义、唯一正确选项与解析准确；参考事实用于核对准确性，不是额外必测清单。",
+        "completeness": "题量及每题字段齐全，考点覆盖输入目标的主要方面；只因明确遗漏扣分，不以复杂考点数量或提高题比例重复扣分。",
+        "relevance": "围绕「HTTP 与 JSON 接口调用」和输入学习目标出题，遵守描述中的范围边界。",
+        "readability": "题干可独立理解，代码、选项和解析清楚；各选项表达与长度不应明显泄露正确答案。",
+        "teaching_adaptation": "按初学者的实际作答能力判断；12 题安排 1 道提高题。hard 提高当前水平内的应用复杂度；跨级判断必须说明前置能力和题干支持，不凭术语名称。检查答案分布对诊断性的影响。"
+      },
+      "tags": [
+        "regression",
+        "http",
+        "assessment",
+        "beginner",
+        "normal",
+        "questions-12"
+      ]
+    },
+    {
+      "case_id": "reg40-assessment-09-testing",
+      "dataset_version": "regression-40-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "JavaScript 测试设计与可靠性",
+        "title": "JavaScript 测试设计与可靠性诊断前测",
+        "description": "学习等价类与边界分析、性质与变形测试、异步失败路径、可控替身与契约测试、测试隔离、随机数据可复现和变异测试。使用稳定的 JavaScript 与标准测试概念，不绑定特定测试框架版本。",
+        "desired_outcome": "能够为数据处理模块设计稳定的测试策略，覆盖输入边界和失败路径，并解释高覆盖率仍可能漏掉缺陷的原因。",
+        "question_count": 14,
+        "difficulty": "hard",
+        "kind": "diagnostic",
+        "overall_experience": "advanced",
+        "background": "有多年 JavaScript 开发经验，熟悉单元测试和依赖注入，想系统改进测试策略而不是重新学习语法。"
+      },
+      "learner_profile": {
+        "current_level": "advanced",
+        "overall_experience": "advanced",
+        "background_summary": "有多年 JavaScript 开发经验，熟悉单元测试和依赖注入，想系统改进测试策略而不是重新学习语法。"
+      },
+      "reference_facts": [
+        "代码覆盖率反映被执行代码的范围，不能保证断言足够强或所有业务错误都被检测。",
+        "测试替身应保持与真实依赖相关的接口和行为约束；过度 mock 可能掩盖集成问题。",
+        "随机测试需要保存种子或失败样本以便重现，测试不应依赖不受控的真实时间或外部网络。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 14 道独立可读的单选题，每题答案唯一，解析与答案一致。",
+        "根据主题、描述和目标选择具有诊断价值的核心概念、常见错误和应用考点，不要求覆盖输入未指定的额外清单。",
+        "相邻题的正确选项字母不同，正确答案位置尽量均衡，并避免明显可预测的排列规律。",
+        "按照整体编程经验 advanced 确定学习者水平。",
+        "本题量安排 13 道当前水平题及 1 道提高题；提高题仍处于 advanced，通过综合与边界任务提高复杂度。normal 和 hard 均保留这个配额。",
+        "hard 在当前水平内增加组合、调试、边界与迁移复杂度；不能仅凭复杂术语或多个考点把题判为跨级。"
+      ],
+      "scoring_rubric": {
+        "correctness": "技术事实、代码语义、唯一正确选项与解析准确；参考事实用于核对准确性，不是额外必测清单。",
+        "completeness": "题量及每题字段齐全，考点覆盖输入目标的主要方面；只因明确遗漏扣分，不以复杂考点数量或提高题比例重复扣分。",
+        "relevance": "围绕「JavaScript 测试设计与可靠性」和输入学习目标出题，遵守描述中的范围边界。",
+        "readability": "题干可独立理解，代码、选项和解析清楚；各选项表达与长度不应明显泄露正确答案。",
+        "teaching_adaptation": "按高级的实际作答能力判断；14 题安排 1 道提高题。hard 提高当前水平内的应用复杂度；跨级判断必须说明前置能力和题干支持，不凭术语名称。检查答案分布对诊断性的影响。"
+      },
+      "tags": [
+        "regression",
+        "testing",
+        "assessment",
+        "advanced",
+        "hard",
+        "questions-14"
+      ]
+    },
+    {
+      "case_id": "reg40-assessment-10-algorithms",
+      "dataset_version": "regression-40-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "算法设计与复杂度分析",
+        "title": "算法设计与复杂度分析诊断前测",
+        "description": "学习时间与空间复杂度、循环不变量、二分边界、递归与递推、动态规划状态设计和贪心正确性论证。用可验证的小型 Python 算法比较方案，避免只背复杂度结论。",
+        "desired_outcome": "能够针对查找和优化问题选择算法，说明正确性与复杂度，并用边界用例检验实现。",
+        "question_count": 20,
+        "difficulty": "normal",
+        "kind": "diagnostic",
+        "overall_experience": "advanced",
+        "background": "有多年编程经验，能实现常见数据结构和排序，想加强正确性证明、边界分析和算法选择能力。"
+      },
+      "learner_profile": {
+        "current_level": "advanced",
+        "overall_experience": "advanced",
+        "background_summary": "有多年编程经验，能实现常见数据结构和排序，想加强正确性证明、边界分析和算法选择能力。"
+      },
+      "reference_facts": [
+        "二分搜索要求与比较规则一致的有序数据；在每轮有效缩小区间的实现中查找时间为 O(log n)。",
+        "动态规划需要清晰的状态、转移、初始条件和计算顺序；不能只因为存在递归就断言复杂度为 O(n)。",
+        "贪心选择需要正确性论证，局部最优不总能产生全局最优。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 20 道独立可读的单选题，每题答案唯一，解析与答案一致。",
+        "根据主题、描述和目标选择具有诊断价值的核心概念、常见错误和应用考点，不要求覆盖输入未指定的额外清单。",
+        "相邻题的正确选项字母不同，正确答案位置尽量均衡，并避免明显可预测的排列规律。",
+        "按照整体编程经验 advanced 确定学习者水平。",
+        "本题量安排 18 道当前水平题及 2 道提高题；提高题仍处于 advanced，通过综合与边界任务提高复杂度。normal 和 hard 均保留这个配额。",
+        "normal 以当前水平的核心概念、常见错误和简单应用为主；必要的术语有足够题干或代码支持。"
+      ],
+      "scoring_rubric": {
+        "correctness": "技术事实、代码语义、唯一正确选项与解析准确；参考事实用于核对准确性，不是额外必测清单。",
+        "completeness": "题量及每题字段齐全，考点覆盖输入目标的主要方面；只因明确遗漏扣分，不以复杂考点数量或提高题比例重复扣分。",
+        "relevance": "围绕「算法设计与复杂度分析」和输入学习目标出题，遵守描述中的范围边界。",
+        "readability": "题干可独立理解，代码、选项和解析清楚；各选项表达与长度不应明显泄露正确答案。",
+        "teaching_adaptation": "按高级的实际作答能力判断；20 题安排 2 道提高题。hard 提高当前水平内的应用复杂度；跨级判断必须说明前置能力和题干支持，不凭术语名称。检查答案分布对诊断性的影响。"
+      },
+      "tags": [
+        "regression",
+        "algorithms",
+        "assessment",
+        "advanced",
+        "normal",
+        "questions-20"
+      ]
+    },
+    {
+      "case_id": "reg40-plan-01-typescript",
+      "dataset_version": "regression-40-v1",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-reg40-typescript",
+          "topic": "TypeScript 类型安全基础",
+          "title": "TypeScript 类型安全基础学习路线",
+          "description": "学习基础类型和类型推断、函数参数与返回值类型、接口与对象建模、联合类型及收窄，并理解类型断言不能替代外部输入的运行时校验。暂不学习框架或高级类型编程。",
+          "desired_outcome": "能够为小型 JavaScript 数据处理模块补充 TypeScript 类型，读懂常见类型错误并区分编译期检查与运行时校验。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "beginner",
+          "weekly_minutes": 120,
+          "background_summary": null
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "diagnostic-reg40-typescript",
+          "score_percent": 35,
+          "mastery_summary": {
+            "基础类型与类型推断": "partial",
+            "函数参数和返回值类型": "partial",
+            "接口与对象建模": "needs_practice",
+            "联合类型与简单收窄": "needs_practice",
+            "类型断言与运行时校验边界": "needs_practice",
+            "小型 JavaScript 模块的类型迁移": "needs_practice"
+          }
+        }
+      },
+      "learner_profile": {
+        "profile_version": 1,
+        "current_level": "beginner",
+        "weekly_minutes": 120,
+        "background_summary": null
+      },
+      "reference_facts": [
+        "TypeScript 类型注解和接口在编译输出中被擦除，不会自动校验外部数据。",
+        "联合类型的安全使用需要结合具体类型判断；类型断言本身不会生成运行时检查。"
+      ],
+      "required_knowledge_points": [
+        "基础类型与类型推断",
+        "函数参数和返回值类型",
+        "接口与对象建模",
+        "联合类型与简单收窄",
+        "类型断言与运行时校验边界",
+        "小型 JavaScript 模块的类型迁移"
+      ],
+      "acceptable_answer_points": [
+        "生成 6 至 12 个按知识依赖排列的实质主题章节，先决条件有效且无环。",
+        "覆盖输入 goal.description 明确提出的主题和前测中的 needs_practice 项。",
+        "每章包含具体学习目标、安排理由、预计时长和可以观察或验证的完成标准。",
+        "面向 beginner 且每周 120 分钟设计可分段学习的章节；每周时间是节奏依据，不是整条路线总时长上限。",
+        "路线包含能验证 desired_outcome 的小型综合任务，避免泛化的练习、复盘阶段代替主题章节。"
+      ],
+      "scoring_rubric": {
+        "correctness": "概念、知识依赖和章节顺序准确，未编造输入之外的经历、成绩或技术限制。",
+        "completeness": "覆盖目标描述中的 required_knowledge_points 与诊断薄弱点，学习目标和可验证完成标准齐全。",
+        "relevance": "始终服务于「TypeScript 类型安全基础」的目标，遵守输入规定的技术范围。",
+        "readability": "标题、章节摘要、依赖与完成标准清楚，读者能够据此执行。",
+        "teaching_adaptation": "匹配 beginner、前测 35 分及每周 120 分钟；无需机械地把总时长压到一周内。"
+      },
+      "tags": [
+        "regression",
+        "typescript",
+        "plan",
+        "beginner",
+        "weekly-120"
+      ]
+    },
+    {
+      "case_id": "reg40-plan-02-python",
+      "dataset_version": "regression-40-v1",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-reg40-python",
+          "topic": "Python 数据处理入门",
+          "title": "Python 数据处理入门学习路线",
+          "description": "学习 Python 的基本数据类型、条件分支、循环、函数、列表与字典，并使用输入检查处理简单的数据清洗任务。只使用稳定的 Python 3 语法和标准库，不引入数据分析框架。",
+          "desired_outcome": "能够把一组分数整理成有效数据，使用函数和循环计算统计结果，并处理空输入。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "beginner",
+          "weekly_minutes": 90,
+          "background_summary": "刚开始学习编程，能读懂变量赋值和简单加法，还不熟悉循环与函数。"
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "diagnostic-reg40-python",
+          "score_percent": 20,
+          "mastery_summary": {
+            "基础类型与变量": "partial",
+            "条件分支": "partial",
+            "循环与列表遍历": "needs_practice",
+            "函数参数和返回值": "needs_practice",
+            "列表与字典": "needs_practice",
+            "输入检查与简单数据统计": "needs_practice"
+          }
+        }
+      },
+      "learner_profile": {
+        "profile_version": 1,
+        "current_level": "beginner",
+        "weekly_minutes": 90,
+        "background_summary": "刚开始学习编程，能读懂变量赋值和简单加法，还不熟悉循环与函数。"
+      },
+      "reference_facts": [
+        "Python 函数没有执行带值的 return 时返回 None；print 展示内容并不等于返回计算结果。",
+        "Python 列表的有效非负索引从 0 开始；遍历空列表时循环体不执行。"
+      ],
+      "required_knowledge_points": [
+        "基础类型与变量",
+        "条件分支",
+        "循环与列表遍历",
+        "函数参数和返回值",
+        "列表与字典",
+        "输入检查与简单数据统计"
+      ],
+      "acceptable_answer_points": [
+        "生成 6 至 12 个按知识依赖排列的实质主题章节，先决条件有效且无环。",
+        "覆盖输入 goal.description 明确提出的主题和前测中的 needs_practice 项。",
+        "每章包含具体学习目标、安排理由、预计时长和可以观察或验证的完成标准。",
+        "面向 beginner 且每周 90 分钟设计可分段学习的章节；每周时间是节奏依据，不是整条路线总时长上限。",
+        "路线包含能验证 desired_outcome 的小型综合任务，避免泛化的练习、复盘阶段代替主题章节。"
+      ],
+      "scoring_rubric": {
+        "correctness": "概念、知识依赖和章节顺序准确，未编造输入之外的经历、成绩或技术限制。",
+        "completeness": "覆盖目标描述中的 required_knowledge_points 与诊断薄弱点，学习目标和可验证完成标准齐全。",
+        "relevance": "始终服务于「Python 数据处理入门」的目标，遵守输入规定的技术范围。",
+        "readability": "标题、章节摘要、依赖与完成标准清楚，读者能够据此执行。",
+        "teaching_adaptation": "匹配 beginner、前测 20 分及每周 90 分钟；无需机械地把总时长压到一周内。"
+      },
+      "tags": [
+        "regression",
+        "python",
+        "plan",
+        "beginner",
+        "weekly-90"
+      ]
+    },
+    {
+      "case_id": "reg40-plan-03-javascript",
+      "dataset_version": "regression-40-v1",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-reg40-javascript",
+          "topic": "JavaScript 异步流程",
+          "title": "JavaScript 异步流程学习路线",
+          "description": "学习 Promise 状态与链式返回、async/await、异步错误传播、事件循环中的同步代码与微任务顺序，以及顺序执行和 Promise.all 并发聚合。不考运行环境特有的定时器细节或框架 API。",
+          "desired_outcome": "能够组织多个异步数据读取任务，说明成功和失败路径，并根据任务依赖选择顺序执行或并发聚合。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "intermediate",
+          "weekly_minutes": 180,
+          "background_summary": "熟悉 JavaScript 函数、数组和对象，写过简单页面，但对 Promise 链和错误传播没有系统理解。"
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "diagnostic-reg40-javascript",
+          "score_percent": 55,
+          "mastery_summary": {
+            "Promise 状态与链式返回": "partial",
+            "async/await": "partial",
+            "异常与拒绝的传播": "needs_practice",
+            "同步代码与微任务顺序": "needs_practice",
+            "顺序执行和 Promise.all": "needs_practice",
+            "异步数据处理综合练习": "needs_practice"
+          }
+        }
+      },
+      "learner_profile": {
+        "profile_version": 1,
+        "current_level": "intermediate",
+        "weekly_minutes": 180,
+        "background_summary": "熟悉 JavaScript 函数、数组和对象，写过简单页面，但对 Promise 链和错误传播没有系统理解。"
+      },
+      "reference_facts": [
+        "async 函数调用返回 Promise；await 在当前异步函数内等待兑现值或传播拒绝原因，不会阻塞整个线程。",
+        "Promise.all 在全部输入兑现时按输入顺序形成结果数组，任意输入拒绝时聚合结果会拒绝。",
+        "同一执行上下文中的同步代码先于已经排入微任务队列的 Promise 回调执行。"
+      ],
+      "required_knowledge_points": [
+        "Promise 状态与链式返回",
+        "async/await",
+        "异常与拒绝的传播",
+        "同步代码与微任务顺序",
+        "顺序执行和 Promise.all",
+        "异步数据处理综合练习"
+      ],
+      "acceptable_answer_points": [
+        "生成 6 至 12 个按知识依赖排列的实质主题章节，先决条件有效且无环。",
+        "覆盖输入 goal.description 明确提出的主题和前测中的 needs_practice 项。",
+        "每章包含具体学习目标、安排理由、预计时长和可以观察或验证的完成标准。",
+        "面向 intermediate 且每周 180 分钟设计可分段学习的章节；每周时间是节奏依据，不是整条路线总时长上限。",
+        "路线包含能验证 desired_outcome 的小型综合任务，避免泛化的练习、复盘阶段代替主题章节。"
+      ],
+      "scoring_rubric": {
+        "correctness": "概念、知识依赖和章节顺序准确，未编造输入之外的经历、成绩或技术限制。",
+        "completeness": "覆盖目标描述中的 required_knowledge_points 与诊断薄弱点，学习目标和可验证完成标准齐全。",
+        "relevance": "始终服务于「JavaScript 异步流程」的目标，遵守输入规定的技术范围。",
+        "readability": "标题、章节摘要、依赖与完成标准清楚，读者能够据此执行。",
+        "teaching_adaptation": "匹配 intermediate、前测 55 分及每周 180 分钟；无需机械地把总时长压到一周内。"
+      },
+      "tags": [
+        "regression",
+        "javascript",
+        "plan",
+        "intermediate",
+        "weekly-180"
+      ]
+    },
+    {
+      "case_id": "reg40-plan-04-java",
+      "dataset_version": "regression-40-v1",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-reg40-java",
+          "topic": "Java 面向对象基础",
+          "title": "Java 面向对象基础学习路线",
+          "description": "学习 Java 的类与对象、构造方法、实例字段与方法、封装、组合、基本继承和接口，通过小型商品与购物车示例掌握对象职责。只使用 Java 基础语法，不引入框架。",
+          "desired_outcome": "能够设计职责明确的简单类，通过对象组合完成商品信息管理，并解释每个实例的独立状态。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "beginner",
+          "weekly_minutes": 60,
+          "background_summary": "能阅读变量、条件和循环，尚不熟悉类、实例、构造方法和字段访问。"
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "diagnostic-reg40-java",
+          "score_percent": 30,
+          "mastery_summary": {
+            "类与对象": "partial",
+            "构造方法和实例字段": "partial",
+            "实例方法与封装": "needs_practice",
+            "对象组合": "needs_practice",
+            "基本继承与接口": "needs_practice",
+            "小型购物车建模": "needs_practice"
+          }
+        }
+      },
+      "learner_profile": {
+        "profile_version": 1,
+        "current_level": "beginner",
+        "weekly_minutes": 60,
+        "background_summary": "能阅读变量、条件和循环，尚不熟悉类、实例、构造方法和字段访问。"
+      },
+      "reference_facts": [
+        "构造方法没有返回类型，与类同名；new 创建对象并调用构造方法。",
+        "不同对象各自拥有实例字段；static 字段属于类，不是每个实例的独立字段。"
+      ],
+      "required_knowledge_points": [
+        "类与对象",
+        "构造方法和实例字段",
+        "实例方法与封装",
+        "对象组合",
+        "基本继承与接口",
+        "小型购物车建模"
+      ],
+      "acceptable_answer_points": [
+        "生成 6 至 12 个按知识依赖排列的实质主题章节，先决条件有效且无环。",
+        "覆盖输入 goal.description 明确提出的主题和前测中的 needs_practice 项。",
+        "每章包含具体学习目标、安排理由、预计时长和可以观察或验证的完成标准。",
+        "面向 beginner 且每周 60 分钟设计可分段学习的章节；每周时间是节奏依据，不是整条路线总时长上限。",
+        "路线包含能验证 desired_outcome 的小型综合任务，避免泛化的练习、复盘阶段代替主题章节。"
+      ],
+      "scoring_rubric": {
+        "correctness": "概念、知识依赖和章节顺序准确，未编造输入之外的经历、成绩或技术限制。",
+        "completeness": "覆盖目标描述中的 required_knowledge_points 与诊断薄弱点，学习目标和可验证完成标准齐全。",
+        "relevance": "始终服务于「Java 面向对象基础」的目标，遵守输入规定的技术范围。",
+        "readability": "标题、章节摘要、依赖与完成标准清楚，读者能够据此执行。",
+        "teaching_adaptation": "匹配 beginner、前测 30 分及每周 60 分钟；无需机械地把总时长压到一周内。"
+      },
+      "tags": [
+        "regression",
+        "java",
+        "plan",
+        "beginner",
+        "weekly-60"
+      ]
+    },
+    {
+      "case_id": "reg40-plan-05-go",
+      "dataset_version": "regression-40-v1",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-reg40-go",
+          "topic": "Go 数据处理与错误处理",
+          "title": "Go 数据处理与错误处理学习路线",
+          "description": "学习 Go 的切片与 map、函数与多返回值、显式 error 处理、结构体和接口，以及 defer 资源释放。围绕数据读取和汇总组织代码，不引入 goroutine、channel 或框架。",
+          "desired_outcome": "能够使用 Go 实现带输入检查和错误返回的数据汇总模块，并解释切片与资源管理中的常见边界。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "intermediate",
+          "weekly_minutes": 240,
+          "background_summary": "有其他语言开发经验，能读懂 Go 基础语法，但对切片共享、显式错误处理和接口仍不熟悉。"
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "diagnostic-reg40-go",
+          "score_percent": 50,
+          "mastery_summary": {
+            "切片与 map": "partial",
+            "函数和多返回值": "partial",
+            "显式 error 处理": "needs_practice",
+            "结构体与方法": "needs_practice",
+            "接口与依赖替换": "needs_practice",
+            "defer 与资源释放": "needs_practice"
+          }
+        }
+      },
+      "learner_profile": {
+        "profile_version": 1,
+        "current_level": "intermediate",
+        "weekly_minutes": 240,
+        "background_summary": "有其他语言开发经验，能读懂 Go 基础语法，但对切片共享、显式错误处理和接口仍不熟悉。"
+      },
+      "reference_facts": [
+        "append 返回更新后的切片；扩容时可能分配新的底层数组，不能假设底层数组总是相同。",
+        "Go 常用多返回值返回结果和 error，调用方需要显式处理非 nil 错误。",
+        "defer 调用在包围它的函数返回时执行，多次 defer 通常按后进先出顺序执行。"
+      ],
+      "required_knowledge_points": [
+        "切片与 map",
+        "函数和多返回值",
+        "显式 error 处理",
+        "结构体与方法",
+        "接口与依赖替换",
+        "defer 与资源释放"
+      ],
+      "acceptable_answer_points": [
+        "生成 6 至 12 个按知识依赖排列的实质主题章节，先决条件有效且无环。",
+        "覆盖输入 goal.description 明确提出的主题和前测中的 needs_practice 项。",
+        "每章包含具体学习目标、安排理由、预计时长和可以观察或验证的完成标准。",
+        "面向 intermediate 且每周 240 分钟设计可分段学习的章节；每周时间是节奏依据，不是整条路线总时长上限。",
+        "路线包含能验证 desired_outcome 的小型综合任务，避免泛化的练习、复盘阶段代替主题章节。"
+      ],
+      "scoring_rubric": {
+        "correctness": "概念、知识依赖和章节顺序准确，未编造输入之外的经历、成绩或技术限制。",
+        "completeness": "覆盖目标描述中的 required_knowledge_points 与诊断薄弱点，学习目标和可验证完成标准齐全。",
+        "relevance": "始终服务于「Go 数据处理与错误处理」的目标，遵守输入规定的技术范围。",
+        "readability": "标题、章节摘要、依赖与完成标准清楚，读者能够据此执行。",
+        "teaching_adaptation": "匹配 intermediate、前测 50 分及每周 240 分钟；无需机械地把总时长压到一周内。"
+      },
+      "tags": [
+        "regression",
+        "go",
+        "plan",
+        "intermediate",
+        "weekly-240"
+      ]
+    },
+    {
+      "case_id": "reg40-plan-06-c",
+      "dataset_version": "regression-40-v1",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-reg40-c",
+          "topic": "C 语言数组与内存基础",
+          "title": "C 语言数组与内存基础学习路线",
+          "description": "学习 C 的函数、数组、指针、数组长度传递、字符串终止符，以及基本栈内存生命周期。使用小型整数数组示例，强调边界有效性，不讨论操作系统专属接口或复杂指针技巧。",
+          "desired_outcome": "能够编写不越界的整数数组处理函数，明确传入长度，并解释数组与指针在函数参数中的区别。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "beginner",
+          "weekly_minutes": 90,
+          "background_summary": "刚学过 C 的整数、条件和循环，尚不能可靠区分数组长度、指针和内存有效范围。"
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "diagnostic-reg40-c",
+          "score_percent": 25,
+          "mastery_summary": {
+            "函数参数与返回值": "partial",
+            "数组索引与长度": "partial",
+            "指针与有效内存": "needs_practice",
+            "数组长度传递": "needs_practice",
+            "字符串与终止符": "needs_practice",
+            "局部变量生命周期与越界排查": "needs_practice"
+          }
+        }
+      },
+      "learner_profile": {
+        "profile_version": 1,
+        "current_level": "beginner",
+        "weekly_minutes": 90,
+        "background_summary": "刚学过 C 的整数、条件和循环，尚不能可靠区分数组长度、指针和内存有效范围。"
+      },
+      "reference_facts": [
+        "C 数组的有效索引必须处于元素范围内；越界访问属于未定义行为，不能保证固定结果。",
+        "函数参数中的数组声明会调整为指针类型，不能用该参数的 sizeof 得到调用方数组的元素个数。"
+      ],
+      "required_knowledge_points": [
+        "函数参数与返回值",
+        "数组索引与长度",
+        "指针与有效内存",
+        "数组长度传递",
+        "字符串与终止符",
+        "局部变量生命周期与越界排查"
+      ],
+      "acceptable_answer_points": [
+        "生成 6 至 12 个按知识依赖排列的实质主题章节，先决条件有效且无环。",
+        "覆盖输入 goal.description 明确提出的主题和前测中的 needs_practice 项。",
+        "每章包含具体学习目标、安排理由、预计时长和可以观察或验证的完成标准。",
+        "面向 beginner 且每周 90 分钟设计可分段学习的章节；每周时间是节奏依据，不是整条路线总时长上限。",
+        "路线包含能验证 desired_outcome 的小型综合任务，避免泛化的练习、复盘阶段代替主题章节。"
+      ],
+      "scoring_rubric": {
+        "correctness": "概念、知识依赖和章节顺序准确，未编造输入之外的经历、成绩或技术限制。",
+        "completeness": "覆盖目标描述中的 required_knowledge_points 与诊断薄弱点，学习目标和可验证完成标准齐全。",
+        "relevance": "始终服务于「C 语言数组与内存基础」的目标，遵守输入规定的技术范围。",
+        "readability": "标题、章节摘要、依赖与完成标准清楚，读者能够据此执行。",
+        "teaching_adaptation": "匹配 beginner、前测 25 分及每周 90 分钟；无需机械地把总时长压到一周内。"
+      },
+      "tags": [
+        "regression",
+        "c",
+        "plan",
+        "beginner",
+        "weekly-90"
+      ]
+    },
+    {
+      "case_id": "reg40-plan-07-sql",
+      "dataset_version": "regression-40-v1",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-reg40-sql",
+          "topic": "SQL 查询与数据汇总",
+          "title": "SQL 查询与数据汇总学习路线",
+          "description": "学习 SELECT 与 WHERE、INNER JOIN 与 LEFT JOIN、GROUP BY 与 HAVING、NULL 的处理、参数化查询和基础索引判断。示例使用标准 SQL 常见语义，不依赖数据库独有函数。",
+          "desired_outcome": "能够编写订单与用户的关联汇总查询，检查空值与重复连接带来的偏差，并使用参数化查询传递输入。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "intermediate",
+          "weekly_minutes": 120,
+          "background_summary": "会写单表 SELECT 和 WHERE，尚不熟悉连接、分组聚合、NULL 和查询结果验证。"
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "diagnostic-reg40-sql",
+          "score_percent": 45,
+          "mastery_summary": {
+            "SELECT 与 WHERE": "partial",
+            "INNER JOIN 和 LEFT JOIN": "partial",
+            "GROUP BY 与 HAVING": "needs_practice",
+            "NULL 与聚合行为": "needs_practice",
+            "参数化查询": "needs_practice",
+            "基础索引与结果验证": "needs_practice"
+          }
+        }
+      },
+      "learner_profile": {
+        "profile_version": 1,
+        "current_level": "intermediate",
+        "weekly_minutes": 120,
+        "background_summary": "会写单表 SELECT 和 WHERE，尚不熟悉连接、分组聚合、NULL 和查询结果验证。"
+      },
+      "reference_facts": [
+        "WHERE 过滤参与分组的行，HAVING 过滤聚合后的分组；表达空值判断应使用 IS NULL 或 IS NOT NULL。",
+        "COUNT(*) 统计行数，COUNT(column) 不统计该列为 NULL 的行；SUM 通常忽略 NULL。",
+        "连接可能因为匹配关系而增加结果行数，不能把 JOIN 后每行都当成唯一业务实体。"
+      ],
+      "required_knowledge_points": [
+        "SELECT 与 WHERE",
+        "INNER JOIN 和 LEFT JOIN",
+        "GROUP BY 与 HAVING",
+        "NULL 与聚合行为",
+        "参数化查询",
+        "基础索引与结果验证"
+      ],
+      "acceptable_answer_points": [
+        "生成 6 至 12 个按知识依赖排列的实质主题章节，先决条件有效且无环。",
+        "覆盖输入 goal.description 明确提出的主题和前测中的 needs_practice 项。",
+        "每章包含具体学习目标、安排理由、预计时长和可以观察或验证的完成标准。",
+        "面向 intermediate 且每周 120 分钟设计可分段学习的章节；每周时间是节奏依据，不是整条路线总时长上限。",
+        "路线包含能验证 desired_outcome 的小型综合任务，避免泛化的练习、复盘阶段代替主题章节。"
+      ],
+      "scoring_rubric": {
+        "correctness": "概念、知识依赖和章节顺序准确，未编造输入之外的经历、成绩或技术限制。",
+        "completeness": "覆盖目标描述中的 required_knowledge_points 与诊断薄弱点，学习目标和可验证完成标准齐全。",
+        "relevance": "始终服务于「SQL 查询与数据汇总」的目标，遵守输入规定的技术范围。",
+        "readability": "标题、章节摘要、依赖与完成标准清楚，读者能够据此执行。",
+        "teaching_adaptation": "匹配 intermediate、前测 45 分及每周 120 分钟；无需机械地把总时长压到一周内。"
+      },
+      "tags": [
+        "regression",
+        "sql",
+        "plan",
+        "intermediate",
+        "weekly-120"
+      ]
+    },
+    {
+      "case_id": "reg40-plan-08-http",
+      "dataset_version": "regression-40-v1",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-reg40-http",
+          "topic": "HTTP 与 JSON 接口调用",
+          "title": "HTTP 与 JSON 接口调用学习路线",
+          "description": "学习 HTTP 请求与响应、方法和状态码、请求头与 JSON、fetch 的异步调用、错误分类和空响应处理。使用固定响应示例，不依赖真实服务或认证配置。",
+          "desired_outcome": "能够读取一个 JSON 接口响应，先检查 HTTP 状态再解析数据，正确处理网络失败和没有响应体的情况。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "beginner",
+          "weekly_minutes": 30,
+          "background_summary": "能阅读 JavaScript 对象和函数，刚开始接触前后端接口，还不能区分状态码、网络失败和 JSON 解析。"
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "diagnostic-reg40-http",
+          "score_percent": 15,
+          "mastery_summary": {
+            "HTTP 请求与响应": "partial",
+            "方法和状态码": "partial",
+            "请求头与 JSON": "needs_practice",
+            "fetch 与异步读取": "needs_practice",
+            "网络失败与 HTTP 错误": "needs_practice",
+            "空响应与错误处理综合练习": "needs_practice"
+          }
+        }
+      },
+      "learner_profile": {
+        "profile_version": 1,
+        "current_level": "beginner",
+        "weekly_minutes": 30,
+        "background_summary": "能阅读 JavaScript 对象和函数，刚开始接触前后端接口，还不能区分状态码、网络失败和 JSON 解析。"
+      },
+      "reference_facts": [
+        "fetch 通常不会仅因 HTTP 4xx 或 5xx 拒绝 Promise，需要检查 Response.ok 或 status；网络失败可能使 Promise 拒绝。",
+        "HTTP 204 响应不包含响应内容，不能默认所有成功响应都有可解析的 JSON。",
+        "Content-Type 描述内容类型，但本身不保证 JSON 的业务字段有效。"
+      ],
+      "required_knowledge_points": [
+        "HTTP 请求与响应",
+        "方法和状态码",
+        "请求头与 JSON",
+        "fetch 与异步读取",
+        "网络失败与 HTTP 错误",
+        "空响应与错误处理综合练习"
+      ],
+      "acceptable_answer_points": [
+        "生成 6 至 12 个按知识依赖排列的实质主题章节，先决条件有效且无环。",
+        "覆盖输入 goal.description 明确提出的主题和前测中的 needs_practice 项。",
+        "每章包含具体学习目标、安排理由、预计时长和可以观察或验证的完成标准。",
+        "面向 beginner 且每周 30 分钟设计可分段学习的章节；每周时间是节奏依据，不是整条路线总时长上限。",
+        "路线包含能验证 desired_outcome 的小型综合任务，避免泛化的练习、复盘阶段代替主题章节。"
+      ],
+      "scoring_rubric": {
+        "correctness": "概念、知识依赖和章节顺序准确，未编造输入之外的经历、成绩或技术限制。",
+        "completeness": "覆盖目标描述中的 required_knowledge_points 与诊断薄弱点，学习目标和可验证完成标准齐全。",
+        "relevance": "始终服务于「HTTP 与 JSON 接口调用」的目标，遵守输入规定的技术范围。",
+        "readability": "标题、章节摘要、依赖与完成标准清楚，读者能够据此执行。",
+        "teaching_adaptation": "匹配 beginner、前测 15 分及每周 30 分钟；无需机械地把总时长压到一周内。"
+      },
+      "tags": [
+        "regression",
+        "http",
+        "plan",
+        "beginner",
+        "weekly-30"
+      ]
+    },
+    {
+      "case_id": "reg40-plan-09-testing",
+      "dataset_version": "regression-40-v1",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-reg40-testing",
+          "topic": "JavaScript 测试设计与可靠性",
+          "title": "JavaScript 测试设计与可靠性学习路线",
+          "description": "学习等价类与边界分析、性质与变形测试、异步失败路径、可控替身与契约测试、测试隔离、随机数据可复现和变异测试。使用稳定的 JavaScript 与标准测试概念，不绑定特定测试框架版本。",
+          "desired_outcome": "能够为数据处理模块设计稳定的测试策略，覆盖输入边界和失败路径，并解释高覆盖率仍可能漏掉缺陷的原因。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "advanced",
+          "weekly_minutes": 300,
+          "background_summary": "有多年 JavaScript 开发经验，熟悉单元测试和依赖注入，想系统改进测试策略而不是重新学习语法。"
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "diagnostic-reg40-testing",
+          "score_percent": 80,
+          "mastery_summary": {
+            "等价类与边界分析": "mastered",
+            "性质与变形测试": "mastered",
+            "异步失败路径": "mastered",
+            "可控替身与契约测试": "needs_practice",
+            "测试隔离与随机数据可复现": "needs_practice",
+            "覆盖率局限与变异测试": "needs_practice"
+          }
+        }
+      },
+      "learner_profile": {
+        "profile_version": 1,
+        "current_level": "advanced",
+        "weekly_minutes": 300,
+        "background_summary": "有多年 JavaScript 开发经验，熟悉单元测试和依赖注入，想系统改进测试策略而不是重新学习语法。"
+      },
+      "reference_facts": [
+        "代码覆盖率反映被执行代码的范围，不能保证断言足够强或所有业务错误都被检测。",
+        "测试替身应保持与真实依赖相关的接口和行为约束；过度 mock 可能掩盖集成问题。",
+        "随机测试需要保存种子或失败样本以便重现，测试不应依赖不受控的真实时间或外部网络。"
+      ],
+      "required_knowledge_points": [
+        "等价类与边界分析",
+        "性质与变形测试",
+        "异步失败路径",
+        "可控替身与契约测试",
+        "测试隔离与随机数据可复现",
+        "覆盖率局限与变异测试"
+      ],
+      "acceptable_answer_points": [
+        "生成 6 至 12 个按知识依赖排列的实质主题章节，先决条件有效且无环。",
+        "覆盖输入 goal.description 明确提出的主题和前测中的 needs_practice 项。",
+        "每章包含具体学习目标、安排理由、预计时长和可以观察或验证的完成标准。",
+        "面向 advanced 且每周 300 分钟设计可分段学习的章节；每周时间是节奏依据，不是整条路线总时长上限。",
+        "路线包含能验证 desired_outcome 的小型综合任务，避免泛化的练习、复盘阶段代替主题章节。"
+      ],
+      "scoring_rubric": {
+        "correctness": "概念、知识依赖和章节顺序准确，未编造输入之外的经历、成绩或技术限制。",
+        "completeness": "覆盖目标描述中的 required_knowledge_points 与诊断薄弱点，学习目标和可验证完成标准齐全。",
+        "relevance": "始终服务于「JavaScript 测试设计与可靠性」的目标，遵守输入规定的技术范围。",
+        "readability": "标题、章节摘要、依赖与完成标准清楚，读者能够据此执行。",
+        "teaching_adaptation": "匹配 advanced、前测 80 分及每周 300 分钟；无需机械地把总时长压到一周内。"
+      },
+      "tags": [
+        "regression",
+        "testing",
+        "plan",
+        "advanced",
+        "weekly-300"
+      ]
+    },
+    {
+      "case_id": "reg40-plan-10-algorithms",
+      "dataset_version": "regression-40-v1",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-reg40-algorithms",
+          "topic": "算法设计与复杂度分析",
+          "title": "算法设计与复杂度分析学习路线",
+          "description": "学习时间与空间复杂度、循环不变量、二分边界、递归与递推、动态规划状态设计和贪心正确性论证。用可验证的小型 Python 算法比较方案，避免只背复杂度结论。",
+          "desired_outcome": "能够针对查找和优化问题选择算法，说明正确性与复杂度，并用边界用例检验实现。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "advanced",
+          "weekly_minutes": 420,
+          "background_summary": "有多年编程经验，能实现常见数据结构和排序，想加强正确性证明、边界分析和算法选择能力。"
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "diagnostic-reg40-algorithms",
+          "score_percent": 85,
+          "mastery_summary": {
+            "时间与空间复杂度": "mastered",
+            "循环不变量": "mastered",
+            "二分搜索边界": "mastered",
+            "递归与递推分析": "needs_practice",
+            "动态规划状态设计": "needs_practice",
+            "贪心正确性论证与反例": "needs_practice"
+          }
+        }
+      },
+      "learner_profile": {
+        "profile_version": 1,
+        "current_level": "advanced",
+        "weekly_minutes": 420,
+        "background_summary": "有多年编程经验，能实现常见数据结构和排序，想加强正确性证明、边界分析和算法选择能力。"
+      },
+      "reference_facts": [
+        "二分搜索要求与比较规则一致的有序数据；在每轮有效缩小区间的实现中查找时间为 O(log n)。",
+        "动态规划需要清晰的状态、转移、初始条件和计算顺序；不能只因为存在递归就断言复杂度为 O(n)。",
+        "贪心选择需要正确性论证，局部最优不总能产生全局最优。"
+      ],
+      "required_knowledge_points": [
+        "时间与空间复杂度",
+        "循环不变量",
+        "二分搜索边界",
+        "递归与递推分析",
+        "动态规划状态设计",
+        "贪心正确性论证与反例"
+      ],
+      "acceptable_answer_points": [
+        "生成 6 至 12 个按知识依赖排列的实质主题章节，先决条件有效且无环。",
+        "覆盖输入 goal.description 明确提出的主题和前测中的 needs_practice 项。",
+        "每章包含具体学习目标、安排理由、预计时长和可以观察或验证的完成标准。",
+        "面向 advanced 且每周 420 分钟设计可分段学习的章节；每周时间是节奏依据，不是整条路线总时长上限。",
+        "路线包含能验证 desired_outcome 的小型综合任务，避免泛化的练习、复盘阶段代替主题章节。"
+      ],
+      "scoring_rubric": {
+        "correctness": "概念、知识依赖和章节顺序准确，未编造输入之外的经历、成绩或技术限制。",
+        "completeness": "覆盖目标描述中的 required_knowledge_points 与诊断薄弱点，学习目标和可验证完成标准齐全。",
+        "relevance": "始终服务于「算法设计与复杂度分析」的目标，遵守输入规定的技术范围。",
+        "readability": "标题、章节摘要、依赖与完成标准清楚，读者能够据此执行。",
+        "teaching_adaptation": "匹配 advanced、前测 85 分及每周 420 分钟；无需机械地把总时长压到一周内。"
+      },
+      "tags": [
+        "regression",
+        "algorithms",
+        "plan",
+        "advanced",
+        "weekly-420"
+      ]
+    },
+    {
+      "case_id": "reg40-content-01-typescript",
+      "dataset_version": "regression-40-v1",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "reg40-session-typescript",
+        "goal": {
+          "topic": "TypeScript 类型安全基础",
+          "desired_outcome": "能够定义 User 接口、为读取用户名称的函数标注类型，并解释为何外部 JSON 仍需单独校验。"
+        },
+        "learner_profile": {
+          "current_level": "beginner",
+          "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「接口与函数类型」。"
+        },
+        "learning_plan": {
+          "title": "TypeScript 类型安全基础学习路线",
+          "summary": "当前节点聚焦「接口与函数类型」，前置基础已经学习。"
+        },
+        "plan_node": {
+          "id": "50000000-0000-4000-8000-000000000001",
+          "node_key": "typescript_foundation",
+          "title": "接口与函数类型",
+          "node_brief": "用接口描述对象的必需属性，为函数参数和返回值标注类型；理解接口只提供编译期约束。",
+          "learning_objective": "能够定义 User 接口、为读取用户名称的函数标注类型，并解释为何外部 JSON 仍需单独校验。",
+          "completion_criteria": [
+            "写出包含 id:number 和 name:string 的 User 接口。",
+            "为接收 User 并返回名称的函数标注参数和返回值类型。",
+            "区分缺少必需属性的类型错误与未经校验的外部数据风险。"
+          ],
+          "difficulty": 2,
+          "estimated_minutes": 45
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「接口与函数类型」。"
+      },
+      "reference_facts": [
+        "displayName 的参数类型为 User，返回值类型为 string；示例传入 Lin 时返回 Lin。",
+        "User 接口要求数值 id 和字符串 name；类型注解、接口和类型断言不会自动验证外部 JSON。"
+      ],
+      "required_knowledge_points": [
+        "接口描述对象属性",
+        "函数参数类型",
+        "函数返回值类型",
+        "编译期类型检查与运行时校验边界"
+      ],
+      "acceptable_answer_points": [
+        "foundation 分至少三个有实质内容的段落，解释本章概念及关系，不使用模板占位说明。",
+        "示例体现 node_brief、learning_objective 和 completion_criteria；文件职责、入口和实际存在的函数调用或阅读顺序清楚。",
+        "给出与本章相关的常见误区、原因和修复方式，教学记忆包含概念、误区和可检验目标。",
+        "expected_output 描述预期行为，不伪造执行日志；来源只如实记录，未检索时 source_refs 可以为空。",
+        "允许使用与参考教材不同但同样正确的场景、标识符和示例，不要求照抄参考代码。"
+      ],
+      "scoring_rubric": {
+        "correctness": "「接口与函数类型」的概念、代码、调用说明和预期行为准确，误区原因与修复方式成立。",
+        "completeness": "覆盖本章 required_knowledge_points 和节点完成标准，包含基础解释、完整示例、误区与教学记忆。",
+        "relevance": "聚焦当前节点而不是整个学习路线；遵守节点声明的语言、前置基础和范围。",
+        "readability": "教材段落、术语定义、分文件示例和函数说明清楚，便于按阅读顺序理解。",
+        "teaching_adaptation": "针对本章初学者解释概念，提供足够代码上下文与边界说明，不假设尚未教授的高级知识。"
+      },
+      "tags": [
+        "regression",
+        "typescript",
+        "card-content",
+        "beginner",
+        "ts"
+      ]
+    },
+    {
+      "case_id": "reg40-content-02-python",
+      "dataset_version": "regression-40-v1",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "reg40-session-python",
+        "goal": {
+          "topic": "Python 数据处理入门",
+          "desired_outcome": "能够编写 sum_scores 函数，解释累加变量初始化的位置、返回值和空列表行为。"
+        },
+        "learner_profile": {
+          "current_level": "beginner",
+          "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「列表遍历与累加函数」。"
+        },
+        "learning_plan": {
+          "title": "Python 数据处理入门学习路线",
+          "summary": "当前节点聚焦「列表遍历与累加函数」，前置基础已经学习。"
+        },
+        "plan_node": {
+          "id": "50000000-0000-4000-8000-000000000002",
+          "node_key": "python_foundation",
+          "title": "列表遍历与累加函数",
+          "node_brief": "用 for 循环遍历数值列表，在局部变量中累加，并通过 return 返回总和；处理空列表。",
+          "learning_objective": "能够编写 sum_scores 函数，解释累加变量初始化的位置、返回值和空列表行为。",
+          "completion_criteria": [
+            "为数值列表编写返回总和的函数。",
+            "解释为何 total 初始化在循环外、return 放在循环后。",
+            "验证 [2,4,6] 返回 12、空列表返回 0，且不改变输入列表。"
+          ],
+          "difficulty": 2,
+          "estimated_minutes": 45
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「列表遍历与累加函数」。"
+      },
+      "reference_facts": [
+        "sum_scores([2,4,6]) 返回 12，sum_scores([]) 返回 0，函数不修改输入列表。",
+        "循环体内的 return 会提前结束函数；在循环内重新初始化 total 会丢弃累计结果。"
+      ],
+      "required_knowledge_points": [
+        "for 遍历列表元素",
+        "循环外初始化累加变量",
+        "循环后返回结果",
+        "空列表处理"
+      ],
+      "acceptable_answer_points": [
+        "foundation 分至少三个有实质内容的段落，解释本章概念及关系，不使用模板占位说明。",
+        "示例体现 node_brief、learning_objective 和 completion_criteria；文件职责、入口和实际存在的函数调用或阅读顺序清楚。",
+        "给出与本章相关的常见误区、原因和修复方式，教学记忆包含概念、误区和可检验目标。",
+        "expected_output 描述预期行为，不伪造执行日志；来源只如实记录，未检索时 source_refs 可以为空。",
+        "允许使用与参考教材不同但同样正确的场景、标识符和示例，不要求照抄参考代码。"
+      ],
+      "scoring_rubric": {
+        "correctness": "「列表遍历与累加函数」的概念、代码、调用说明和预期行为准确，误区原因与修复方式成立。",
+        "completeness": "覆盖本章 required_knowledge_points 和节点完成标准，包含基础解释、完整示例、误区与教学记忆。",
+        "relevance": "聚焦当前节点而不是整个学习路线；遵守节点声明的语言、前置基础和范围。",
+        "readability": "教材段落、术语定义、分文件示例和函数说明清楚，便于按阅读顺序理解。",
+        "teaching_adaptation": "针对本章初学者解释概念，提供足够代码上下文与边界说明，不假设尚未教授的高级知识。"
+      },
+      "tags": [
+        "regression",
+        "python",
+        "card-content",
+        "beginner",
+        "python"
+      ]
+    },
+    {
+      "case_id": "reg40-content-03-javascript",
+      "dataset_version": "regression-40-v1",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "reg40-session-javascript",
+        "goal": {
+          "topic": "JavaScript 异步流程",
+          "desired_outcome": "能够说明异步函数的输入、Promise 返回值和成功、失败路径，区分等待当前函数与阻塞线程。"
+        },
+        "learner_profile": {
+          "current_level": "beginner",
+          "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「async/await 与错误处理」。"
+        },
+        "learning_plan": {
+          "title": "JavaScript 异步流程学习路线",
+          "summary": "当前节点聚焦「async/await 与错误处理」，前置基础已经学习。"
+        },
+        "plan_node": {
+          "id": "50000000-0000-4000-8000-000000000003",
+          "node_key": "javascript_foundation",
+          "title": "async/await 与错误处理",
+          "node_brief": "理解 async 返回 Promise，使用 await 读取结果，在 try/catch 中处理拒绝；示例使用固定数据，不涉及真实网络。",
+          "learning_objective": "能够说明异步函数的输入、Promise 返回值和成功、失败路径，区分等待当前函数与阻塞线程。",
+          "completion_criteria": [
+            "解释 async 函数为什么返回 Promise。",
+            "使用 await 获取兑现值，并通过 try/catch 捕获拒绝。",
+            "说明给定 loadTotal 示例中成功返回 10、失败进入 catch 的原因。"
+          ],
+          "difficulty": 2,
+          "estimated_minutes": 45
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「async/await 与错误处理」。"
+      },
+      "reference_facts": [
+        "loadTotal 等待 [2,3,5] 后的兑现值为 10；loadScores 拒绝时 loadTotal 也拒绝。",
+        "async 调用返回 Promise，await 只暂停当前 async 函数而不阻塞整个线程。"
+      ],
+      "required_knowledge_points": [
+        "async 返回 Promise",
+        "await 获取兑现值",
+        "拒绝通过 await 进入 catch",
+        "await 不阻塞整个线程"
+      ],
+      "acceptable_answer_points": [
+        "foundation 分至少三个有实质内容的段落，解释本章概念及关系，不使用模板占位说明。",
+        "示例体现 node_brief、learning_objective 和 completion_criteria；文件职责、入口和实际存在的函数调用或阅读顺序清楚。",
+        "给出与本章相关的常见误区、原因和修复方式，教学记忆包含概念、误区和可检验目标。",
+        "expected_output 描述预期行为，不伪造执行日志；来源只如实记录，未检索时 source_refs 可以为空。",
+        "允许使用与参考教材不同但同样正确的场景、标识符和示例，不要求照抄参考代码。"
+      ],
+      "scoring_rubric": {
+        "correctness": "「async/await 与错误处理」的概念、代码、调用说明和预期行为准确，误区原因与修复方式成立。",
+        "completeness": "覆盖本章 required_knowledge_points 和节点完成标准，包含基础解释、完整示例、误区与教学记忆。",
+        "relevance": "聚焦当前节点而不是整个学习路线；遵守节点声明的语言、前置基础和范围。",
+        "readability": "教材段落、术语定义、分文件示例和函数说明清楚，便于按阅读顺序理解。",
+        "teaching_adaptation": "针对本章初学者解释概念，提供足够代码上下文与边界说明，不假设尚未教授的高级知识。"
+      },
+      "tags": [
+        "regression",
+        "javascript",
+        "card-content",
+        "beginner",
+        "js"
+      ]
+    },
+    {
+      "case_id": "reg40-content-04-java",
+      "dataset_version": "regression-40-v1",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "reg40-session-java",
+        "goal": {
+          "topic": "Java 面向对象基础",
+          "desired_outcome": "能够创建两个 Product 实例并解释名称不同的原因，通过实例方法读取封装的字段。"
+        },
+        "learner_profile": {
+          "current_level": "beginner",
+          "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「构造方法与实例状态」。"
+        },
+        "learning_plan": {
+          "title": "Java 面向对象基础学习路线",
+          "summary": "当前节点聚焦「构造方法与实例状态」，前置基础已经学习。"
+        },
+        "plan_node": {
+          "id": "50000000-0000-4000-8000-000000000004",
+          "node_key": "java_foundation",
+          "title": "构造方法与实例状态",
+          "node_brief": "通过 Product 类说明构造方法如何初始化 private 实例字段，以及对象方法如何读取自身状态。",
+          "learning_objective": "能够创建两个 Product 实例并解释名称不同的原因，通过实例方法读取封装的字段。",
+          "completion_criteria": [
+            "写出无返回类型且与类同名的构造方法。",
+            "使用 this.name 区分实例字段与同名参数。",
+            "解释两个 Product 实例的名称为何互不覆盖。"
+          ],
+          "difficulty": 2,
+          "estimated_minutes": 45
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「构造方法与实例状态」。"
+      },
+      "reference_facts": [
+        "Product(String name) 是无返回类型的构造方法；this.name 指当前实例的字段。",
+        "first.getName() 返回 Book，second.getName() 返回 Pen；两个对象的实例字段独立。"
+      ],
+      "required_knowledge_points": [
+        "类与实例",
+        "构造方法初始化",
+        "this 区分字段和参数",
+        "private 字段与实例方法"
+      ],
+      "acceptable_answer_points": [
+        "foundation 分至少三个有实质内容的段落，解释本章概念及关系，不使用模板占位说明。",
+        "示例体现 node_brief、learning_objective 和 completion_criteria；文件职责、入口和实际存在的函数调用或阅读顺序清楚。",
+        "给出与本章相关的常见误区、原因和修复方式，教学记忆包含概念、误区和可检验目标。",
+        "expected_output 描述预期行为，不伪造执行日志；来源只如实记录，未检索时 source_refs 可以为空。",
+        "允许使用与参考教材不同但同样正确的场景、标识符和示例，不要求照抄参考代码。"
+      ],
+      "scoring_rubric": {
+        "correctness": "「构造方法与实例状态」的概念、代码、调用说明和预期行为准确，误区原因与修复方式成立。",
+        "completeness": "覆盖本章 required_knowledge_points 和节点完成标准，包含基础解释、完整示例、误区与教学记忆。",
+        "relevance": "聚焦当前节点而不是整个学习路线；遵守节点声明的语言、前置基础和范围。",
+        "readability": "教材段落、术语定义、分文件示例和函数说明清楚，便于按阅读顺序理解。",
+        "teaching_adaptation": "针对本章初学者解释概念，提供足够代码上下文与边界说明，不假设尚未教授的高级知识。"
+      },
+      "tags": [
+        "regression",
+        "java",
+        "card-content",
+        "beginner",
+        "java"
+      ]
+    },
+    {
+      "case_id": "reg40-content-05-go",
+      "dataset_version": "regression-40-v1",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "reg40-session-go",
+        "goal": {
+          "topic": "Go 数据处理与错误处理",
+          "desired_outcome": "能够为整数切片求和，正确保存 append 返回值，并解释长度变化与空切片结果。"
+        },
+        "learner_profile": {
+          "current_level": "beginner",
+          "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「切片遍历与 append」。"
+        },
+        "learning_plan": {
+          "title": "Go 数据处理与错误处理学习路线",
+          "summary": "当前节点聚焦「切片遍历与 append」，前置基础已经学习。"
+        },
+        "plan_node": {
+          "id": "50000000-0000-4000-8000-000000000005",
+          "node_key": "go_foundation",
+          "title": "切片遍历与 append",
+          "node_brief": "通过 []int 的求和示例讲解切片长度、range 遍历、接收 append 返回值以及空切片行为。",
+          "learning_objective": "能够为整数切片求和，正确保存 append 返回值，并解释长度变化与空切片结果。",
+          "completion_criteria": [
+            "用 range 遍历 []int 的值并求和。",
+            "把 append 的返回值赋给切片变量。",
+            "说明 [2,4] 追加 6 后长度为 3、总和为 12，空切片总和为 0。"
+          ],
+          "difficulty": 2,
+          "estimated_minutes": 45
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「切片遍历与 append」。"
+      },
+      "reference_facts": [
+        "[]int{2,4} 追加 6 并保存结果后长度为 3，总和为 12；空切片总和为 0。",
+        "append 返回更新后的切片并可能分配新的底层数组；range 的两个返回值是索引和元素值。"
+      ],
+      "required_knowledge_points": [
+        "切片长度",
+        "range 遍历元素",
+        "append 返回更新后的切片",
+        "空切片处理"
+      ],
+      "acceptable_answer_points": [
+        "foundation 分至少三个有实质内容的段落，解释本章概念及关系，不使用模板占位说明。",
+        "示例体现 node_brief、learning_objective 和 completion_criteria；文件职责、入口和实际存在的函数调用或阅读顺序清楚。",
+        "给出与本章相关的常见误区、原因和修复方式，教学记忆包含概念、误区和可检验目标。",
+        "expected_output 描述预期行为，不伪造执行日志；来源只如实记录，未检索时 source_refs 可以为空。",
+        "允许使用与参考教材不同但同样正确的场景、标识符和示例，不要求照抄参考代码。"
+      ],
+      "scoring_rubric": {
+        "correctness": "「切片遍历与 append」的概念、代码、调用说明和预期行为准确，误区原因与修复方式成立。",
+        "completeness": "覆盖本章 required_knowledge_points 和节点完成标准，包含基础解释、完整示例、误区与教学记忆。",
+        "relevance": "聚焦当前节点而不是整个学习路线；遵守节点声明的语言、前置基础和范围。",
+        "readability": "教材段落、术语定义、分文件示例和函数说明清楚，便于按阅读顺序理解。",
+        "teaching_adaptation": "针对本章初学者解释概念，提供足够代码上下文与边界说明，不假设尚未教授的高级知识。"
+      },
+      "tags": [
+        "regression",
+        "go",
+        "card-content",
+        "beginner",
+        "go"
+      ]
+    },
+    {
+      "case_id": "reg40-content-06-c",
+      "dataset_version": "regression-40-v1",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "reg40-session-c",
+        "goal": {
+          "topic": "C 语言数组与内存基础",
+          "desired_outcome": "能够解释 sum_array 的参数合同、索引边界，以及为什么函数需要单独接收元素数量。"
+        },
+        "learner_profile": {
+          "current_level": "beginner",
+          "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「数组求和与长度传递」。"
+        },
+        "learning_plan": {
+          "title": "C 语言数组与内存基础学习路线",
+          "summary": "当前节点聚焦「数组求和与长度传递」，前置基础已经学习。"
+        },
+        "plan_node": {
+          "id": "50000000-0000-4000-8000-000000000006",
+          "node_key": "c_foundation",
+          "title": "数组求和与长度传递",
+          "node_brief": "将数组指针和元素数量一起传给求和函数，使用小于 count 的索引条件避免越界。",
+          "learning_objective": "能够解释 sum_array 的参数合同、索引边界，以及为什么函数需要单独接收元素数量。",
+          "completion_criteria": [
+            "为 sum_array 同时传入有效数组和正确元素数量。",
+            "使用 i < count 遍历有效索引，避免写成 i <= count。",
+            "解释 main 中的数组 sizeof 计算与函数中指针 sizeof 的区别。"
+          ],
+          "difficulty": 2,
+          "estimated_minutes": 45
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「数组求和与长度传递」。"
+      },
+      "reference_facts": [
+        "sum_array 接收至少 count 个有效元素；示例数组 {2,4,6} 的总和为 12。",
+        "i < count 保持有效索引；数组越界是未定义行为，不保证固定异常或输出。",
+        "sizeof 指针参数不能获取原数组元素数量；const int * 禁止通过该指针修改元素。"
+      ],
+      "required_knowledge_points": [
+        "有效数组索引",
+        "指针与元素访问",
+        "显式传递元素数量",
+        "const 只读访问"
+      ],
+      "acceptable_answer_points": [
+        "foundation 分至少三个有实质内容的段落，解释本章概念及关系，不使用模板占位说明。",
+        "示例体现 node_brief、learning_objective 和 completion_criteria；文件职责、入口和实际存在的函数调用或阅读顺序清楚。",
+        "给出与本章相关的常见误区、原因和修复方式，教学记忆包含概念、误区和可检验目标。",
+        "expected_output 描述预期行为，不伪造执行日志；来源只如实记录，未检索时 source_refs 可以为空。",
+        "允许使用与参考教材不同但同样正确的场景、标识符和示例，不要求照抄参考代码。"
+      ],
+      "scoring_rubric": {
+        "correctness": "「数组求和与长度传递」的概念、代码、调用说明和预期行为准确，误区原因与修复方式成立。",
+        "completeness": "覆盖本章 required_knowledge_points 和节点完成标准，包含基础解释、完整示例、误区与教学记忆。",
+        "relevance": "聚焦当前节点而不是整个学习路线；遵守节点声明的语言、前置基础和范围。",
+        "readability": "教材段落、术语定义、分文件示例和函数说明清楚，便于按阅读顺序理解。",
+        "teaching_adaptation": "针对本章初学者解释概念，提供足够代码上下文与边界说明，不假设尚未教授的高级知识。"
+      },
+      "tags": [
+        "regression",
+        "c",
+        "card-content",
+        "beginner",
+        "c"
+      ]
+    },
+    {
+      "case_id": "reg40-content-07-sql",
+      "dataset_version": "regression-40-v1",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "reg40-session-sql",
+        "goal": {
+          "topic": "SQL 查询与数据汇总",
+          "desired_outcome": "能够区分行过滤与分组过滤，处理 NULL 并根据固定数据推导汇总结果。"
+        },
+        "learner_profile": {
+          "current_level": "beginner",
+          "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「WHERE、GROUP BY 与 HAVING」。"
+        },
+        "learning_plan": {
+          "title": "SQL 查询与数据汇总学习路线",
+          "summary": "当前节点聚焦「WHERE、GROUP BY 与 HAVING」，前置基础已经学习。"
+        },
+        "plan_node": {
+          "id": "50000000-0000-4000-8000-000000000007",
+          "node_key": "sql_foundation",
+          "title": "WHERE、GROUP BY 与 HAVING",
+          "node_brief": "先过滤有金额的记录，再按团队分组计算 SUM，最后用 HAVING 过滤团队总额。使用 Python 标准库 sqlite3 承载完整示例。",
+          "learning_objective": "能够区分行过滤与分组过滤，处理 NULL 并根据固定数据推导汇总结果。",
+          "completion_criteria": [
+            "写出 WHERE amount IS NOT NULL 后再 GROUP BY team 的查询。",
+            "使用 HAVING SUM(amount) >= 40 过滤团队汇总。",
+            "根据 A 的 10、30，B 的 60 和 C 的 NULL 推导结果 A:40、B:60。"
+          ],
+          "difficulty": 2,
+          "estimated_minutes": 45
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「WHERE、GROUP BY 与 HAVING」。"
+      },
+      "reference_facts": [
+        "固定数据中 A 的总额为 40、B 为 60；WHERE amount IS NOT NULL 排除 C。",
+        "HAVING SUM(amount) >= 40 保留 A、B，改成 >= 50 只保留 B。",
+        "WHERE 过滤行、HAVING 过滤分组；SUM 忽略 NULL，全 NULL 分组的 SUM 为 NULL。"
+      ],
+      "required_knowledge_points": [
+        "WHERE 行过滤",
+        "GROUP BY 分组",
+        "SUM 聚合与 NULL",
+        "HAVING 分组过滤"
+      ],
+      "acceptable_answer_points": [
+        "foundation 分至少三个有实质内容的段落，解释本章概念及关系，不使用模板占位说明。",
+        "示例体现 node_brief、learning_objective 和 completion_criteria；文件职责、入口和实际存在的函数调用或阅读顺序清楚。",
+        "给出与本章相关的常见误区、原因和修复方式，教学记忆包含概念、误区和可检验目标。",
+        "expected_output 描述预期行为，不伪造执行日志；来源只如实记录，未检索时 source_refs 可以为空。",
+        "允许使用与参考教材不同但同样正确的场景、标识符和示例，不要求照抄参考代码。"
+      ],
+      "scoring_rubric": {
+        "correctness": "「WHERE、GROUP BY 与 HAVING」的概念、代码、调用说明和预期行为准确，误区原因与修复方式成立。",
+        "completeness": "覆盖本章 required_knowledge_points 和节点完成标准，包含基础解释、完整示例、误区与教学记忆。",
+        "relevance": "聚焦当前节点而不是整个学习路线；遵守节点声明的语言、前置基础和范围。",
+        "readability": "教材段落、术语定义、分文件示例和函数说明清楚，便于按阅读顺序理解。",
+        "teaching_adaptation": "针对本章初学者解释概念，提供足够代码上下文与边界说明，不假设尚未教授的高级知识。"
+      },
+      "tags": [
+        "regression",
+        "sql",
+        "card-content",
+        "beginner",
+        "sql"
+      ]
+    },
+    {
+      "case_id": "reg40-content-08-http",
+      "dataset_version": "regression-40-v1",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "reg40-session-http",
+        "goal": {
+          "topic": "HTTP 与 JSON 接口调用",
+          "desired_outcome": "能够区分 HTTP 错误、网络失败和 JSON 解析失败，并说明为何 204 不调用 json。"
+        },
+        "learner_profile": {
+          "current_level": "beginner",
+          "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「状态检查与 JSON 响应读取」。"
+        },
+        "learning_plan": {
+          "title": "HTTP 与 JSON 接口调用学习路线",
+          "summary": "当前节点聚焦「状态检查与 JSON 响应读取」，前置基础已经学习。"
+        },
+        "plan_node": {
+          "id": "50000000-0000-4000-8000-000000000008",
+          "node_key": "http_foundation",
+          "title": "状态检查与 JSON 响应读取",
+          "node_brief": "使用 Response.ok 检查 HTTP 状态，对 204 返回 null，对其他成功响应异步读取 JSON；使用固定 Response 对象验证分支。",
+          "learning_objective": "能够区分 HTTP 错误、网络失败和 JSON 解析失败，并说明为何 204 不调用 json。",
+          "completion_criteria": [
+            "对非 2xx 响应报告 HTTP 错误。",
+            "在 204 分支返回 null 而不是读取空 JSON。",
+            "对固定 200 JSON 响应读取 id:1，解释 fetch 不自动拒绝所有 HTTP 错误。"
+          ],
+          "difficulty": 2,
+          "estimated_minutes": 45
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「状态检查与 JSON 响应读取」。"
+      },
+      "reference_facts": [
+        "示例中 200 JSON 响应的 id 是 1，204 返回 null，404 使读取函数拒绝并带有 HTTP 404 消息。",
+        "Response.ok 对 200 至 299 为真；fetch 通常不因 4xx、5xx 自动拒绝；非法 JSON 会使 json 的 Promise 拒绝。"
+      ],
+      "required_knowledge_points": [
+        "Response.ok 与 HTTP 状态",
+        "204 无响应内容",
+        "异步 JSON 读取",
+        "HTTP 错误与网络失败的区别"
+      ],
+      "acceptable_answer_points": [
+        "foundation 分至少三个有实质内容的段落，解释本章概念及关系，不使用模板占位说明。",
+        "示例体现 node_brief、learning_objective 和 completion_criteria；文件职责、入口和实际存在的函数调用或阅读顺序清楚。",
+        "给出与本章相关的常见误区、原因和修复方式，教学记忆包含概念、误区和可检验目标。",
+        "expected_output 描述预期行为，不伪造执行日志；来源只如实记录，未检索时 source_refs 可以为空。",
+        "允许使用与参考教材不同但同样正确的场景、标识符和示例，不要求照抄参考代码。"
+      ],
+      "scoring_rubric": {
+        "correctness": "「状态检查与 JSON 响应读取」的概念、代码、调用说明和预期行为准确，误区原因与修复方式成立。",
+        "completeness": "覆盖本章 required_knowledge_points 和节点完成标准，包含基础解释、完整示例、误区与教学记忆。",
+        "relevance": "聚焦当前节点而不是整个学习路线；遵守节点声明的语言、前置基础和范围。",
+        "readability": "教材段落、术语定义、分文件示例和函数说明清楚，便于按阅读顺序理解。",
+        "teaching_adaptation": "针对本章初学者解释概念，提供足够代码上下文与边界说明，不假设尚未教授的高级知识。"
+      },
+      "tags": [
+        "regression",
+        "http",
+        "card-content",
+        "beginner",
+        "js"
+      ]
+    },
+    {
+      "case_id": "reg40-content-09-testing",
+      "dataset_version": "regression-40-v1",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "reg40-session-testing",
+        "goal": {
+          "topic": "JavaScript 测试设计与可靠性",
+          "desired_outcome": "能够根据函数合同选择测试输入，断言返回值和异常，并区分打印结果与自动验证。"
+        },
+        "learner_profile": {
+          "current_level": "beginner",
+          "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「断言与边界用例」。"
+        },
+        "learning_plan": {
+          "title": "JavaScript 测试设计与可靠性学习路线",
+          "summary": "当前节点聚焦「断言与边界用例」，前置基础已经学习。"
+        },
+        "plan_node": {
+          "id": "50000000-0000-4000-8000-000000000009",
+          "node_key": "testing_foundation",
+          "title": "断言与边界用例",
+          "node_brief": "使用 Node.js 内置 assert/strict 为整数金额函数编写普通、零数量和非法输入测试，不使用外部测试框架。",
+          "learning_objective": "能够根据函数合同选择测试输入，断言返回值和异常，并区分打印结果与自动验证。",
+          "completion_criteria": [
+            "为单价单位为分、数量为非负整数的函数断言普通结果和零数量结果。",
+            "使用 assert.throws 检查负数量触发 RangeError。",
+            "解释断言失败会报告问题，而只打印结果不会自动验证。"
+          ],
+          "difficulty": 2,
+          "estimated_minutes": 45
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「断言与边界用例」。"
+      },
+      "reference_facts": [
+        "calculateTotal(125,2) 为 250，calculateTotal(125,0) 为 0，数量 -1 或 1.5 触发 RangeError。",
+        "assert.equal 验证返回值，assert.throws 验证异常；只打印结果不等价于断言。"
+      ],
+      "required_knowledge_points": [
+        "返回值断言",
+        "零值边界",
+        "异常断言",
+        "确定性与独立用例"
+      ],
+      "acceptable_answer_points": [
+        "foundation 分至少三个有实质内容的段落，解释本章概念及关系，不使用模板占位说明。",
+        "示例体现 node_brief、learning_objective 和 completion_criteria；文件职责、入口和实际存在的函数调用或阅读顺序清楚。",
+        "给出与本章相关的常见误区、原因和修复方式，教学记忆包含概念、误区和可检验目标。",
+        "expected_output 描述预期行为，不伪造执行日志；来源只如实记录，未检索时 source_refs 可以为空。",
+        "允许使用与参考教材不同但同样正确的场景、标识符和示例，不要求照抄参考代码。"
+      ],
+      "scoring_rubric": {
+        "correctness": "「断言与边界用例」的概念、代码、调用说明和预期行为准确，误区原因与修复方式成立。",
+        "completeness": "覆盖本章 required_knowledge_points 和节点完成标准，包含基础解释、完整示例、误区与教学记忆。",
+        "relevance": "聚焦当前节点而不是整个学习路线；遵守节点声明的语言、前置基础和范围。",
+        "readability": "教材段落、术语定义、分文件示例和函数说明清楚，便于按阅读顺序理解。",
+        "teaching_adaptation": "针对本章初学者解释概念，提供足够代码上下文与边界说明，不假设尚未教授的高级知识。"
+      },
+      "tags": [
+        "regression",
+        "testing",
+        "card-content",
+        "beginner",
+        "js"
+      ]
+    },
+    {
+      "case_id": "reg40-content-10-algorithms",
+      "dataset_version": "regression-40-v1",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "reg40-session-algorithms",
+        "goal": {
+          "topic": "算法设计与复杂度分析",
+          "desired_outcome": "能够追踪 low、high 和 mid 的变化，处理空列表与缺失目标，并说明每轮为何缩小搜索区间。"
+        },
+        "learner_profile": {
+          "current_level": "beginner",
+          "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「二分搜索的区间与边界」。"
+        },
+        "learning_plan": {
+          "title": "算法设计与复杂度分析学习路线",
+          "summary": "当前节点聚焦「二分搜索的区间与边界」，前置基础已经学习。"
+        },
+        "plan_node": {
+          "id": "50000000-0000-4000-8000-000000000010",
+          "node_key": "algorithms_foundation",
+          "title": "二分搜索的区间与边界",
+          "node_brief": "在升序整数列表上使用左右闭区间二分搜索，命中时返回索引，未命中返回 -1，不保证重复元素的首个位置。",
+          "learning_objective": "能够追踪 low、high 和 mid 的变化，处理空列表与缺失目标，并说明每轮为何缩小搜索区间。",
+          "completion_criteria": [
+            "明确输入列表必须升序排列，返回的是索引而不是元素值。",
+            "使用 low <= high 和 mid+1、mid-1 保证区间缩小。",
+            "说明目标 7 的索引为 3，目标 2 和空列表返回 -1；重复元素只保证返回某个匹配索引。"
+          ],
+          "difficulty": 2,
+          "estimated_minutes": 45
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「二分搜索的区间与边界」。"
+      },
+      "reference_facts": [
+        "给定升序列表 [1,3,5,7,9] 查找 7 的索引为 3，查找 2 返回 -1，空列表返回 -1。",
+        "实现使用左右闭区间 low<=high，未命中分支排除 mid；不保证返回重复目标的首个位置。"
+      ],
+      "required_knowledge_points": [
+        "升序输入前提",
+        "左右闭区间",
+        "中点比较与区间缩小",
+        "空列表和未命中处理"
+      ],
+      "acceptable_answer_points": [
+        "foundation 分至少三个有实质内容的段落，解释本章概念及关系，不使用模板占位说明。",
+        "示例体现 node_brief、learning_objective 和 completion_criteria；文件职责、入口和实际存在的函数调用或阅读顺序清楚。",
+        "给出与本章相关的常见误区、原因和修复方式，教学记忆包含概念、误区和可检验目标。",
+        "expected_output 描述预期行为，不伪造执行日志；来源只如实记录，未检索时 source_refs 可以为空。",
+        "允许使用与参考教材不同但同样正确的场景、标识符和示例，不要求照抄参考代码。"
+      ],
+      "scoring_rubric": {
+        "correctness": "「二分搜索的区间与边界」的概念、代码、调用说明和预期行为准确，误区原因与修复方式成立。",
+        "completeness": "覆盖本章 required_knowledge_points 和节点完成标准，包含基础解释、完整示例、误区与教学记忆。",
+        "relevance": "聚焦当前节点而不是整个学习路线；遵守节点声明的语言、前置基础和范围。",
+        "readability": "教材段落、术语定义、分文件示例和函数说明清楚，便于按阅读顺序理解。",
+        "teaching_adaptation": "针对本章初学者解释概念，提供足够代码上下文与边界说明，不假设尚未教授的高级知识。"
+      },
+      "tags": [
+        "regression",
+        "algorithms",
+        "card-content",
+        "beginner",
+        "python"
+      ]
+    },
+    {
+      "case_id": "reg40-posttest-01-typescript",
+      "dataset_version": "regression-40-v1",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "TypeScript 类型安全基础：接口与函数类型",
+        "question_count": 6,
+        "difficulty": "normal",
+        "kind": "post_test",
+        "plan_node_id": "50000000-0000-4000-8000-000000000001",
+        "source_card_content_id": "60000000-0000-4000-8000-000000000001",
+        "card_content_context": {
+          "plan_node_id": "50000000-0000-4000-8000-000000000001",
+          "card_content_id": "60000000-0000-4000-8000-000000000001",
+          "foundation": "接口描述对象必须具有的属性及属性类型。User 中的 id:number 和 name:string 表示符合该接口的对象需要数值 id 和字符串 name；把缺少 name 的对象直接交给 User 参数，会产生类型检查错误。\n\n函数签名描述输入与输出。displayName(user: User): string 接收 User 对象并返回字符串；返回数字不符合这里声明的返回值类型。\n\n接口约束发生在编译期。类型注解与接口在编译后的 JavaScript 中被擦除，不能自动验证外部 JSON。使用类型断言并不会产生验证代码，外部数据进入函数前仍需单独校验。",
+          "worked_example": {
+            "explanation": "用接口描述对象的必需属性，为函数参数和返回值标注类型；理解接口只提供编译期约束。",
+            "files": [
+              {
+                "path": "src/user.ts",
+                "language": "ts",
+                "role": "module",
+                "content": "export interface User {\n  id: number;\n  name: string;\n}\n\nexport function displayName(user: User): string {\n  return user.name;\n}\n"
+              },
+              {
+                "path": "src/main.ts",
+                "language": "ts",
+                "role": "entry",
+                "content": "import { displayName, type User } from './user';\n\nfunction main(): void {\n  const user: User = { id: 1, name: 'Lin' };\n  console.log(displayName(user));\n}\n\nmain();\n"
+              }
+            ],
+            "entry_file": "src/main.ts",
+            "call_sequence": [
+              {
+                "step": 1,
+                "file": "src/main.ts",
+                "function": "main",
+                "note": "创建包含必需属性的 User 对象并调用 displayName。"
+              },
+              {
+                "step": 2,
+                "file": "src/user.ts",
+                "function": "displayName",
+                "note": "接收 User 对象并返回字符串名称。"
+              }
+            ],
+            "expected_output": "src/main.ts › main：名称是字符串 Lin；参数类型 User 和返回值类型 string 只参与编译期检查。"
+          },
+          "pitfalls_debug": [
+            {
+              "title": "把接口或类型断言当成运行时校验",
+              "cause": "编译期类型信息不会自动验证实际收到的外部数据。",
+              "fix": "在外部数据边界显式校验必需属性和类型，再交给内部函数。"
+            },
+            {
+              "title": "返回值与声明类型不符",
+              "cause": "返回了数字，但函数签名声明返回 string。",
+              "fix": "让返回值与函数用途和声明类型保持一致。"
+            }
+          ],
+          "teaching_memory": {
+            "key_concepts": [
+              "接口描述对象属性",
+              "函数参数类型",
+              "函数返回值类型",
+              "编译期类型检查与运行时校验边界"
+            ],
+            "common_mistakes": [
+              "把接口或类型断言当成运行时校验",
+              "返回值与声明类型不符"
+            ],
+            "assessment_targets": [
+              "写出包含 id:number 和 name:string 的 User 接口。",
+              "为接收 User 并返回名称的函数标注参数和返回值类型。",
+              "区分缺少必需属性的类型错误与未经校验的外部数据风险。"
+            ]
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「接口与函数类型」。"
+      },
+      "reference_facts": [
+        "displayName 的参数类型为 User，返回值类型为 string；示例传入 Lin 时返回 Lin。",
+        "User 接口要求数值 id 和字符串 name；类型注解、接口和类型断言不会自动验证外部 JSON。"
+      ],
+      "required_knowledge_points": [
+        "接口描述对象属性",
+        "函数参数类型",
+        "函数返回值类型",
+        "编译期类型检查与运行时校验边界"
+      ],
+      "acceptable_answer_points": [
+        "恰好生成 6 道单选题，答案唯一，解析说明原因且与教材、代码一致。",
+        "每个考点都能在固定 foundation、worked_example、pitfalls_debug 或 teaching_memory 中找到依据。",
+        "覆盖本章关键概念、教材已说明的边界和误区，包含代码理解或范围内的应用题，而非只考术语记忆。",
+        "可以更换数据或名称进行同知识点迁移，但不能依赖未提供的新概念、框架、版本或真实服务。",
+        "normal 主要验证已学概念和简单应用，题干提供足够上下文。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、选项、答案和解析与固定教材事实一致；推导代码行为时遵守教材明确的前提。",
+        "completeness": "题量准确，覆盖教材中的 required_knowledge_points 和主要误区，解析完整。",
+        "relevance": "仅考查提供的节点内容；更换场景允许，但未学的知识不能成为作答前提。",
+        "readability": "题干、代码与选项简洁清楚，解析可定位到具体概念或代码行为。",
+        "teaching_adaptation": "面向刚学完本章的初学者，normal 难度只调整已学内容内的推理和应用复杂度。"
+      },
+      "tags": [
+        "regression",
+        "typescript",
+        "posttest",
+        "beginner",
+        "normal",
+        "questions-6",
+        "fixed-context"
+      ]
+    },
+    {
+      "case_id": "reg40-posttest-02-python",
+      "dataset_version": "regression-40-v1",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "Python 数据处理入门：列表遍历与累加函数",
+        "question_count": 5,
+        "difficulty": "normal",
+        "kind": "post_test",
+        "plan_node_id": "50000000-0000-4000-8000-000000000002",
+        "source_card_content_id": "60000000-0000-4000-8000-000000000002",
+        "card_content_context": {
+          "plan_node_id": "50000000-0000-4000-8000-000000000002",
+          "card_content_id": "60000000-0000-4000-8000-000000000002",
+          "foundation": "for 循环按顺序读取列表中的元素。示例只接收数值列表，for score in scores 每轮读取一个分数；函数读取列表，不修改其中的元素。\n\n累加变量必须在循环外初始化。total 从 0 开始，每一轮增加当前 score；若在循环内重新设为 0，就无法保留前面元素的累计结果。\n\nreturn 在循环后返回完整总和。若放进循环体，会在处理第一项时结束函数。空列表不执行循环，最后返回初始值 0；print 只展示结果，不代替函数的 return。",
+          "worked_example": {
+            "explanation": "用 for 循环遍历数值列表，在局部变量中累加，并通过 return 返回总和；处理空列表。",
+            "files": [
+              {
+                "path": "scores.py",
+                "language": "python",
+                "role": "module",
+                "content": "def sum_scores(scores):\n    total = 0\n    for score in scores:\n        total += score\n    return total\n"
+              },
+              {
+                "path": "main.py",
+                "language": "python",
+                "role": "entry",
+                "content": "from scores import sum_scores\n\n\ndef main():\n    print(sum_scores([2, 4, 6]))\n    print(sum_scores([]))\n\n\nif __name__ == '__main__':\n    main()\n"
+              }
+            ],
+            "entry_file": "main.py",
+            "call_sequence": [
+              {
+                "step": 1,
+                "file": "main.py",
+                "function": "main",
+                "note": "分别传入普通数值列表和空列表。"
+              },
+              {
+                "step": 2,
+                "file": "scores.py",
+                "function": "sum_scores",
+                "note": "初始化总和、遍历元素并在循环后返回。"
+              }
+            ],
+            "expected_output": "main.py › main：[2,4,6] 的总和是 12，空列表总和是 0；输入列表保持不变。"
+          },
+          "pitfalls_debug": [
+            {
+              "title": "在循环内重置 total",
+              "cause": "每轮都会丢弃已经累加的结果。",
+              "fix": "在进入循环之前把 total 初始化为 0。"
+            },
+            {
+              "title": "在循环内提前 return",
+              "cause": "第一次迭代就结束函数，后续元素没有参与计算。",
+              "fix": "完成整个循环后再返回 total。"
+            }
+          ],
+          "teaching_memory": {
+            "key_concepts": [
+              "for 遍历列表元素",
+              "循环外初始化累加变量",
+              "循环后返回结果",
+              "空列表处理"
+            ],
+            "common_mistakes": [
+              "在循环内重置 total",
+              "在循环内提前 return"
+            ],
+            "assessment_targets": [
+              "为数值列表编写返回总和的函数。",
+              "解释为何 total 初始化在循环外、return 放在循环后。",
+              "验证 [2,4,6] 返回 12、空列表返回 0，且不改变输入列表。"
+            ]
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「列表遍历与累加函数」。"
+      },
+      "reference_facts": [
+        "sum_scores([2,4,6]) 返回 12，sum_scores([]) 返回 0，函数不修改输入列表。",
+        "循环体内的 return 会提前结束函数；在循环内重新初始化 total 会丢弃累计结果。"
+      ],
+      "required_knowledge_points": [
+        "for 遍历列表元素",
+        "循环外初始化累加变量",
+        "循环后返回结果",
+        "空列表处理"
+      ],
+      "acceptable_answer_points": [
+        "恰好生成 5 道单选题，答案唯一，解析说明原因且与教材、代码一致。",
+        "每个考点都能在固定 foundation、worked_example、pitfalls_debug 或 teaching_memory 中找到依据。",
+        "覆盖本章关键概念、教材已说明的边界和误区，包含代码理解或范围内的应用题，而非只考术语记忆。",
+        "可以更换数据或名称进行同知识点迁移，但不能依赖未提供的新概念、框架、版本或真实服务。",
+        "normal 主要验证已学概念和简单应用，题干提供足够上下文。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、选项、答案和解析与固定教材事实一致；推导代码行为时遵守教材明确的前提。",
+        "completeness": "题量准确，覆盖教材中的 required_knowledge_points 和主要误区，解析完整。",
+        "relevance": "仅考查提供的节点内容；更换场景允许，但未学的知识不能成为作答前提。",
+        "readability": "题干、代码与选项简洁清楚，解析可定位到具体概念或代码行为。",
+        "teaching_adaptation": "面向刚学完本章的初学者，normal 难度只调整已学内容内的推理和应用复杂度。"
+      },
+      "tags": [
+        "regression",
+        "python",
+        "posttest",
+        "beginner",
+        "normal",
+        "questions-5",
+        "fixed-context"
+      ]
+    },
+    {
+      "case_id": "reg40-posttest-03-javascript",
+      "dataset_version": "regression-40-v1",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "JavaScript 异步流程：async/await 与错误处理",
+        "question_count": 7,
+        "difficulty": "hard",
+        "kind": "post_test",
+        "plan_node_id": "50000000-0000-4000-8000-000000000003",
+        "source_card_content_id": "60000000-0000-4000-8000-000000000003",
+        "card_content_context": {
+          "plan_node_id": "50000000-0000-4000-8000-000000000003",
+          "card_content_id": "60000000-0000-4000-8000-000000000003",
+          "foundation": "async 函数总是返回 Promise。函数内部 return 10 时，调用者收到的是兑现值为 10 的 Promise；要获取该值，可以在另一个 async 函数里使用 await。\n\nawait 暂停当前 async 函数后续的执行，直到等待的 Promise 兑现或拒绝。它不阻塞整个 JavaScript 线程；等待兑现时返回该值，等待拒绝时会在 await 位置抛出拒绝原因。\n\ntry/catch 可以处理 await 传播的错误。loadTotal 等待读取函数产生的数值列表，再计算总和。示例的成功读取返回 [2,3,5]，因此总和为 10；拒绝的读取函数使 await 抛出 Error，main 的 catch 得到消息 load failed。",
+          "worked_example": {
+            "explanation": "理解 async 返回 Promise，使用 await 读取结果，在 try/catch 中处理拒绝；示例使用固定数据，不涉及真实网络。",
+            "files": [
+              {
+                "path": "src/total.js",
+                "language": "js",
+                "role": "module",
+                "content": "export async function loadTotal(loadScores) {\n  const scores = await loadScores();\n  return scores.reduce((total, score) => total + score, 0);\n}\n"
+              },
+              {
+                "path": "src/main.js",
+                "language": "js",
+                "role": "entry",
+                "content": "import { loadTotal } from './total.js';\n\nasync function main() {\n  const total = await loadTotal(async () => [2, 3, 5]);\n  console.log(total);\n  try {\n    await loadTotal(async () => { throw new Error('load failed'); });\n  } catch (error) {\n    console.log(error.message);\n  }\n}\n\nmain().catch(console.error);\n"
+              }
+            ],
+            "entry_file": "src/main.js",
+            "call_sequence": [
+              {
+                "step": 1,
+                "file": "src/main.js",
+                "function": "main",
+                "note": "调用成功读取和失败读取两条路径。"
+              },
+              {
+                "step": 2,
+                "file": "src/total.js",
+                "function": "loadTotal",
+                "note": "等待数值列表后求和，读取拒绝时传播错误。"
+              }
+            ],
+            "expected_output": "src/main.js › main：成功路径得到 10，失败路径捕获消息 load failed；没有实际网络请求。"
+          },
+          "pitfalls_debug": [
+            {
+              "title": "把 async 的返回值直接当数字",
+              "cause": "async 调用返回 Promise，而不是直接返回兑现值。",
+              "fix": "使用 await 或 then 获取计算结果。"
+            },
+            {
+              "title": "没有 await 却期待 try/catch 捕获拒绝",
+              "cause": "未等待的 Promise 拒绝不会在该同步 try 块中直接抛出。",
+              "fix": "在 try 块中 await，或为 Promise 显式添加 catch。"
+            }
+          ],
+          "teaching_memory": {
+            "key_concepts": [
+              "async 返回 Promise",
+              "await 获取兑现值",
+              "拒绝通过 await 进入 catch",
+              "await 不阻塞整个线程"
+            ],
+            "common_mistakes": [
+              "把 async 的返回值直接当数字",
+              "没有 await 却期待 try/catch 捕获拒绝"
+            ],
+            "assessment_targets": [
+              "解释 async 函数为什么返回 Promise。",
+              "使用 await 获取兑现值，并通过 try/catch 捕获拒绝。",
+              "说明给定 loadTotal 示例中成功返回 10、失败进入 catch 的原因。"
+            ]
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「async/await 与错误处理」。"
+      },
+      "reference_facts": [
+        "loadTotal 等待 [2,3,5] 后的兑现值为 10；loadScores 拒绝时 loadTotal 也拒绝。",
+        "async 调用返回 Promise，await 只暂停当前 async 函数而不阻塞整个线程。"
+      ],
+      "required_knowledge_points": [
+        "async 返回 Promise",
+        "await 获取兑现值",
+        "拒绝通过 await 进入 catch",
+        "await 不阻塞整个线程"
+      ],
+      "acceptable_answer_points": [
+        "恰好生成 7 道单选题，答案唯一，解析说明原因且与教材、代码一致。",
+        "每个考点都能在固定 foundation、worked_example、pitfalls_debug 或 teaching_memory 中找到依据。",
+        "覆盖本章关键概念、教材已说明的边界和误区，包含代码理解或范围内的应用题，而非只考术语记忆。",
+        "可以更换数据或名称进行同知识点迁移，但不能依赖未提供的新概念、框架、版本或真实服务。",
+        "hard 增加已学内容内的组合、调试或边界推理，不因提分要求引入章节之外知识。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、选项、答案和解析与固定教材事实一致；推导代码行为时遵守教材明确的前提。",
+        "completeness": "题量准确，覆盖教材中的 required_knowledge_points 和主要误区，解析完整。",
+        "relevance": "仅考查提供的节点内容；更换场景允许，但未学的知识不能成为作答前提。",
+        "readability": "题干、代码与选项简洁清楚，解析可定位到具体概念或代码行为。",
+        "teaching_adaptation": "面向刚学完本章的初学者，hard 难度只调整已学内容内的推理和应用复杂度。"
+      },
+      "tags": [
+        "regression",
+        "javascript",
+        "posttest",
+        "beginner",
+        "hard",
+        "questions-7",
+        "fixed-context"
+      ]
+    },
+    {
+      "case_id": "reg40-posttest-04-java",
+      "dataset_version": "regression-40-v1",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "Java 面向对象基础：构造方法与实例状态",
+        "question_count": 6,
+        "difficulty": "normal",
+        "kind": "post_test",
+        "plan_node_id": "50000000-0000-4000-8000-000000000004",
+        "source_card_content_id": "60000000-0000-4000-8000-000000000004",
+        "card_content_context": {
+          "plan_node_id": "50000000-0000-4000-8000-000000000004",
+          "card_content_id": "60000000-0000-4000-8000-000000000004",
+          "foundation": "类描述对象的数据和行为，new 创建具体实例。Product 类声明 name 字段和 getName 方法；两个不同的 Product 对象各自拥有自己的 name。\n\n构造方法与类同名且没有返回类型。Product(String name) 在创建对象时执行，this.name = name 将参数保存到当前对象的实例字段。省略 this 写成 name = name 只会把参数赋给自身，不能完成字段初始化。\n\nprivate 限制外部直接访问字段。main 通过公开的 getName 方法读取对象名称，不直接读取 private 字段。字段属于实例，所以修改或初始化一个对象的状态不会自动覆盖另一个实例。",
+          "worked_example": {
+            "explanation": "通过 Product 类说明构造方法如何初始化 private 实例字段，以及对象方法如何读取自身状态。",
+            "files": [
+              {
+                "path": "Product.java",
+                "language": "java",
+                "role": "module",
+                "content": "public class Product {\n    private final String name;\n\n    public Product(String name) {\n        this.name = name;\n    }\n\n    public String getName() {\n        return name;\n    }\n}\n"
+              },
+              {
+                "path": "Main.java",
+                "language": "java",
+                "role": "entry",
+                "content": "public class Main {\n    public static void main(String[] args) {\n        Product first = new Product(\"Book\");\n        Product second = new Product(\"Pen\");\n        System.out.println(first.getName());\n        System.out.println(second.getName());\n    }\n}\n"
+              }
+            ],
+            "entry_file": "Main.java",
+            "call_sequence": [
+              {
+                "step": 1,
+                "file": "Main.java",
+                "function": "main",
+                "note": "创建名称分别为 Book 和 Pen 的两个实例。"
+              },
+              {
+                "step": 2,
+                "file": "Product.java",
+                "function": "Product",
+                "note": "把构造参数存入当前对象的 name 字段。"
+              },
+              {
+                "step": 3,
+                "file": "Product.java",
+                "function": "getName",
+                "note": "返回当前实例的名称。"
+              }
+            ],
+            "expected_output": "Main.java › main：两个实例的名称分别为 Book 和 Pen，各自保持独立状态。"
+          },
+          "pitfalls_debug": [
+            {
+              "title": "为构造方法写 void",
+              "cause": "有返回类型的同名声明是普通方法，不能承担构造初始化职责。",
+              "fix": "构造方法使用类名且省略返回类型。"
+            },
+            {
+              "title": "把 name = name 当成字段赋值",
+              "cause": "同名参数遮蔽了字段，赋值没有写入对象状态。",
+              "fix": "使用 this.name = name 显式赋值给实例字段。"
+            }
+          ],
+          "teaching_memory": {
+            "key_concepts": [
+              "类与实例",
+              "构造方法初始化",
+              "this 区分字段和参数",
+              "private 字段与实例方法"
+            ],
+            "common_mistakes": [
+              "为构造方法写 void",
+              "把 name = name 当成字段赋值"
+            ],
+            "assessment_targets": [
+              "写出无返回类型且与类同名的构造方法。",
+              "使用 this.name 区分实例字段与同名参数。",
+              "解释两个 Product 实例的名称为何互不覆盖。"
+            ]
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「构造方法与实例状态」。"
+      },
+      "reference_facts": [
+        "Product(String name) 是无返回类型的构造方法；this.name 指当前实例的字段。",
+        "first.getName() 返回 Book，second.getName() 返回 Pen；两个对象的实例字段独立。"
+      ],
+      "required_knowledge_points": [
+        "类与实例",
+        "构造方法初始化",
+        "this 区分字段和参数",
+        "private 字段与实例方法"
+      ],
+      "acceptable_answer_points": [
+        "恰好生成 6 道单选题，答案唯一，解析说明原因且与教材、代码一致。",
+        "每个考点都能在固定 foundation、worked_example、pitfalls_debug 或 teaching_memory 中找到依据。",
+        "覆盖本章关键概念、教材已说明的边界和误区，包含代码理解或范围内的应用题，而非只考术语记忆。",
+        "可以更换数据或名称进行同知识点迁移，但不能依赖未提供的新概念、框架、版本或真实服务。",
+        "normal 主要验证已学概念和简单应用，题干提供足够上下文。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、选项、答案和解析与固定教材事实一致；推导代码行为时遵守教材明确的前提。",
+        "completeness": "题量准确，覆盖教材中的 required_knowledge_points 和主要误区，解析完整。",
+        "relevance": "仅考查提供的节点内容；更换场景允许，但未学的知识不能成为作答前提。",
+        "readability": "题干、代码与选项简洁清楚，解析可定位到具体概念或代码行为。",
+        "teaching_adaptation": "面向刚学完本章的初学者，normal 难度只调整已学内容内的推理和应用复杂度。"
+      },
+      "tags": [
+        "regression",
+        "java",
+        "posttest",
+        "beginner",
+        "normal",
+        "questions-6",
+        "fixed-context"
+      ]
+    },
+    {
+      "case_id": "reg40-posttest-05-go",
+      "dataset_version": "regression-40-v1",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "Go 数据处理与错误处理：切片遍历与 append",
+        "question_count": 8,
+        "difficulty": "hard",
+        "kind": "post_test",
+        "plan_node_id": "50000000-0000-4000-8000-000000000005",
+        "source_card_content_id": "60000000-0000-4000-8000-000000000005",
+        "card_content_context": {
+          "plan_node_id": "50000000-0000-4000-8000-000000000005",
+          "card_content_id": "60000000-0000-4000-8000-000000000005",
+          "foundation": "切片表示对一段底层数组的访问，len 返回当前元素数量。[]int{2,4} 的长度是 2，元素的非负索引从 0 开始且小于 len。\n\nappend 返回包含新元素的切片。必须保存返回值，如 values = append(values, 6)；调用后 values 的长度变为 3。append 在容量不足时可能更换底层数组，不能认为所有追加都必然原地完成。\n\nrange 可以遍历切片元素。for _, value := range values 忽略索引并读取值，在循环外初始化 total，循环后返回。空切片不执行循环，因此总和是 0；本示例不修改已有元素。",
+          "worked_example": {
+            "explanation": "通过 []int 的求和示例讲解切片长度、range 遍历、接收 append 返回值以及空切片行为。",
+            "files": [
+              {
+                "path": "main.go",
+                "language": "go",
+                "role": "entry",
+                "content": "package main\n\nimport \"fmt\"\n\nfunc sum(values []int) int {\n    total := 0\n    for _, value := range values {\n        total += value\n    }\n    return total\n}\n\nfunc main() {\n    values := []int{2, 4}\n    values = append(values, 6)\n    fmt.Println(len(values), sum(values))\n    fmt.Println(sum([]int{}))\n}\n"
+              }
+            ],
+            "entry_file": "main.go",
+            "call_sequence": [
+              {
+                "step": 1,
+                "file": "main.go",
+                "function": "main",
+                "note": "保存追加后的切片，读取长度并调用求和函数。"
+              },
+              {
+                "step": 2,
+                "file": "main.go",
+                "function": "sum",
+                "note": "遍历整数元素，空切片保持总和为 0。"
+              }
+            ],
+            "expected_output": "main.go › main：追加后长度为 3、总和为 12；空切片的总和为 0。"
+          },
+          "pitfalls_debug": [
+            {
+              "title": "追加后没有保存返回的切片",
+              "cause": "append 返回的新长度和可能的新底层数组没有体现在原变量中。",
+              "fix": "使用 values = append(values, item) 保存返回值。"
+            },
+            {
+              "title": "遍历时把索引当成元素",
+              "cause": "range 的第一个返回值是索引，第二个才是元素值。",
+              "fix": "使用 _, value 接收元素值，或显式区分索引与值。"
+            }
+          ],
+          "teaching_memory": {
+            "key_concepts": [
+              "切片长度",
+              "range 遍历元素",
+              "append 返回更新后的切片",
+              "空切片处理"
+            ],
+            "common_mistakes": [
+              "追加后没有保存返回的切片",
+              "遍历时把索引当成元素"
+            ],
+            "assessment_targets": [
+              "用 range 遍历 []int 的值并求和。",
+              "把 append 的返回值赋给切片变量。",
+              "说明 [2,4] 追加 6 后长度为 3、总和为 12，空切片总和为 0。"
+            ]
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「切片遍历与 append」。"
+      },
+      "reference_facts": [
+        "[]int{2,4} 追加 6 并保存结果后长度为 3，总和为 12；空切片总和为 0。",
+        "append 返回更新后的切片并可能分配新的底层数组；range 的两个返回值是索引和元素值。"
+      ],
+      "required_knowledge_points": [
+        "切片长度",
+        "range 遍历元素",
+        "append 返回更新后的切片",
+        "空切片处理"
+      ],
+      "acceptable_answer_points": [
+        "恰好生成 8 道单选题，答案唯一，解析说明原因且与教材、代码一致。",
+        "每个考点都能在固定 foundation、worked_example、pitfalls_debug 或 teaching_memory 中找到依据。",
+        "覆盖本章关键概念、教材已说明的边界和误区，包含代码理解或范围内的应用题，而非只考术语记忆。",
+        "可以更换数据或名称进行同知识点迁移，但不能依赖未提供的新概念、框架、版本或真实服务。",
+        "hard 增加已学内容内的组合、调试或边界推理，不因提分要求引入章节之外知识。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、选项、答案和解析与固定教材事实一致；推导代码行为时遵守教材明确的前提。",
+        "completeness": "题量准确，覆盖教材中的 required_knowledge_points 和主要误区，解析完整。",
+        "relevance": "仅考查提供的节点内容；更换场景允许，但未学的知识不能成为作答前提。",
+        "readability": "题干、代码与选项简洁清楚，解析可定位到具体概念或代码行为。",
+        "teaching_adaptation": "面向刚学完本章的初学者，hard 难度只调整已学内容内的推理和应用复杂度。"
+      },
+      "tags": [
+        "regression",
+        "go",
+        "posttest",
+        "beginner",
+        "hard",
+        "questions-8",
+        "fixed-context"
+      ]
+    },
+    {
+      "case_id": "reg40-posttest-06-c",
+      "dataset_version": "regression-40-v1",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "C 语言数组与内存基础：数组求和与长度传递",
+        "question_count": 5,
+        "difficulty": "normal",
+        "kind": "post_test",
+        "plan_node_id": "50000000-0000-4000-8000-000000000006",
+        "source_card_content_id": "60000000-0000-4000-8000-000000000006",
+        "card_content_context": {
+          "plan_node_id": "50000000-0000-4000-8000-000000000006",
+          "card_content_id": "60000000-0000-4000-8000-000000000006",
+          "foundation": "数组元素必须在有效边界内访问。本例只接收总和不会溢出 int 的小整数；3 个元素的有效索引是 0、1、2，循环条件 i < count 正好覆盖这些元素，i <= count 会多访问一项。\n\n函数接收指针和元素数量。sum_array 的 values 指向至少 count 个有效整数，values[i] 读取第 i 项。数组传入函数后，参数不自动保存原数组长度，所以 count 必须由调用方提供。\n\nconst int *values 表示函数通过这个指针只读元素。本例不修改输入数组。main 中 values 是实际数组，可以用 sizeof(values) / sizeof(values[0]) 得到元素数量；若在 sum_array 内对指针参数做相同计算，则不能得到调用方的数组长度。",
+          "worked_example": {
+            "explanation": "将数组指针和元素数量一起传给求和函数，使用小于 count 的索引条件避免越界。",
+            "files": [
+              {
+                "path": "sum.h",
+                "language": "c",
+                "role": "types",
+                "content": "#ifndef SUM_H\n#define SUM_H\n\n#include <stddef.h>\n\nint sum_array(const int *values, size_t count);\n\n#endif\n"
+              },
+              {
+                "path": "sum.c",
+                "language": "c",
+                "role": "module",
+                "content": "#include \"sum.h\"\n\nint sum_array(const int *values, size_t count) {\n    int total = 0;\n    for (size_t i = 0; i < count; ++i) {\n        total += values[i];\n    }\n    return total;\n}\n"
+              },
+              {
+                "path": "main.c",
+                "language": "c",
+                "role": "entry",
+                "content": "#include <stdio.h>\n#include \"sum.h\"\n\nint main(void) {\n    int values[] = {2, 4, 6};\n    size_t count = sizeof(values) / sizeof(values[0]);\n    printf(\"%d\\n\", sum_array(values, count));\n    return 0;\n}\n"
+              }
+            ],
+            "entry_file": "main.c",
+            "call_sequence": [
+              {
+                "step": 1,
+                "file": "main.c",
+                "function": "main",
+                "note": "在实际数组所在作用域计算元素数量并传给 sum_array。"
+              },
+              {
+                "step": 2,
+                "file": "sum.c",
+                "function": "sum_array",
+                "note": "仅访问小于 count 的索引并返回总和。"
+              }
+            ],
+            "expected_output": "main.c › main：有效数组 {2,4,6} 的总和为 12；sum_array 不修改数组元素。"
+          },
+          "pitfalls_debug": [
+            {
+              "title": "把循环条件写成 i <= count",
+              "cause": "最后一次迭代访问 count 索引，超出数组有效范围。",
+              "fix": "使用 i < count，并确认 count 不大于实际可访问元素数。"
+            },
+            {
+              "title": "在函数里用指针 sizeof 推算数组长度",
+              "cause": "参数是指针，sizeof 测量指针本身而不是调用方完整数组。",
+              "fix": "由调用方计算或持有元素数量并显式传入。"
+            }
+          ],
+          "teaching_memory": {
+            "key_concepts": [
+              "有效数组索引",
+              "指针与元素访问",
+              "显式传递元素数量",
+              "const 只读访问"
+            ],
+            "common_mistakes": [
+              "把循环条件写成 i <= count",
+              "在函数里用指针 sizeof 推算数组长度"
+            ],
+            "assessment_targets": [
+              "为 sum_array 同时传入有效数组和正确元素数量。",
+              "使用 i < count 遍历有效索引，避免写成 i <= count。",
+              "解释 main 中的数组 sizeof 计算与函数中指针 sizeof 的区别。"
+            ]
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「数组求和与长度传递」。"
+      },
+      "reference_facts": [
+        "sum_array 接收至少 count 个有效元素；示例数组 {2,4,6} 的总和为 12。",
+        "i < count 保持有效索引；数组越界是未定义行为，不保证固定异常或输出。",
+        "sizeof 指针参数不能获取原数组元素数量；const int * 禁止通过该指针修改元素。"
+      ],
+      "required_knowledge_points": [
+        "有效数组索引",
+        "指针与元素访问",
+        "显式传递元素数量",
+        "const 只读访问"
+      ],
+      "acceptable_answer_points": [
+        "恰好生成 5 道单选题，答案唯一，解析说明原因且与教材、代码一致。",
+        "每个考点都能在固定 foundation、worked_example、pitfalls_debug 或 teaching_memory 中找到依据。",
+        "覆盖本章关键概念、教材已说明的边界和误区，包含代码理解或范围内的应用题，而非只考术语记忆。",
+        "可以更换数据或名称进行同知识点迁移，但不能依赖未提供的新概念、框架、版本或真实服务。",
+        "normal 主要验证已学概念和简单应用，题干提供足够上下文。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、选项、答案和解析与固定教材事实一致；推导代码行为时遵守教材明确的前提。",
+        "completeness": "题量准确，覆盖教材中的 required_knowledge_points 和主要误区，解析完整。",
+        "relevance": "仅考查提供的节点内容；更换场景允许，但未学的知识不能成为作答前提。",
+        "readability": "题干、代码与选项简洁清楚，解析可定位到具体概念或代码行为。",
+        "teaching_adaptation": "面向刚学完本章的初学者，normal 难度只调整已学内容内的推理和应用复杂度。"
+      },
+      "tags": [
+        "regression",
+        "c",
+        "posttest",
+        "beginner",
+        "normal",
+        "questions-5",
+        "fixed-context"
+      ]
+    },
+    {
+      "case_id": "reg40-posttest-07-sql",
+      "dataset_version": "regression-40-v1",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "SQL 查询与数据汇总：WHERE、GROUP BY 与 HAVING",
+        "question_count": 10,
+        "difficulty": "hard",
+        "kind": "post_test",
+        "plan_node_id": "50000000-0000-4000-8000-000000000007",
+        "source_card_content_id": "60000000-0000-4000-8000-000000000007",
+        "card_content_context": {
+          "plan_node_id": "50000000-0000-4000-8000-000000000007",
+          "card_content_id": "60000000-0000-4000-8000-000000000007",
+          "foundation": "WHERE 先过滤源数据行。本例 sales(team, amount) 有 ('A',10)、('A',30)、('B',60)、('C',NULL)。WHERE amount IS NOT NULL 去掉没有金额的 C 行；不能用 amount = NULL 判断空值。\n\nGROUP BY team 把剩余行按团队归为一组，SUM(amount) 计算每个团队的总额。A 的总额为 40，B 为 60。SUM 忽略 NULL，若一组全部是 NULL，其 SUM 结果为 NULL；本例已经先过滤空值行。\n\nHAVING 在聚合之后过滤分组。HAVING SUM(amount) >= 40 保留 A 与 B；把条件改为 >= 50 只保留 B。ORDER BY team 明确结果顺序，不依赖数据库默认行顺序。Python 的 sqlite3 只负责准备固定数据和执行这里的查询，不引入其他数据库方言知识。",
+          "worked_example": {
+            "explanation": "先过滤有金额的记录，再按团队分组计算 SUM，最后用 HAVING 过滤团队总额。使用 Python 标准库 sqlite3 承载完整示例。",
+            "files": [
+              {
+                "path": "sales.py",
+                "language": "python",
+                "role": "entry",
+                "content": "import sqlite3\n\n\ndef query_totals(connection):\n    return connection.execute('''\n        SELECT team, SUM(amount) AS total\n        FROM sales\n        WHERE amount IS NOT NULL\n        GROUP BY team\n        HAVING SUM(amount) >= 40\n        ORDER BY team\n    ''').fetchall()\n\n\ndef main():\n    connection = sqlite3.connect(':memory:')\n    try:\n        connection.execute('CREATE TABLE sales (team TEXT, amount INTEGER)')\n        connection.executemany(\n            'INSERT INTO sales (team, amount) VALUES (?, ?)',\n            [('A', 10), ('A', 30), ('B', 60), ('C', None)],\n        )\n        print(query_totals(connection))\n    finally:\n        connection.close()\n\n\nif __name__ == '__main__':\n    main()\n"
+              }
+            ],
+            "entry_file": "sales.py",
+            "call_sequence": [
+              {
+                "step": 1,
+                "file": "sales.py",
+                "function": "main",
+                "note": "创建内存表并加入四条固定数据。"
+              },
+              {
+                "step": 2,
+                "file": "sales.py",
+                "function": "query_totals",
+                "note": "执行行过滤、分组汇总和分组过滤查询。"
+              }
+            ],
+            "expected_output": "sales.py › main：查询结果按团队顺序为 [('A',40),('B',60)]，C 的空金额行被过滤。"
+          },
+          "pitfalls_debug": [
+            {
+              "title": "用 WHERE SUM(amount) >= 40 过滤分组",
+              "cause": "WHERE 发生在分组聚合前，不能把聚合条件放在这里。",
+              "fix": "将聚合后的总额条件放入 HAVING。"
+            },
+            {
+              "title": "使用 amount = NULL 判断空值",
+              "cause": "普通等号比较 NULL 不会得到预期的真值。",
+              "fix": "使用 IS NULL 或 IS NOT NULL 明确判断。"
+            }
+          ],
+          "teaching_memory": {
+            "key_concepts": [
+              "WHERE 行过滤",
+              "GROUP BY 分组",
+              "SUM 聚合与 NULL",
+              "HAVING 分组过滤"
+            ],
+            "common_mistakes": [
+              "用 WHERE SUM(amount) >= 40 过滤分组",
+              "使用 amount = NULL 判断空值"
+            ],
+            "assessment_targets": [
+              "写出 WHERE amount IS NOT NULL 后再 GROUP BY team 的查询。",
+              "使用 HAVING SUM(amount) >= 40 过滤团队汇总。",
+              "根据 A 的 10、30，B 的 60 和 C 的 NULL 推导结果 A:40、B:60。"
+            ]
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「WHERE、GROUP BY 与 HAVING」。"
+      },
+      "reference_facts": [
+        "固定数据中 A 的总额为 40、B 为 60；WHERE amount IS NOT NULL 排除 C。",
+        "HAVING SUM(amount) >= 40 保留 A、B，改成 >= 50 只保留 B。",
+        "WHERE 过滤行、HAVING 过滤分组；SUM 忽略 NULL，全 NULL 分组的 SUM 为 NULL。"
+      ],
+      "required_knowledge_points": [
+        "WHERE 行过滤",
+        "GROUP BY 分组",
+        "SUM 聚合与 NULL",
+        "HAVING 分组过滤"
+      ],
+      "acceptable_answer_points": [
+        "恰好生成 10 道单选题，答案唯一，解析说明原因且与教材、代码一致。",
+        "每个考点都能在固定 foundation、worked_example、pitfalls_debug 或 teaching_memory 中找到依据。",
+        "覆盖本章关键概念、教材已说明的边界和误区，包含代码理解或范围内的应用题，而非只考术语记忆。",
+        "可以更换数据或名称进行同知识点迁移，但不能依赖未提供的新概念、框架、版本或真实服务。",
+        "hard 增加已学内容内的组合、调试或边界推理，不因提分要求引入章节之外知识。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、选项、答案和解析与固定教材事实一致；推导代码行为时遵守教材明确的前提。",
+        "completeness": "题量准确，覆盖教材中的 required_knowledge_points 和主要误区，解析完整。",
+        "relevance": "仅考查提供的节点内容；更换场景允许，但未学的知识不能成为作答前提。",
+        "readability": "题干、代码与选项简洁清楚，解析可定位到具体概念或代码行为。",
+        "teaching_adaptation": "面向刚学完本章的初学者，hard 难度只调整已学内容内的推理和应用复杂度。"
+      },
+      "tags": [
+        "regression",
+        "sql",
+        "posttest",
+        "beginner",
+        "hard",
+        "questions-10",
+        "fixed-context"
+      ]
+    },
+    {
+      "case_id": "reg40-posttest-08-http",
+      "dataset_version": "regression-40-v1",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "HTTP 与 JSON 接口调用：状态检查与 JSON 响应读取",
+        "question_count": 6,
+        "difficulty": "normal",
+        "kind": "post_test",
+        "plan_node_id": "50000000-0000-4000-8000-000000000008",
+        "source_card_content_id": "60000000-0000-4000-8000-000000000008",
+        "card_content_context": {
+          "plan_node_id": "50000000-0000-4000-8000-000000000008",
+          "card_content_id": "60000000-0000-4000-8000-000000000008",
+          "foundation": "HTTP 状态和网络是否成功连接是两件事。fetch 通常在收到 404 或 500 响应时仍兑现为 Response，所以应用要检查 response.ok；ok 表示状态在 200 至 299 范围。网络失败则可能直接使 fetch 返回的 Promise 拒绝。\n\n204 是成功但没有响应内容的状态。读取函数在 status 为 204 时返回 null，不调用 json，避免把没有内容的成功响应当成 JSON 解析失败。\n\n其他成功响应可以通过 await response.json() 读取 JSON。json 返回 Promise，内容不是合法 JSON 时会拒绝。本例用固定 Response 构造合法 200 JSON、204 和 404，展示各分支；合法 JSON 也不意味着所有业务字段都已经校验。",
+          "worked_example": {
+            "explanation": "使用 Response.ok 检查 HTTP 状态，对 204 返回 null，对其他成功响应异步读取 JSON；使用固定 Response 对象验证分支。",
+            "files": [
+              {
+                "path": "src/response.js",
+                "language": "js",
+                "role": "module",
+                "content": "export async function readJsonResponse(response) {\n  if (!response.ok) {\n    throw new Error('HTTP ' + response.status);\n  }\n  if (response.status === 204) {\n    return null;\n  }\n  return await response.json();\n}\n"
+              },
+              {
+                "path": "src/main.js",
+                "language": "js",
+                "role": "entry",
+                "content": "import { readJsonResponse } from './response.js';\n\nasync function main() {\n  const success = new Response(JSON.stringify({ id: 1 }), {\n    status: 200,\n    headers: { 'Content-Type': 'application/json' },\n  });\n  console.log((await readJsonResponse(success)).id);\n  console.log(await readJsonResponse(new Response(null, { status: 204 })));\n  try {\n    await readJsonResponse(new Response(null, { status: 404 }));\n  } catch (error) {\n    console.log(error.message);\n  }\n}\n\nmain().catch(console.error);\n"
+              }
+            ],
+            "entry_file": "src/main.js",
+            "call_sequence": [
+              {
+                "step": 1,
+                "file": "src/main.js",
+                "function": "main",
+                "note": "创建三种固定响应，无需访问真实接口。"
+              },
+              {
+                "step": 2,
+                "file": "src/response.js",
+                "function": "readJsonResponse",
+                "note": "先检查状态，再处理空响应或读取 JSON。"
+              }
+            ],
+            "expected_output": "src/main.js › main：200 响应读取到 id 为 1，204 返回 null，404 捕获 HTTP 404 错误。"
+          },
+          "pitfalls_debug": [
+            {
+              "title": "只依赖 fetch 的 catch 判断 HTTP 错误",
+              "cause": "HTTP 404、500 通常仍是已收到的响应，不自动触发 fetch 拒绝。",
+              "fix": "先检查 Response.ok 或状态码再选择处理路径。"
+            },
+            {
+              "title": "对 204 一律调用 json",
+              "cause": "无内容响应没有 JSON 文本可解析。",
+              "fix": "在读取响应体之前为 204 提供明确分支。"
+            }
+          ],
+          "teaching_memory": {
+            "key_concepts": [
+              "Response.ok 与 HTTP 状态",
+              "204 无响应内容",
+              "异步 JSON 读取",
+              "HTTP 错误与网络失败的区别"
+            ],
+            "common_mistakes": [
+              "只依赖 fetch 的 catch 判断 HTTP 错误",
+              "对 204 一律调用 json"
+            ],
+            "assessment_targets": [
+              "对非 2xx 响应报告 HTTP 错误。",
+              "在 204 分支返回 null 而不是读取空 JSON。",
+              "对固定 200 JSON 响应读取 id:1，解释 fetch 不自动拒绝所有 HTTP 错误。"
+            ]
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「状态检查与 JSON 响应读取」。"
+      },
+      "reference_facts": [
+        "示例中 200 JSON 响应的 id 是 1，204 返回 null，404 使读取函数拒绝并带有 HTTP 404 消息。",
+        "Response.ok 对 200 至 299 为真；fetch 通常不因 4xx、5xx 自动拒绝；非法 JSON 会使 json 的 Promise 拒绝。"
+      ],
+      "required_knowledge_points": [
+        "Response.ok 与 HTTP 状态",
+        "204 无响应内容",
+        "异步 JSON 读取",
+        "HTTP 错误与网络失败的区别"
+      ],
+      "acceptable_answer_points": [
+        "恰好生成 6 道单选题，答案唯一，解析说明原因且与教材、代码一致。",
+        "每个考点都能在固定 foundation、worked_example、pitfalls_debug 或 teaching_memory 中找到依据。",
+        "覆盖本章关键概念、教材已说明的边界和误区，包含代码理解或范围内的应用题，而非只考术语记忆。",
+        "可以更换数据或名称进行同知识点迁移，但不能依赖未提供的新概念、框架、版本或真实服务。",
+        "normal 主要验证已学概念和简单应用，题干提供足够上下文。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、选项、答案和解析与固定教材事实一致；推导代码行为时遵守教材明确的前提。",
+        "completeness": "题量准确，覆盖教材中的 required_knowledge_points 和主要误区，解析完整。",
+        "relevance": "仅考查提供的节点内容；更换场景允许，但未学的知识不能成为作答前提。",
+        "readability": "题干、代码与选项简洁清楚，解析可定位到具体概念或代码行为。",
+        "teaching_adaptation": "面向刚学完本章的初学者，normal 难度只调整已学内容内的推理和应用复杂度。"
+      },
+      "tags": [
+        "regression",
+        "http",
+        "posttest",
+        "beginner",
+        "normal",
+        "questions-6",
+        "fixed-context"
+      ]
+    },
+    {
+      "case_id": "reg40-posttest-09-testing",
+      "dataset_version": "regression-40-v1",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "JavaScript 测试设计与可靠性：断言与边界用例",
+        "question_count": 8,
+        "difficulty": "hard",
+        "kind": "post_test",
+        "plan_node_id": "50000000-0000-4000-8000-000000000009",
+        "source_card_content_id": "60000000-0000-4000-8000-000000000009",
+        "card_content_context": {
+          "plan_node_id": "50000000-0000-4000-8000-000000000009",
+          "card_content_id": "60000000-0000-4000-8000-000000000009",
+          "foundation": "断言把实际结果与明确预期比较。calculateTotal 的合同要求单价 cents 和数量 quantity 都是非负整数，并且乘积处于安全整数范围；返回金额以分计。assert.equal(calculateTotal(125,2),250) 验证普通结果，单纯打印 250 不会自动判断对错。\n\n边界输入需要独立用例。数量为 0 时返回 0，是合法边界而不是异常。负数或非整数输入违反合同，函数抛出 RangeError，assert.throws 可以检查该错误类型。\n\n确定性用例只依赖固定输入。calculateTotal 不读取时间、不访问网络、不修改共享状态，因此各断言可以独立验证函数行为。断言失败会抛出错误；覆盖率再高，也不能替代这些正确的预期和失败路径检查。",
+          "worked_example": {
+            "explanation": "使用 Node.js 内置 assert/strict 为整数金额函数编写普通、零数量和非法输入测试，不使用外部测试框架。",
+            "files": [
+              {
+                "path": "src/total.js",
+                "language": "js",
+                "role": "module",
+                "content": "export function calculateTotal(cents, quantity) {\n  if (!Number.isSafeInteger(cents) || cents < 0 ||\n      !Number.isSafeInteger(quantity) || quantity < 0) {\n    throw new RangeError('non-negative integers required');\n  }\n  const total = cents * quantity;\n  if (!Number.isSafeInteger(total)) {\n    throw new RangeError('total exceeds safe integer range');\n  }\n  return total;\n}\n"
+              },
+              {
+                "path": "tests/total.test.js",
+                "language": "js",
+                "role": "test",
+                "content": "import assert from 'node:assert/strict';\nimport { calculateTotal } from '../src/total.js';\n\nfunction testTotal() {\n  assert.equal(calculateTotal(125, 2), 250);\n  assert.equal(calculateTotal(125, 0), 0);\n  assert.throws(() => calculateTotal(125, -1), RangeError);\n  assert.throws(() => calculateTotal(125, 1.5), RangeError);\n}\n\ntestTotal();\n"
+              }
+            ],
+            "entry_file": "tests/total.test.js",
+            "call_sequence": [
+              {
+                "step": 1,
+                "file": "tests/total.test.js",
+                "function": "testTotal",
+                "note": "使用固定输入分别验证返回值、零边界和异常。"
+              },
+              {
+                "step": 2,
+                "file": "src/total.js",
+                "function": "calculateTotal",
+                "note": "校验输入、计算整数金额并在违规时抛出 RangeError。"
+              }
+            ],
+            "expected_output": "tests/total.test.js › testTotal：普通金额为 250、零数量金额为 0；负数量和小数数量产生 RangeError，断言按这些合同验证。"
+          },
+          "pitfalls_debug": [
+            {
+              "title": "用打印结果代替断言",
+              "cause": "没有自动比较实际值与预期，错误结果可能无人发现。",
+              "fix": "使用明确返回值断言或异常断言。"
+            },
+            {
+              "title": "把非法输入当成零值边界",
+              "cause": "混淆合同允许的 0 和合同禁止的负数、非整数。",
+              "fix": "分别为合法零值和非法输入设计独立用例。"
+            }
+          ],
+          "teaching_memory": {
+            "key_concepts": [
+              "返回值断言",
+              "零值边界",
+              "异常断言",
+              "确定性与独立用例"
+            ],
+            "common_mistakes": [
+              "用打印结果代替断言",
+              "把非法输入当成零值边界"
+            ],
+            "assessment_targets": [
+              "为单价单位为分、数量为非负整数的函数断言普通结果和零数量结果。",
+              "使用 assert.throws 检查负数量触发 RangeError。",
+              "解释断言失败会报告问题，而只打印结果不会自动验证。"
+            ]
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「断言与边界用例」。"
+      },
+      "reference_facts": [
+        "calculateTotal(125,2) 为 250，calculateTotal(125,0) 为 0，数量 -1 或 1.5 触发 RangeError。",
+        "assert.equal 验证返回值，assert.throws 验证异常；只打印结果不等价于断言。"
+      ],
+      "required_knowledge_points": [
+        "返回值断言",
+        "零值边界",
+        "异常断言",
+        "确定性与独立用例"
+      ],
+      "acceptable_answer_points": [
+        "恰好生成 8 道单选题，答案唯一，解析说明原因且与教材、代码一致。",
+        "每个考点都能在固定 foundation、worked_example、pitfalls_debug 或 teaching_memory 中找到依据。",
+        "覆盖本章关键概念、教材已说明的边界和误区，包含代码理解或范围内的应用题，而非只考术语记忆。",
+        "可以更换数据或名称进行同知识点迁移，但不能依赖未提供的新概念、框架、版本或真实服务。",
+        "hard 增加已学内容内的组合、调试或边界推理，不因提分要求引入章节之外知识。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、选项、答案和解析与固定教材事实一致；推导代码行为时遵守教材明确的前提。",
+        "completeness": "题量准确，覆盖教材中的 required_knowledge_points 和主要误区，解析完整。",
+        "relevance": "仅考查提供的节点内容；更换场景允许，但未学的知识不能成为作答前提。",
+        "readability": "题干、代码与选项简洁清楚，解析可定位到具体概念或代码行为。",
+        "teaching_adaptation": "面向刚学完本章的初学者，hard 难度只调整已学内容内的推理和应用复杂度。"
+      },
+      "tags": [
+        "regression",
+        "testing",
+        "posttest",
+        "beginner",
+        "hard",
+        "questions-8",
+        "fixed-context"
+      ]
+    },
+    {
+      "case_id": "reg40-posttest-10-algorithms",
+      "dataset_version": "regression-40-v1",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "算法设计与复杂度分析：二分搜索的区间与边界",
+        "question_count": 10,
+        "difficulty": "hard",
+        "kind": "post_test",
+        "plan_node_id": "50000000-0000-4000-8000-000000000010",
+        "source_card_content_id": "60000000-0000-4000-8000-000000000010",
+        "card_content_context": {
+          "plan_node_id": "50000000-0000-4000-8000-000000000010",
+          "card_content_id": "60000000-0000-4000-8000-000000000010",
+          "foundation": "二分搜索依赖升序排列的输入。函数不排序、不修改列表，命中时返回目标的索引，不是目标值；如果列表中有重复目标，只保证返回某个匹配位置，不保证第一个。\n\n搜索区间是左右闭区间 [low,high]。low 从 0 开始，high 从 len(values)-1 开始；low <= high 时区间仍有候选元素。中点 mid=(low+high)//2，小于目标时令 low=mid+1，大于目标时令 high=mid-1，排除已经比较过的中点。\n\n未命中时区间逐步变空，函数返回 -1。空列表的初始 high 为 -1，循环立即跳过。对 [1,3,5,7,9] 查找 7 返回索引 3，查找 2 返回 -1。每轮约减半候选数量，时间复杂度为 O(log n)，迭代实现额外空间为 O(1)。",
+          "worked_example": {
+            "explanation": "在升序整数列表上使用左右闭区间二分搜索，命中时返回索引，未命中返回 -1，不保证重复元素的首个位置。",
+            "files": [
+              {
+                "path": "search.py",
+                "language": "python",
+                "role": "module",
+                "content": "def binary_search(values, target):\n    low = 0\n    high = len(values) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if values[mid] == target:\n            return mid\n        if values[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1\n"
+              },
+              {
+                "path": "main.py",
+                "language": "python",
+                "role": "entry",
+                "content": "from search import binary_search\n\n\ndef main():\n    values = [1, 3, 5, 7, 9]\n    print(binary_search(values, 7))\n    print(binary_search(values, 2))\n    print(binary_search([], 7))\n\n\nif __name__ == '__main__':\n    main()\n"
+              }
+            ],
+            "entry_file": "main.py",
+            "call_sequence": [
+              {
+                "step": 1,
+                "file": "main.py",
+                "function": "main",
+                "note": "用命中、缺失目标和空列表验证固定输入。"
+              },
+              {
+                "step": 2,
+                "file": "search.py",
+                "function": "binary_search",
+                "note": "比较中点并排除已比较的位置，直到命中或区间为空。"
+              }
+            ],
+            "expected_output": "main.py › main：查找 7 返回索引 3，查找 2 和在空列表查找 7 均返回 -1。"
+          },
+          "pitfalls_debug": [
+            {
+              "title": "在无序列表上直接二分",
+              "cause": "中点比较不能决定目标所在方向，有序前提被破坏。",
+              "fix": "先确认升序前提；若业务需要原始索引，不能忽略排序对索引的影响。"
+            },
+            {
+              "title": "边界更新保留中点导致不前进",
+              "cause": "使用 low=mid 或 high=mid 可能使区间无法继续缩小。",
+              "fix": "在未命中分支使用 mid+1 或 mid-1 排除中点。"
+            }
+          ],
+          "teaching_memory": {
+            "key_concepts": [
+              "升序输入前提",
+              "左右闭区间",
+              "中点比较与区间缩小",
+              "空列表和未命中处理"
+            ],
+            "common_mistakes": [
+              "在无序列表上直接二分",
+              "边界更新保留中点导致不前进"
+            ],
+            "assessment_targets": [
+              "明确输入列表必须升序排列，返回的是索引而不是元素值。",
+              "使用 low <= high 和 mid+1、mid-1 保证区间缩小。",
+              "说明目标 7 的索引为 3，目标 2 和空列表返回 -1；重复元素只保证返回某个匹配索引。"
+            ]
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "background_summary": "已学习本章示例使用的基本变量、函数和控制流，正在系统学习「二分搜索的区间与边界」。"
+      },
+      "reference_facts": [
+        "给定升序列表 [1,3,5,7,9] 查找 7 的索引为 3，查找 2 返回 -1，空列表返回 -1。",
+        "实现使用左右闭区间 low<=high，未命中分支排除 mid；不保证返回重复目标的首个位置。"
+      ],
+      "required_knowledge_points": [
+        "升序输入前提",
+        "左右闭区间",
+        "中点比较与区间缩小",
+        "空列表和未命中处理"
+      ],
+      "acceptable_answer_points": [
+        "恰好生成 10 道单选题，答案唯一，解析说明原因且与教材、代码一致。",
+        "每个考点都能在固定 foundation、worked_example、pitfalls_debug 或 teaching_memory 中找到依据。",
+        "覆盖本章关键概念、教材已说明的边界和误区，包含代码理解或范围内的应用题，而非只考术语记忆。",
+        "可以更换数据或名称进行同知识点迁移，但不能依赖未提供的新概念、框架、版本或真实服务。",
+        "hard 增加已学内容内的组合、调试或边界推理，不因提分要求引入章节之外知识。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、选项、答案和解析与固定教材事实一致；推导代码行为时遵守教材明确的前提。",
+        "completeness": "题量准确，覆盖教材中的 required_knowledge_points 和主要误区，解析完整。",
+        "relevance": "仅考查提供的节点内容；更换场景允许，但未学的知识不能成为作答前提。",
+        "readability": "题干、代码与选项简洁清楚，解析可定位到具体概念或代码行为。",
+        "teaching_adaptation": "面向刚学完本章的初学者，hard 难度只调整已学内容内的推理和应用复杂度。"
+      },
+      "tags": [
+        "regression",
+        "algorithms",
+        "posttest",
+        "beginner",
+        "hard",
+        "questions-10",
+        "fixed-context"
+      ]
+    }
+  ]
+}

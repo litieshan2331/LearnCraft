@@ -180,7 +180,15 @@ function buildJudgeSystemPrompt(runType: EvaluationCase['run_type']): string {
 /** 返回四类业务工作流在 Judge 中的专属检查重点。 */
 function judgeWorkflowFocus(runType: EvaluationCase['run_type']): string {
   const focusByRunType: Record<EvaluationCase['run_type'], string> = {
-    assessment_generate: '- 当前工作流是 assessment_generate 前测：重点检查题目、选项、答案、解析、知识点覆盖、干扰项质量、难度和诊断性。',
+    assessment_generate: [
+      '- 当前工作流是 assessment_generate 前测：重点检查题目、选项、答案、解析、知识点覆盖、干扰项质量、难度和诊断性。',
+      '- 前测固定安排提高题：10 至 14 题安排 1 道，15 至 20 题安排 2 道；例如 12 道题中 11 道保持学习者当前水平，仅 1 道允许跨到高一级。beginner 最多跨到 intermediate，intermediate 最多跨到 advanced；advanced 的提高题仍保持 advanced，但增加综合复杂度。',
+      '- hard 提升当前水平内的应用复杂度，允许组合多个考点、调试、边界条件和迁移应用；不提高整套题的学习者等级，不扩大跨级配额。',
+      '- 同时涉及多个较复杂考点是正常的；不得仅凭术语名称、skill_tags、知识点数量，或出现类型收窄、空值检查、泛型等概念，就判定提高题过多或扣分。',
+      '- 判断是否跨级必须结合实际作答所需的前置知识、推理步骤，以及题干提供的说明和代码上下文。若认定跨级题超过配额，证据必须定位具体题目，说明其必须依赖哪种超出当前水平的能力，以及题干为何未提供足够支持；不能只罗列考点名称。',
+      '- 难度分配问题归入 teaching_adaptation；completeness 判断题量、要求覆盖和关键遗漏，不因复杂考点多或提高题比例的同一问题重复扣分。',
+      '- 检查相邻题目的 answer_key 是否相同、答案位置是否过度集中或存在可预测规律；若损害诊断性，在 teaching_adaptation 中提供具体题号与答案分布证据。',
+    ].join('\n'),
     plan_generate: '- 当前工作流是 plan_generate 学习路线：重点检查知识依赖、学习顺序、章节粒度、目标覆盖、完成标准、难度梯度和学习时间匹配。',
     card_content_generate: '- 当前工作流是 card_content_generate 节点内容：重点检查概念解释、代码和示例、常见误区、来源说明、教学记忆以及与当前章节的聚焦程度。',
     posttest_generate: '- 当前工作流是 posttest_generate 节点后测：重点检查题目、答案、解析、关键知识点覆盖、是否只考查已学习内容、迁移要求和错误解释。',

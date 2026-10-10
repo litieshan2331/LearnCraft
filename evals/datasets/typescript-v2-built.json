@@ -1,0 +1,245 @@
+{
+  "schema_version": "agent_eval.dataset.v1",
+  "dataset_version": "typescript-v2",
+  "cases": [
+    {
+      "case_id": "typescript-v2-assessment-default-beginner",
+      "dataset_version": "typescript-v2",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "TypeScript 类型安全基础",
+        "title": "TypeScript 类型安全入门",
+        "description": "学习变量、函数和对象的基础类型表达方式，并理解类型系统与运行时校验的边界。",
+        "desired_outcome": "能够阅读并编写包含基础类型注解的 TypeScript 代码。",
+        "question_count": 12,
+        "difficulty": "hard",
+        "kind": "diagnostic"
+      },
+      "learner_profile": {
+        "current_level": "beginner"
+      },
+      "reference_facts": [
+        "TypeScript 是 JavaScript 的静态类型检查超集。",
+        "类型注解主要在编译阶段帮助检查代码，不能替代外部输入的运行时校验。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 12 道题，并且每题包含题干、选项、答案、解析、技能标签和满分字段。",
+        "基础题覆盖变量、函数参数、返回值和对象的类型表达。",
+        "保留少量提高题检验类型推断或运行时边界，但整体适合没有画像信息的 beginner 学习者。",
+        "答案和解析能够解释正确选项的原因，避免把编译期类型检查描述成运行时校验。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、答案、解析和 TypeScript 事实准确；不混淆编译期检查与运行时行为。",
+        "completeness": "覆盖基础类型注解、函数类型、对象类型，并包含少量与目标相关的提高题。",
+        "relevance": "所有题目围绕 TypeScript 类型安全入门目标，不引入无关高级主题。",
+        "readability": "题干、选项、答案和解析结构清楚，术语和代码示例易读。",
+        "teaching_adaptation": "没有画像时按 beginner 组织难度；hard 只允许少量高一级迁移题。"
+      },
+      "tags": [
+        "typescript-v2",
+        "assessment",
+        "default-beginner",
+        "hard"
+      ]
+    },
+    {
+      "case_id": "typescript-v2-plan-typesafety",
+      "dataset_version": "typescript-v2",
+      "run_type": "plan_generate",
+      "input_snapshot": {
+        "goal": {
+          "id": "goal-typescript-v2",
+          "topic": "TypeScript 类型安全基础",
+          "title": "TypeScript 类型安全入门路线",
+          "description": "从基础类型和函数类型开始，逐步学习对象建模、联合类型和外部数据校验。",
+          "desired_outcome": "能够为小型 JavaScript 模块补充清晰、可维护的 TypeScript 类型。"
+        },
+        "learner_profile": {
+          "profile_version": 1,
+          "current_level": "beginner",
+          "weekly_minutes": 150,
+          "background_summary": "有 JavaScript 基础，但还没有系统使用 TypeScript。"
+        },
+        "diagnostic_assessment": {
+          "assessment_id": "assessment-typescript-v2",
+          "score_percent": 45,
+          "mastery_summary": {
+            "basic_types": "partial",
+            "function_types": "needs_practice",
+            "runtime_validation_boundary": "unknown"
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner"
+      },
+      "reference_facts": [
+        "学习路线应先建立基础类型和函数类型，再进入对象建模、联合类型与外部数据校验。",
+        "运行时校验与编译期类型检查解决的是不同问题。"
+      ],
+      "required_knowledge_points": [
+        "基础类型",
+        "函数参数与返回值类型",
+        "对象与接口建模",
+        "联合类型",
+        "外部输入的运行时校验边界"
+      ],
+      "acceptable_answer_points": [
+        "路线按知识依赖从基础到综合实践排序。",
+        "每个节点有明确学习目标、完成标准和可验证产出。",
+        "学习时间和粒度符合 beginner 及每周 150 分钟的画像。",
+        "路线包含将类型知识应用到小型 JavaScript 模块的练习。"
+      ],
+      "scoring_rubric": {
+        "correctness": "知识关系、TypeScript 事实和运行时边界描述准确。",
+        "completeness": "覆盖全部 required_knowledge_points，并给出练习和完成标准。",
+        "relevance": "路线围绕 TypeScript 类型安全目标，不扩展到无关工程主题。",
+        "readability": "节点标题、顺序、说明和标准表达清晰，便于执行。",
+        "teaching_adaptation": "难度、学习节奏和练习规模适合有 JavaScript 基础的 beginner。"
+      },
+      "tags": [
+        "typescript-v2",
+        "plan",
+        "beginner"
+      ]
+    },
+    {
+      "case_id": "typescript-v2-card-content-interfaces",
+      "dataset_version": "typescript-v2",
+      "run_type": "card_content_generate",
+      "input_snapshot": {
+        "agent_role": "node_tutor",
+        "logical_session_key": "typescript-v2-session",
+        "goal": {
+          "topic": "TypeScript 类型安全基础",
+          "desired_outcome": "能够使用接口描述对象，并为函数参数和返回值提供类型。"
+        },
+        "learner_profile": {
+          "current_level": "beginner",
+          "background_summary": "理解 JavaScript 对象和函数，但不熟悉 TypeScript 接口。"
+        },
+        "learning_plan": {
+          "title": "TypeScript 类型安全入门路线"
+        },
+        "plan_node": {
+          "id": "33333333-3333-4333-8333-333333333334",
+          "title": "接口与函数类型",
+          "summary": "使用接口描述对象结构，并为函数参数和返回值添加类型。"
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner"
+      },
+      "reference_facts": [
+        "接口可以描述对象的属性结构。",
+        "函数参数和返回值可以使用类型注解表达预期类型。"
+      ],
+      "required_knowledge_points": [
+        "接口",
+        "对象属性类型",
+        "函数参数类型",
+        "函数返回值类型"
+      ],
+      "acceptable_answer_points": [
+        "解释接口和函数类型的用途，并给出可运行方向明确的 TypeScript 示例。",
+        "示例中的接口、参数和返回值类型与当前节点目标一致。",
+        "包含至少一个常见错误或调试提示，并说明修复方式。",
+        "内容组织包含基础解释、示例、练习或检查点和教学记忆。"
+      ],
+      "scoring_rubric": {
+        "correctness": "接口、对象属性、参数和返回值类型的概念及示例准确。",
+        "completeness": "覆盖当前节点的四个 required_knowledge_points，并包含误区与修复。",
+        "relevance": "内容集中于接口与函数类型，不提前展开无关高级类型。",
+        "readability": "解释、文件、函数调用顺序和代码块清楚易读。",
+        "teaching_adaptation": "示例规模和术语解释适合有 JavaScript 基础的 beginner。"
+      },
+      "tags": [
+        "typescript-v2",
+        "card-content",
+        "interfaces"
+      ]
+    },
+    {
+      "case_id": "typescript-v2-posttest-interfaces",
+      "dataset_version": "typescript-v2",
+      "run_type": "posttest_generate",
+      "input_snapshot": {
+        "topic": "TypeScript 类型安全基础",
+        "question_count": 6,
+        "difficulty": "normal",
+        "kind": "post_test",
+        "plan_node_id": "33333333-3333-4333-8333-333333333334",
+        "source_card_content_id": "44444444-4444-4444-8444-444444444445",
+        "card_content_context": {
+          "plan_node_id": "33333333-3333-4333-8333-333333333334",
+          "card_content_id": "44444444-4444-4444-8444-444444444445",
+          "foundation": "接口可以描述对象的属性结构，函数参数和返回值可以使用类型注解。",
+          "worked_example": {
+            "entry_file": "src/user.ts",
+            "files": [
+              {
+                "path": "src/user.ts",
+                "language": "ts",
+                "role": "entry",
+                "content": "interface User { id: number; name: string }\nexport function displayName(user: User): string {\n  return user.name;\n}"
+              }
+            ]
+          },
+          "pitfalls_debug": [
+            {
+              "title": "把接口当成运行时校验",
+              "cause": "接口主要参与编译期类型检查，运行时不会自动验证外部 JSON。",
+              "fix": "对外部输入使用显式运行时校验，再将结果交给类型安全的代码处理。"
+            }
+          ],
+          "teaching_memory": {
+            "key_concepts": [
+              "接口",
+              "属性类型",
+              "参数类型",
+              "返回值类型"
+            ],
+            "common_mistakes": [
+              "把接口当成运行时校验"
+            ],
+            "assessment_targets": [
+              "能够为对象和函数写出基础类型定义"
+            ]
+          }
+        }
+      },
+      "learner_profile": {
+        "current_level": "beginner"
+      },
+      "reference_facts": [
+        "接口主要用于编译期描述对象结构，不能自动完成运行时输入校验。",
+        "函数参数和返回值类型应与示例函数的实际用途一致。"
+      ],
+      "required_knowledge_points": [
+        "接口",
+        "对象属性类型",
+        "函数参数类型",
+        "函数返回值类型"
+      ],
+      "acceptable_answer_points": [
+        "恰好生成 6 道后测题，题目只基于当前节点内容。",
+        "题目覆盖接口、属性类型、参数类型和返回值类型。",
+        "每题答案和解析能够解释原因，并包含与示例代码相关的理解或迁移。",
+        "至少提醒接口不等于外部输入的运行时校验。"
+      ],
+      "scoring_rubric": {
+        "correctness": "题目、选项、答案、解析和示例代码事实准确。",
+        "completeness": "覆盖当前节点的全部关键知识点和教学记忆中的常见误区。",
+        "relevance": "只考查已提供的接口与函数类型内容，不依赖未学习知识。",
+        "readability": "题干、选项和解析清楚，代码片段可读。",
+        "teaching_adaptation": "题量、难度和迁移要求适合 beginner 的节点后测。"
+      },
+      "tags": [
+        "typescript-v2",
+        "posttest",
+        "interfaces"
+      ]
+    }
+  ]
+}

@@ -35,17 +35,19 @@ export const SYSTEM_PROMPT = [
   '- 题量与难度等由用户消息给出，必须严格遵循。',
   '- 学习者水平以用户消息中的整体编程经验为依据；如果没有画像或经验信息，按 beginner（初学者）处理。',
   '- normal 是相对于学习者水平的通用难度：考查当前水平的核心概念、常见错误和简单应用；不能把 normal 固定解释成某个技术领域的入门题。',
-  '- hard 允许在当前水平上增加一个等级的复杂度，例如组合多个知识点、处理边界条件、调试或迁移应用；advanced 学习者的 hard 题保持 advanced 水平但增加综合复杂度。',
-  '- 具体来说，beginner 的 hard 可以出现 intermediate 级别的概念，intermediate 的 hard 可以出现 advanced 级别的概念；advanced 的 hard 不再上跳等级，而是增加综合、边界和迁移复杂度。',
+  '- hard 提升当前水平内的应用复杂度，例如组合多个知识点、处理边界条件、调试或迁移应用；不会提高整套题的学习者等级，也不会增加跨级提高题数量。',
   '- diagnostic 前测固定保留少量提高题：10 至 14 题安排 1 道，15 至 20 题安排 2 道；其余题目覆盖当前水平的核心概念和常见错误。',
+  '- 例如 12 道题中，11 道保持当前水平，仅 1 道提高题允许跨到高一级；beginner 的提高题最多到 intermediate，intermediate 的提高题最多到 advanced；advanced 的提高题保持 advanced，但增加综合、边界和迁移复杂度。',
+  '- 提高题按实际作答所需的前置知识和推理能力判断；出现多个较复杂考点是正常的，不等于跨级。当前水平的题可以组合知识点，必要的新术语应由题干提供说明或代码上下文，不要求学习者凭空掌握高一级的知识。',
+  '- 相邻题目的 answer_key 必须不同，正确答案位置在可用选项中尽量均衡；在选项数量允许时避免固定顺序轮换等可预测规律。调整选项位置时同步更新选项 key、answer_key 和解析中的选项引用，保持语义与唯一正确答案不变。',
   '- 题目答案的生成不要把正确选项的长度回答地太明显，例如不要出现三个短答案一个长答案的情况，要不然学习者很容易知道答案是什么。',
   '- 面向的是程序员学习者：每道题都要能脱离其它题目独立读懂，不依赖题目之外的上下文。',
   '',
   '#工作流程',
   '1. 读懂主题范围、目标、测试类型、题量和难度，并根据整体编程经验确定学习者水平；经验缺失时使用 beginner。',
-  '2. 按相对难度建立通用考点蓝图：核心概念、常见错误、简单应用，以及诊断题规定数量的提高题。',
-  '3. 再按考点蓝图逐题设计，确保题目难度与学习者水平匹配，不集中考查少数高级知识点。',
-  '4. 每题写完后检查选项、答案键与解析是否自洽，再核对「#输出规则」末尾的自检清单。',
+  '2. 先按用户消息中的题量分配建立考点蓝图，分别安排保持当前水平的题和固定数量的提高题；hard 在当前水平内增加应用复杂度，不扩大跨级配额。',
+  '3. 再按考点蓝图逐题设计，允许组合多个考点；逐题检查实际作答要求，确保只有规定数量的提高题允许跨到高一级。',
+  '4. 全部题目完成后检查答案位置分布，调整选项以消除相邻相同的 answer_key，并同步核对答案键与解析；再核对「#输出规则」末尾的自检清单。',
   '- 以上步骤只在内部执行，不要把考点清单、分析过程或中间结论写进输出。',
   '',
   '#工具调用',
@@ -62,7 +64,7 @@ export const SYSTEM_PROMPT = [
   '- 题干或解析需要展示代码时，使用标准 Markdown 三反引号代码围栏；语言标签、代码、命令和标识符保持英文。',
   '- JSON 字符串中的结构换行必须使用单层转义 \n，绝不能使用双重转义 \\n；代码中原本需要表示换行字符时保留其自身的转义语义。',
   '- 如果你收到一条用户消息指出上一次输出未通过字段校验并给出字段路径，请只修正这些路径对应的问题，然后重新输出完整 JSON。',
-  '- 输出前自检：① 顶层只有 schema_version 与 questions；② questions 数量与请求一致；③ 每题字段完全一致；④ 每个 answer_key 都能在对应 options 里找到；⑤ 需要代码时用了三反引号围栏，JSON 里的换行是单层转义；⑥ 输出里没有解释文字，也没有用围栏包裹整个 JSON。',
+  '- 输出前自检：① 顶层只有 schema_version 与 questions；② questions 数量与请求一致；③ 每题字段完全一致；④ 每个 answer_key 都能在对应 options 里找到，且与解析一致；⑤ 相邻题 answer_key 不同，答案位置尽量均衡且避免可预测规律；⑥ 当前水平题与提高题符合用户消息中的题量分配，hard 不扩大跨级配额；⑦ 需要代码时用了三反引号围栏，JSON 里的换行是单层转义；⑧ 输出里没有解释文字，也没有用围栏包裹整个 JSON。',
   '',
   '#示例',
   '以下示例只示范字段与格式，禁止照抄其中的主题、题目、选项、解析与代码。示例为节选，正式输出的题量必须与用户消息请求的题量一致。',
@@ -76,7 +78,7 @@ export const SYSTEM_PROMPT = [
   '      "options": [',
   '        { "key": "A", "text": "3 + 4" },',
   '        { "key": "B", "text": "\'3\' + \'4\'" },',
-  '        { "key": "C", "text": "3 * 4" }',
+  '        { "key": "C", "text": "3 * 4" },',
   '        { "key": "D", "text": "4 - 3" }',
   '      ],',
   '      "answer_key": "A",',
@@ -123,8 +125,12 @@ export function buildValidationFeedback(context: {
   ].join('\n');
 }
 
+/** 按学习者水平和题量组装前测请求，明确跨级配额与答案位置约束。 */
 export function buildUserPrompt(input: AssessmentGenerationInput): string {
   const learnerLevel = resolveLearnerLevel(input.overall_experience);
+  const challengeQuestionCount = input.question_count >= 15 ? 2 : 1;
+  const currentLevelQuestionCount = input.question_count - challengeQuestionCount;
+  const nextLearnerLevel = learnerLevel === 'beginner' ? 'intermediate' : 'advanced';
   return [
     '主题：' + input.topic,
     '标题：' + (input.title ?? input.topic),
@@ -134,6 +140,15 @@ export function buildUserPrompt(input: AssessmentGenerationInput): string {
     '学习者水平（根据整体编程经验归类，缺省为 beginner）：' + learnerLevel,
     '测试类型：' + input.kind,
     '难度：' + input.difficulty,
+    '题量分配：' + String(currentLevelQuestionCount) + ' 道保持当前水平（' + learnerLevel + '），'
+      + String(challengeQuestionCount) + ' 道提高题；'
+      + (learnerLevel === 'advanced'
+        ? '提高题仍保持 advanced，增加综合、边界和迁移复杂度。'
+        : '仅这 ' + String(challengeQuestionCount) + ' 道提高题允许跨到 ' + nextLearnerLevel + '，其余题不跨级。'),
+    input.difficulty === 'hard'
+      ? 'hard 要求：保持当前水平的题通过组合考点、调试、边界条件或迁移应用提高复杂度；出现多个较复杂考点不等于跨级，不得增加提高题数量。'
+      : 'normal 要求：保持当前水平的题考查核心概念、常见错误和简单应用，并保留上述固定数量的提高题。',
+    '答案位置要求：相邻题的 answer_key 必须不同，正确答案位置尽量均衡；调整选项后同步更新答案键和解析。',
     '请生成恰好 ' + String(input.question_count) + ' 道题，每题包含 prompt、options、answer_key、explanation、skill_tags、max_score。',
   ].join('\n');
 }
