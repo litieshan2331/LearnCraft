@@ -33,13 +33,19 @@ export const SYSTEM_PROMPT = [
   '#场景约束',
   '- 所有面向学习者的自然语言，包括题干、选项、解析与能力标签，必须使用简体中文；技术专有名词可保留英文。',
   '- 题量与难度等由用户消息给出，必须严格遵循。',
+  '- 学习者水平以用户消息中的整体编程经验为依据；如果没有画像或经验信息，按 beginner（初学者）处理。',
+  '- normal 是相对于学习者水平的通用难度：考查当前水平的核心概念、常见错误和简单应用；不能把 normal 固定解释成某个技术领域的入门题。',
+  '- hard 允许在当前水平上增加一个等级的复杂度，例如组合多个知识点、处理边界条件、调试或迁移应用；advanced 学习者的 hard 题保持 advanced 水平但增加综合复杂度。',
+  '- 具体来说，beginner 的 hard 可以出现 intermediate 级别的概念，intermediate 的 hard 可以出现 advanced 级别的概念；advanced 的 hard 不再上跳等级，而是增加综合、边界和迁移复杂度。',
+  '- diagnostic 前测固定保留少量提高题：10 至 14 题安排 1 道，15 至 20 题安排 2 道；其余题目覆盖当前水平的核心概念和常见错误。',
   '- 题目答案的生成不要把正确选项的长度回答地太明显，例如不要出现三个短答案一个长答案的情况，要不然学习者很容易知道答案是什么。',
   '- 面向的是程序员学习者：每道题都要能脱离其它题目独立读懂，不依赖题目之外的上下文。',
   '',
   '#工作流程',
-  '1. 读懂主题范围、难度、测试类型与题量要求。',
-  '2. 先思考要覆盖的考点（概念理解、语法细节、常见错误、实际应用），再按考点逐题设计。',
-  '3. 每题写完后检查选项、答案键与解析是否自洽，再核对「#输出规则」末尾的自检清单。',
+  '1. 读懂主题范围、目标、测试类型、题量和难度，并根据整体编程经验确定学习者水平；经验缺失时使用 beginner。',
+  '2. 按相对难度建立通用考点蓝图：核心概念、常见错误、简单应用，以及诊断题规定数量的提高题。',
+  '3. 再按考点蓝图逐题设计，确保题目难度与学习者水平匹配，不集中考查少数高级知识点。',
+  '4. 每题写完后检查选项、答案键与解析是否自洽，再核对「#输出规则」末尾的自检清单。',
   '- 以上步骤只在内部执行，不要把考点清单、分析过程或中间结论写进输出。',
   '',
   '#工具调用',
@@ -118,14 +124,40 @@ export function buildValidationFeedback(context: {
 }
 
 export function buildUserPrompt(input: AssessmentGenerationInput): string {
+  const learnerLevel = resolveLearnerLevel(input.overall_experience);
   return [
     '主题：' + input.topic,
     '标题：' + (input.title ?? input.topic),
     '描述：' + (input.description ?? ''),
     '目标：' + (input.desired_outcome ?? ''),
     '整体编程经验：' + (input.overall_experience ?? ''),
+    '学习者水平（根据整体编程经验归类，缺省为 beginner）：' + learnerLevel,
     '测试类型：' + input.kind,
     '难度：' + input.difficulty,
     '请生成恰好 ' + String(input.question_count) + ' 道题，每题包含 prompt、options、answer_key、explanation、skill_tags、max_score。',
   ].join('\n');
+}
+
+/** 将整体编程经验归类为通用学习者水平；无法可靠判断时按 beginner 处理。 */
+function resolveLearnerLevel(experience: string | null | undefined): 'beginner' | 'intermediate' | 'advanced' {
+  const value = experience?.trim().toLowerCase() ?? '';
+  if (value.length === 0) {
+    return 'beginner';
+  }
+  if (value === 'advanced' || value === '高级' || value === '资深' || value === 'expert') {
+    return 'advanced';
+  }
+  if (value === 'intermediate' || value === '中级') {
+    return 'intermediate';
+  }
+  if (value === 'beginner' || value === '初级' || value === '初学者' || value === '入门') {
+    return 'beginner';
+  }
+  if (/(高级|资深|专家|多年经验|expert|senior)/i.test(value)) {
+    return 'advanced';
+  }
+  if (/(中级|熟悉|有一定.*经验|intermediate)/i.test(value) && !/(未系统|刚开始|基础)/i.test(value)) {
+    return 'intermediate';
+  }
+  return 'beginner';
 }

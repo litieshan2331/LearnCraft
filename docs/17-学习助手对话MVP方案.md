@@ -278,7 +278,7 @@ new
 2. 增加 `get_wrong_question`、`get_learner_profile`、`get_mastery_state` 三个只读工具；
 3. 增加错题归因子 Agent 和结构化校验；
 4. 增加苏格拉底导师子 Agent 和分层提示策略；
-5. 将 `load_skill` 接入现有 ReAct 工具循环；
+5. 将 `load_skill`、业务数据工具和 Tavily 接入 LangGraph 工具节点；现有 ReAct 循环继续服务四个 P0 批量工作流，不作为学习助手主图。
 6. 增加 `record_learning_memory` 和 `mark_learning_step` 的幂等写入；
 7. 接入 Tavily 的受控事实核对；
 8. 最后接入前端学习助手页面和 Agent 观测信息。
@@ -287,12 +287,177 @@ new
 
 ## 十一、数据库建模后的剩余实施步骤（简版）
 
-1. 执行 `0010_learning_assistant_mvp` 迁移，并核对四张新表、索引和外键。
+1. 执行 `0010_learning_assistant_mvp` 迁移，并核对四张业务表、索引和外键；同时增加 LangGraph PostgreSQL Checkpointer 的专用表迁移。
 2. 实现会话、消息、对话运行和学习经历记忆的 Repository；所有消息落库，模型上下文默认取最近 20 轮。
 3. 增加学习助手 API：创建/读取会话、发送消息、读取消息和查询运行状态。
-4. 实现主 Agent 的工具编排，以及错题归因子 Agent、苏格拉底导师子 Agent 的结构化输入输出校验。
+4. 安装并接入 LangGraph.js，创建主图，以及错题归因子 Agent、苏格拉底导师子 Agent 的结构化输入输出校验。
 5. 接入 `get_wrong_question`、画像与掌握度查询、`load_skill`、`record_learning_memory`、`mark_learning_step` 和受控 Tavily 调用。
 6. 增加对话运行的调用上限、权限校验、错误记录、幂等写入和学习经历记忆写入规则。
 7. 在“学习起点”中接入学习助手对话页面，支持刷新后恢复会话和最近消息。
 8. 用错题归因、连续追问、修复验证、工具失败和重复请求用例完成端到端验收。
+
+## 十二、LangGraph.js 实现目录
+
+LangGraph.js 只负责 Agent 图编排和运行状态；Web 侧继续负责业务 API、数据库写入和用户界面。推荐目录如下：
+
+```text
+apps/
+├─ web/
+│  ├─ src/app/api/v1/learning-assistant/
+│  │  ├─ conversations/route.ts
+│  │  └─ conversations/[conversationId]/
+│  │     ├─ route.ts
+│  │     ├─ messages/route.ts
+│  │     └─ runs/[runId]/route.ts
+│  ├─ src/app/internal/v1/learning-assistant/
+│  │  ├─ context/route.ts
+│  │  ├─ message-result/route.ts
+│  │  └─ run-result/route.ts
+│  ├─ src/modules/learning-assistant/
+│  │  ├─ domain/learning-assistant.ts
+│  │  ├─ application/learning-assistant-service.ts
+│  │  ├─ infrastructure/
+│  │  │  ├─ drizzle-learning-assistant-repository.ts
+│  │  │  └─ learning-assistant-service-factory.ts
+│  │  ├─ interfaces/
+│  │  │  ├─ learning-assistant-http.ts
+│  │  │  ├─ learning-assistant-schemas.ts
+│  │  │  └─ learning-assistant-presenter.ts
+│  │  └─ presentation/
+│  │     ├─ api/learning-assistant-client.ts
+│  │     └─ components/
+│  └─ src/lib/db/schema/learning-assistant.ts
+│
+└─ agent-worker-ts/
+   └─ src/
+      ├─ workflows/learning-assistant/
+      │  ├─ index.ts
+      │  ├─ graph.ts
+      │  ├─ state.ts
+      │  ├─ routing.ts
+      │  ├─ agents/
+      │  │  ├─ main-agent.ts
+      │  │  ├─ error-attribution-agent.ts
+      │  │  └─ socratic-tutor-agent.ts
+      │  ├─ nodes/
+      │  │  ├─ load-context-node.ts
+      │  │  ├─ route-intent-node.ts
+      │  │  ├─ persist-message-node.ts
+      │  │  └─ persist-memory-node.ts
+      │  ├─ tools/
+      │  │  ├─ get-wrong-question-tool.ts
+      │  │  ├─ get-learner-profile-tool.ts
+      │  │  ├─ get-mastery-state-tool.ts
+      │  │  ├─ get-learning-context-tool.ts
+      │  │  ├─ load-skill-tool.ts
+      │  │  ├─ record-learning-memory-tool.ts
+      │  │  ├─ mark-learning-step-tool.ts
+      │  │  └─ tavily-search-tool.ts
+      │  ├─ prompts/
+      │  │  ├─ main-agent-prompt.ts
+      │  │  ├─ error-attribution-prompt.ts
+      │  │  └─ socratic-tutor-prompt.ts
+      │  └─ schemas/
+      │     ├─ graph-state.ts
+      │     ├─ error-attribution.ts
+      │     └─ socratic-response.ts
+      ├─ infrastructure/langgraph/
+      │  └─ learning-assistant-checkpointer.ts
+      ├─ acl/
+      │  └─ learning-assistant-core-client.ts
+      ├─ infrastructure/queue/
+      │  └─ learning-assistant-processor.ts
+      └─ main/worker.ts
+```
+
+目录职责：
+
+- `workflows/learning-assistant/graph.ts`：创建并编译 LangGraph 主图。
+- `state.ts`：定义图状态，包括意图、错题上下文、当前诊断、提示级别、用户回答和下一步动作。
+- `agents/main-agent.ts`：学习教练主 Agent，负责路由意图、选择工具和决定是否调用子 Agent。
+- `agents/error-attribution-agent.ts`：错题归因子 Agent，只返回结构化诊断。
+- `agents/socratic-tutor-agent.ts`：苏格拉底导师子 Agent，只返回一个主要问题和当前级别提示。
+- `nodes/`：把取数、路由、子 Agent 调用、消息写入和记忆写入封装为图节点。
+- `tools/`：Function Calling 工具适配层；工具通过 ACL 或已有网关访问业务数据，不能直接访问数据库。
+- `prompts/` 与 `schemas/`：分别保存提示词和 Zod 结构化合同。
+- `infrastructure/langgraph/`：封装 PostgreSQL Checkpointer，不放业务规则。
+- `acl/learning-assistant-core-client.ts`：Worker 调用 Web 内部接口的防腐层。
+- `infrastructure/queue/learning-assistant-processor.ts`：消费对话运行任务并调用 LangGraph 主图。
+- `apps/web/src/modules/learning-assistant/`：会话、消息、运行和学习经历记忆的领域服务与 Repository。
+
+LangGraph 主图的最小节点顺序为：
+
+```text
+START
+  → load_context
+  → main_agent
+  → error_attribution_agent / socratic_tutor_agent / tools
+  → persist_message
+  → persist_memory（仅在证据充分或修复验证通过时）
+  → END
+```
+
+现有模型网关、受控出网客户端、Tavily 网关和 Skill 文件加载器继续复用，不在学习助手目录中复制实现。
+
+现有 `src/application/services/tool-aware-generator.ts` 继续维护四个 P0 批量生成工作流；学习助手单独使用 LangGraph 主图，避免两套工作流的状态和恢复语义混在一起。
+
+## 十三、LangGraph.js PostgreSQL Checkpointer
+
+### 1. 依赖和装配位置
+
+LangGraph 依赖只安装在 `apps/agent-worker-ts`，不安装到 Web 前端。目标依赖包括：
+
+- `@langchain/langgraph`：StateGraph、节点、边和编译器；
+- `@langchain/langgraph-checkpoint-postgres`：PostgreSQL Checkpointer；
+- `@langchain/core`：消息、Runnable 和工具协议。
+
+现有 `ModelGateway` 继续负责 OpenAI-compatible 请求、安全出网、限流和 token 统计；LangGraph 通过适配器调用它，不新增第二套模型网关。
+
+### 2. Checkpoint 与消息表的区别
+
+- `learning_assistant_messages` 是产品数据：保存用户、助手和工具消息，用于页面刷新、审计和最近 20 轮上下文。
+- PostgreSQL Checkpoint 是运行数据：保存 LangGraph 图状态、节点游标、待执行任务和恢复所需的 writes。
+- `learning_assistant_runs` 是运行摘要：保存模型调用次数、子 Agent、Skill、Tavily、token 和错误摘要。
+
+三者不能互相替代，也不能把 Checkpoint 二进制或内部状态塞进消息 `content`。
+
+### 3. thread_id 规则
+
+同一学习助手会话固定使用：
+
+```text
+thread_id = conversation_id
+checkpoint_ns = learncraft.learning_assistant.v1
+```
+
+`conversation_id` 由 Web 创建并传入 Worker。每次用户发送消息都在同一 `thread_id` 上继续图执行；`learning_assistant_run.id` 用于记录本次触发和幂等，不替代 `thread_id`。
+
+### 4. 数据库迁移职责
+
+Checkpointer 的表必须使用 PostgreSQL，并纳入现有 Drizzle 迁移链。生产环境不能在 Worker 启动时隐式执行 `setup()` 或创建表。
+
+当前锁定 `@langchain/langgraph-checkpoint-postgres@1.0.6`，已将官方所需的 `checkpoint_migrations`、`checkpoints`、`checkpoint_blobs`、`checkpoint_writes` 四张表放入 `agent` schema，并生成 `apps/web/src/lib/db/migrations/0011_langgraph_checkpointer.sql`、`meta/0011_snapshot.json` 和 `_journal.json` 记录。表结构保留官方主键、JSONB、BYTEA 与可空 `checkpoint_blobs.blob` 兼容约束。
+
+`apps/agent-worker-ts/src/infrastructure/langgraph/learning-assistant-checkpointer.ts` 只负责连接池、序列化配置、`thread_id` 传递和生命周期管理，不负责执行生产迁移。
+
+### 5. 恢复和清理规则
+
+- Worker 崩溃后，队列重试使用同一 `conversation_id` 和 `learning_assistant_run.idempotencyKey`，图从最新 Checkpoint 继续。
+- 只有图成功、失败或取消后，才更新 `learning_assistant_runs` 和会话状态；消息写入仍保持幂等。
+- Checkpoint 不能暴露给前端，也不能作为长期学习记忆返回用户。
+- 会话归档时保留产品消息和学习经历记忆；Checkpoint 按留存策略清理。
+- Checkpoint 清理必须按 `thread_id` 和过期时间执行，不能误删其他用户会话。
+
+### 6. 运行时边界
+
+```text
+Web API 写入用户消息和 learning_assistant_runs
+  → Queue 投递 learning-assistant 任务
+  → Worker 从 Web 内部接口读取最近 20 轮和业务上下文
+  → LangGraph 使用 thread_id 加载 PostgreSQL Checkpoint
+  → 主 Agent 调度子 Agent、Skill 和工具
+  → Worker 回写助手消息、运行摘要和已验证的学习经历记忆
+```
+
+Checkpointer 只解决图执行恢复；它不改变用户消息落库、20 轮滑动窗口、长期学习经历记忆和用户画像的业务规则。
 

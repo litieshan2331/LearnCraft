@@ -50,6 +50,43 @@ describe('评测集契约', () => {
     });
     expect(parsed.cases).toHaveLength(1);
   });
+
+  it('允许前测评测用例不提供必测知识点清单', () => {
+    const parsed = EvaluationDatasetSchema.parse({
+      schema_version: 'agent_eval.dataset.v1',
+      dataset_version: 'v1',
+      cases: [{
+        case_id: 'assessment-001',
+        dataset_version: 'v1',
+        run_type: 'assessment_generate',
+        input_snapshot: { topic: 'TypeScript', question_count: 10, difficulty: 'normal', kind: 'diagnostic' },
+        learner_profile: { current_level: 'beginner' },
+        reference_facts: ['TypeScript 是 JavaScript 的超集。'],
+        acceptable_answer_points: ['解释目标概念。'],
+        scoring_rubric: rubric(),
+        tags: ['assessment'],
+      }],
+    });
+    expect(parsed.cases[0]?.required_knowledge_points).toEqual([]);
+  });
+
+  it('仍要求路线、节点内容和后测评测用例提供必测知识点清单', () => {
+    expect(() => EvaluationDatasetSchema.parse({
+      schema_version: 'agent_eval.dataset.v1',
+      dataset_version: 'v1',
+      cases: [{
+        case_id: 'plan-001',
+        dataset_version: 'v1',
+        run_type: 'plan_generate',
+        input_snapshot: { goal: { topic: 'TypeScript' } },
+        learner_profile: { current_level: 'beginner' },
+        reference_facts: ['TypeScript 是 JavaScript 的超集。'],
+        acceptable_answer_points: ['路线有完成标准。'],
+        scoring_rubric: rubric(),
+        tags: ['plan'],
+      }],
+    })).toThrow();
+  });
 });
 
 describe('评测结果契约', () => {

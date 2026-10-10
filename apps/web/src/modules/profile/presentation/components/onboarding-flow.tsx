@@ -386,7 +386,7 @@ function LearningGoalForm({
 
         <Field data-invalid={Boolean(form.formState.errors.topic)}>
           <FieldLabel htmlFor="goal-topic">学习主题</FieldLabel>
-          <Input className="h-11 rounded-xl bg-background/70 px-3.5" id="goal-topic" maxLength={200} placeholder="例如：Vue 3 + TypeScript、Go 并发编程、Kubernetes" {...form.register("topic")} />
+          <Input className="h-11 rounded-xl bg-background/70 px-3.5" id="goal-topic" maxLength={200} placeholder="例如：React + TypeScript、Go 并发编程、Kubernetes" {...form.register("topic")} />
           <FieldDescription>支持任意面向程序员的技术主题；请尽量写清技术栈或版本。</FieldDescription>
           <FieldError errors={[form.formState.errors.topic]} />
         </Field>
@@ -398,7 +398,7 @@ function LearningGoalForm({
         </Field>
 
         <Field data-invalid={Boolean(form.formState.errors.description)}>
-          <FieldLabel htmlFor="goal-description">你想学习什么</FieldLabel>
+          <FieldLabel htmlFor="goal-description">你想学习什么（最好包括必须覆盖的知识点）</FieldLabel>
           <Textarea className="rounded-xl bg-background/70 px-3.5 py-2.5" id="goal-description" maxLength={4000} placeholder="说明你现在想解决的问题、感兴趣的方向或希望覆盖的知识范围。" rows={5} {...form.register("description")} />
           <FieldError errors={[form.formState.errors.description]} />
         </Field>

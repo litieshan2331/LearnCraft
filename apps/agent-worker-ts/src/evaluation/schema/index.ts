@@ -50,12 +50,23 @@ export const EvaluationCaseSchema = z
     input_snapshot: z.record(z.string(), z.unknown()),
     learner_profile: z.record(z.string(), z.unknown()).default({}),
     reference_facts: z.array(z.string().min(1)).default([]),
-    required_knowledge_points: z.array(z.string().min(1)).min(1),
+    // 评测集的必测知识点只供 Judge 参考；前测业务输入不携带该字段，因此允许为空。
+    required_knowledge_points: z.array(z.string().min(1)).default([]),
     acceptable_answer_points: z.array(z.string().min(1)).min(1),
     scoring_rubric: EvaluationRubricSchema,
     tags: z.array(z.string().min(1)).default([]),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    // 前测没有必测知识点清单时仍可评测；其它工作流仍要求明确的覆盖范围。
+    if (value.run_type !== 'assessment_generate' && value.required_knowledge_points.length === 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['required_knowledge_points'],
+        message: '除 assessment_generate 外，评测用例必须提供必测知识点。',
+      });
+    }
+  });
 
 /** 评测集文件契约。 */
 export const EvaluationDatasetSchema = z

@@ -14,7 +14,9 @@ import {
   integer,
   jsonb,
   numeric,
+  primaryKey,
   pgSchema,
+  customType,
   unique,
   uuid,
   varchar,
@@ -32,6 +34,11 @@ import { learningGoals } from "./profile";
 import { userModelConnections } from "./model-connection";
 
 export const agentSchema = pgSchema("agent");
+
+/** LangGraph Checkpoint 使用的 PostgreSQL BYTEA 类型；node-postgres 以 Buffer 读写二进制值。 */
+const checkpointBytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
 
 export const agentRuns = agentSchema.table("agent_runs", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -152,4 +159,58 @@ export const agentTraceEvents = agentSchema.table("agent_trace_events", {
   check("ck_agent_trace_events_input_tokens", sql`${table.inputTokens} is null or ${table.inputTokens} >= 0`),
   check("ck_agent_trace_events_output_tokens", sql`${table.outputTokens} is null or ${table.outputTokens} >= 0`),
   index("idx_agent_trace_events_run_sequence").on(table.agentRunId, table.sequenceNo),
+]);
+
+/** LangGraph Checkpoint 迁移版本；由应用迁移管理，不在 Worker 启动时调用 setup()。 */
+export const langgraphCheckpointMigrations = agentSchema.table("checkpoint_migrations", {
+  version: integer("v").primaryKey(),
+});
+
+/** LangGraph 图状态主表；保存 thread、命名空间、检查点 JSON 与元数据。 */
+export const langgraphCheckpoints = agentSchema.table("checkpoints", {
+  threadId: text("thread_id").notNull(),
+  checkpointNamespace: text("checkpoint_ns").notNull().default(""),
+  checkpointId: text("checkpoint_id").notNull(),
+  parentCheckpointId: text("parent_checkpoint_id"),
+  type: text("type"),
+  checkpoint: jsonb("checkpoint").notNull(),
+  metadata: jsonb("metadata").notNull().default({}),
+}, (table) => [
+  primaryKey({ columns: [table.threadId, table.checkpointNamespace, table.checkpointId] }),
+]);
+
+/** LangGraph 通道版本对应的序列化值；blob 允许为空以匹配官方迁移的兼容修复。 */
+export const langgraphCheckpointBlobs = agentSchema.table("checkpoint_blobs", {
+  threadId: text("thread_id").notNull(),
+  checkpointNamespace: text("checkpoint_ns").notNull().default(""),
+  channel: text("channel").notNull(),
+  version: text("version").notNull(),
+  type: text("type").notNull(),
+  blob: checkpointBytea("blob"),
+}, (table) => [
+  primaryKey({
+    columns: [table.threadId, table.checkpointNamespace, table.channel, table.version],
+  }),
+]);
+
+/** LangGraph 检查点写入队列；保存待恢复的任务写入及其序号。 */
+export const langgraphCheckpointWrites = agentSchema.table("checkpoint_writes", {
+  threadId: text("thread_id").notNull(),
+  checkpointNamespace: text("checkpoint_ns").notNull().default(""),
+  checkpointId: text("checkpoint_id").notNull(),
+  taskId: text("task_id").notNull(),
+  index: integer("idx").notNull(),
+  channel: text("channel").notNull(),
+  type: text("type"),
+  blob: checkpointBytea("blob").notNull(),
+}, (table) => [
+  primaryKey({
+    columns: [
+      table.threadId,
+      table.checkpointNamespace,
+      table.checkpointId,
+      table.taskId,
+      table.index,
+    ],
+  }),
 ]);

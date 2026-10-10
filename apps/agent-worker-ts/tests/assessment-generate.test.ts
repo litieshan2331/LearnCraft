@@ -148,6 +148,34 @@ describe('输入契约', () => {
     expect(String(userMessage?.content)).toContain('难度：normal');
   });
 
+  it('缺省整体编程经验时按 beginner 生成通用难度提示', async () => {
+    const gateway = new FakeGateway([{ content: questionSetJson() }]);
+    const { deps: d } = deps(gateway);
+
+    await runAssessmentGenerate({ runId: 'run-1', inputSummaryJson: INPUT_SUMMARY }, d);
+
+    const systemMessage = gateway.requests[0]?.messages[0];
+    const userMessage = gateway.requests[0]?.messages[1];
+    expect(String(systemMessage?.content)).toContain('normal 是相对于学习者水平的通用难度');
+    expect(String(systemMessage?.content)).toContain('10 至 14 题安排 1 道，15 至 20 题安排 2 道');
+    expect(String(userMessage?.content)).toContain('学习者水平（根据整体编程经验归类，缺省为 beginner）：beginner');
+  });
+
+  it('按整体编程经验识别 intermediate，但不改变通用 normal 定义', async () => {
+    const gateway = new FakeGateway([{ content: questionSetJson() }]);
+    const { deps: d } = deps(gateway);
+
+    await runAssessmentGenerate({
+      runId: 'run-1',
+      inputSummaryJson: { ...INPUT_SUMMARY, overall_experience: 'intermediate' },
+    }, d);
+
+    const systemMessage = gateway.requests[0]?.messages[0];
+    const userMessage = gateway.requests[0]?.messages[1];
+    expect(String(userMessage?.content)).toContain('学习者水平（根据整体编程经验归类，缺省为 beginner）：intermediate');
+    expect(String(systemMessage?.content)).toContain('不能把 normal 固定解释成某个技术领域的入门题');
+  });
+
   it('diagnostic 题量不在 10-20 时判定为输入非法且不发模型请求', async () => {
     const gateway = new FakeGateway([{ content: questionSetJson(5) }]);
     const { deps: d } = deps(gateway);

@@ -78,6 +78,13 @@
       "when": 1791600000000,
       "tag": "0010_learning_assistant_mvp",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791602875407,
+      "tag": "0011_langgraph_checkpointer",
+      "breakpoints": true
     }
   ]
 }
