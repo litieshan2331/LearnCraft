@@ -12,6 +12,8 @@
 
 具体接口字段以 `packages/contracts/openapi/core.yaml` 为准。
 
+学习助手接口位于 `/api/v1/learning-assistant`：会话集合支持创建和列表，单个会话详情返回 `active_run_id`；消息集合支持发送和 `after_sequence_no` 游标分页读取全部历史；`runs/{run_id}` 返回安全运行状态。所有接口使用 Session，写操作使用已有 Origin 校验，发送消息使用 UUID `Idempotency-Key`。消息历史不受模型最近 20 轮上下文限制。本阶段仅保存用户消息和 `queued` 对话运行，队列与 Worker 尚未接入。
+
 生成节点知识内容并回写成功后，`GET /api/v1/card-contents/{card_content_id}` 仅向内容所有者返回 ready 内容、示例和来源引用，不返回 teaching_memory 或生成元数据。
 
 节点内容 ready 后，`POST /api/v1/plan-nodes/{node_id}/post-assessment-runs` 创建后测 AgentRun；节点完成标记仅记录个人进度，不是后测前置条件。 `GET /api/v1/plan-nodes/{node_id}/post-assessments` 返回该节点的后测题集；最新一套未交卷前不能生成下一套，交卷后可再次生成。`GET /api/v1/plan-nodes/{node_id}/post-assessment-attempts` 返回所有已完成后测的评分摘要。

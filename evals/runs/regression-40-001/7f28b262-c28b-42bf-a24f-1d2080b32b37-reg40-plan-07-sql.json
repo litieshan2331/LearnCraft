@@ -1,0 +1,257 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "7f28b262-c28b-42bf-a24f-1d2080b32b37",
+  "case_id": "reg40-plan-07-sql",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "plan_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "schema_version": "learning_plan.v1",
+    "title": "SQL 查询与数据汇总学习路线",
+    "summary": "面向会写单表 SELECT、但尚未掌握连接、分组聚合与 NULL 语义的学习者，按依赖顺序拆成 11 个可独立学习的章节：先建立执行顺序与结果自检习惯，再补齐 WHERE 谓词与 NULL 三值逻辑，随后进入 INNER JOIN、LEFT JOIN、连接膨胀诊断、GROUP BY 与 HAVING，最后落到参数化查询、索引判断与订单用户汇总实战，全程使用标准 SQL 常见语义。",
+    "nodes": [
+      {
+        "node_key": "query_execution_order",
+        "ordinal": 1,
+        "title": "SELECT 的逻辑执行顺序与查询自检",
+        "node_brief": "从 FROM 到 ORDER BY 的逻辑处理顺序，列别名在哪些子句中可用，以及每次查询后核对行数、列含义与抽样结果的习惯。",
+        "learning_objective": "能按逻辑执行顺序解释一条多子句查询，并在执行后写出行数与抽样核对结论。",
+        "rationale": "先建立统一的执行顺序与自检框架，后面连接、分组的反直觉行为才有解释依据。",
+        "difficulty": 2,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能写出 SELECT 各子句的逻辑处理顺序",
+          "能说明 SELECT 中定义的列别名为什么不能在 WHERE 中引用",
+          "对一条给定查询能记录执行后的行数与 3 行抽样结果",
+          "能指出查询结果中每一列的业务含义"
+        ]
+      },
+      {
+        "node_key": "where_predicate_precision",
+        "ordinal": 2,
+        "title": "WHERE 谓词精修：比较、范围与集合匹配",
+        "node_brief": "比较运算符、BETWEEN、IN、LIKE 的边界语义，AND/OR 的优先级，以及用括号消除歧义的写法。",
+        "learning_objective": "能针对一个业务筛选需求写出边界正确、布尔组合无歧义的 WHERE 子句，并用边界数据验证。",
+        "rationale": "连接与分组的正确性都建立在筛选条件准确的前提上，这一章把已有的 WHERE 能力补齐到可验证的程度。",
+        "difficulty": 2,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "query_execution_order"
+        ],
+        "completion_criteria": [
+          "能写出同时含 BETWEEN 与 IN 的筛选条件并说明端点是否被包含",
+          "能用括号改写一个 AND/OR 混合条件，使其语义与需求一致",
+          "能构造边界数据行并验证筛选结果符合预期",
+          "能说明 LIKE 中通配符位置对匹配范围的影响"
+        ]
+      },
+      {
+        "node_key": "null_three_valued_logic",
+        "ordinal": 3,
+        "title": "NULL 与三值逻辑",
+        "node_brief": "NULL 表示未知的含义、与任何值比较的结果、IS NULL 与 IS NOT NULL，以及 NOT IN 子查询含 NULL 时的陷阱。",
+        "learning_objective": "能判断含 NULL 的比较表达式结果，并改写会因 NULL 而漏行或返回空集的谓词。",
+        "rationale": "NULL 是前测暴露的主要薄弱点之一，它同时影响筛选、连接与聚合，必须紧跟 WHERE 之后单独攻克。",
+        "difficulty": 3,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "where_predicate_precision"
+        ],
+        "completion_criteria": [
+          "能说明 NULL = NULL 的比较结果并给出正确写法",
+          "能解释 NOT IN 子查询中一旦出现 NULL 结果集为什么为空",
+          "能用 IS NULL 或 COALESCE 改写一个会漏行的筛选条件",
+          "能对同一条件分别用 = 与 IS NULL 执行并对比行数差异"
+        ]
+      },
+      {
+        "node_key": "inner_join",
+        "ordinal": 4,
+        "title": "INNER JOIN：按业务键连接两张表",
+        "node_brief": "连接条件 ON 的写法、两表与三表连接的顺序，以及连接键条件与普通筛选条件放在 ON 和 WHERE 的差别。",
+        "learning_objective": "能写出订单表与用户表按用户 ID 连接的 INNER JOIN 查询，并预测结果行数。",
+        "rationale": "内连接是连接家族的基准语义，只有先掌握它，外连接的差异才可被准确描述。",
+        "difficulty": 2,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "where_predicate_precision",
+          "null_three_valued_logic"
+        ],
+        "completion_criteria": [
+          "能写出两表与三表的 INNER JOIN 并明确指定连接键",
+          "能说明连接键列含 NULL 时该行不会被匹配到",
+          "能在执行前预测连接结果行数并与实际结果核对",
+          "能说明在 INNER JOIN 下条件写在 ON 或 WHERE 的等价与不等价情形"
+        ]
+      },
+      {
+        "node_key": "left_join",
+        "ordinal": 5,
+        "title": "LEFT JOIN：保留主表未匹配的行",
+        "node_brief": "左外连接的语义、未匹配行被补 NULL 的表现，以及在 WHERE 中过滤右表列导致外连接退化为内连接的问题。",
+        "learning_objective": "能用 LEFT JOIN 保留主表全部行，并识别 WHERE 中过滤右表列造成的语义退化。",
+        "rationale": "业务汇总常需要保留无匹配记录的主表行，这一章与内连接形成对照，是偏差检查的关键能力。",
+        "difficulty": 3,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "inner_join",
+          "null_three_valued_logic"
+        ],
+        "completion_criteria": [
+          "能写出保留全部订单的 LEFT JOIN 查询并核对主表行数不变",
+          "能指出把右表列条件写在 WHERE 中为何会丢掉未匹配行",
+          "能比较同一需求下 INNER JOIN 与 LEFT JOIN 的结果行数差异并解释原因",
+          "能识别连接结果中由不匹配产生的 NULL 列"
+        ]
+      },
+      {
+        "node_key": "join_fanout_and_duplicates",
+        "ordinal": 6,
+        "title": "连接膨胀与重复行诊断",
+        "node_brief": "一对多连接造成的行数放大、聚合前重复计数，以及用连接前后行数对比和主键分组计数定位放大来源。",
+        "learning_objective": "能定位一次连接膨胀，并用行数对比说明重复来自哪张表。",
+        "rationale": "前测指出结果验证能力不足，连接膨胀是最常见也最容易被忽略的结果失真来源。",
+        "difficulty": 4,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "left_join"
+        ],
+        "completion_criteria": [
+          "能计算连接前后行数并判断是否发生行数放大",
+          "能用主键分组计数定位重复来源表",
+          "能说明先连接再求和的金额为什么会偏大",
+          "能给出一种避免重复计数的改写思路并验证结果"
+        ]
+      },
+      {
+        "node_key": "group_by_aggregation",
+        "ordinal": 7,
+        "title": "GROUP BY 与聚合函数",
+        "node_brief": "分组键的选择、COUNT/SUM/AVG/MAX/MIN 的含义，以及 SELECT 列表与分组键的一致性要求。",
+        "learning_objective": "能写出按用户汇总订单数与订单金额的查询，并解释每个聚合值的含义。",
+        "rationale": "分组聚合是数据汇总的核心，也是前测中需要练习的薄弱点，需要在连接正确之后单独训练。",
+        "difficulty": 3,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "inner_join"
+        ],
+        "completion_criteria": [
+          "能写出含两个以上聚合函数的 GROUP BY 查询",
+          "能说明未出现在 GROUP BY 中的列直接出现在 SELECT 中为何不被标准 SQL 允许",
+          "能核对分组后的组数与明细行数的关系",
+          "能给出每个聚合列的业务解释"
+        ]
+      },
+      {
+        "node_key": "having_and_null_aggregation",
+        "ordinal": 8,
+        "title": "HAVING 与聚合中的 NULL 行为",
+        "node_brief": "WHERE 与 HAVING 的分工、按聚合值过滤，以及 COUNT(*) 与 COUNT(列)、SUM 与 AVG 对 NULL 的忽略方式。",
+        "learning_objective": "能区分过滤分组前数据与过滤分组结果，并解释 NULL 对计数与均值的影响。",
+        "rationale": "HAVING 与 NULL 聚合行为是两个独立薄弱点的交汇处，合在一章可以从结果差异中直接观察二者作用。",
+        "difficulty": 3,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "group_by_aggregation",
+          "null_three_valued_logic"
+        ],
+        "completion_criteria": [
+          "能把同一条件分别放到 WHERE 与 HAVING 并说明结果差异",
+          "能解释 COUNT(*) 与 COUNT(某列) 的结果为何不同",
+          "能说明某列含 NULL 时求 AVG 的分母是多少",
+          "能写出按聚合值过滤的分组查询并核对保留的组数"
+        ]
+      },
+      {
+        "node_key": "parameterized_queries",
+        "ordinal": 9,
+        "title": "参数化查询与输入传递",
+        "node_brief": "占位符与绑定参数的写法、参数值与列类型的匹配，以及参数化对拼接错误与注入风险的避免。",
+        "learning_objective": "能把一个拼接字面量的查询改写成带占位符的参数化查询并正确绑定参数。",
+        "rationale": "期望结果要求用参数传递输入，这一章独立于查询结构，可与聚合章节并行学习。",
+        "difficulty": 2,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [
+          "where_predicate_precision"
+        ],
+        "completion_criteria": [
+          "能把字面量条件改写为占位符形式",
+          "能按占位符顺序绑定参数并使查询返回预期结果",
+          "能说明为什么占位符通常不能用来替换表名或列名",
+          "能对比拼接写法与参数化写法在同一输入下的行为差异"
+        ]
+      },
+      {
+        "node_key": "index_basics_and_result_verification",
+        "ordinal": 10,
+        "title": "基础索引判断与查询结果验证",
+        "node_brief": "连接键与筛选列上的索引如何影响查询、执行计划中扫描方式的读法，以及用独立查询交叉验证汇总结果的方法。",
+        "learning_objective": "能对一个连接汇总查询给出索引建议，并用独立查询交叉验证其结果。",
+        "rationale": "前测在基础索引与结果验证上均为待练习，这一章把性能判断与结果可信度合并成可操作的检查动作。",
+        "difficulty": 4,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [
+          "join_fanout_and_duplicates",
+          "having_and_null_aggregation",
+          "parameterized_queries"
+        ],
+        "completion_criteria": [
+          "能指出一条查询中适合建索引的列并说明理由",
+          "能在执行计划中区分全表扫描与索引查找",
+          "能用一条独立查询交叉核对汇总结果的行数与金额",
+          "能记录一次索引前后查询的变化并给出结论"
+        ]
+      },
+      {
+        "node_key": "order_user_report_capstone",
+        "ordinal": 11,
+        "title": "订单与用户汇总报表实战",
+        "node_brief": "综合运用内连接与外连接、分组聚合、NULL 处理、参数化与结果验证，产出一份可按时间区间与用户筛选的订单汇总查询。",
+        "learning_objective": "能独立完成一份订单与用户关联汇总查询，并给出空值影响与重复连接的检查记录。",
+        "rationale": "把前面各章能力收敛到一个真实汇总场景，同时验证期望结果中的偏差检查与参数化输入要求是否达成。",
+        "difficulty": 4,
+        "estimated_minutes": 150,
+        "prerequisite_node_keys": [
+          "join_fanout_and_duplicates",
+          "having_and_null_aggregation",
+          "parameterized_queries",
+          "index_basics_and_result_verification"
+        ],
+        "completion_criteria": [
+          "查询中同时使用了 INNER JOIN 与 LEFT JOIN",
+          "查询包含 GROUP BY 与按聚合值过滤的 HAVING 子句",
+          "使用参数化方式传入时间区间与用户筛选条件",
+          "给出连接膨胀前后的行数对照记录并说明处理方式",
+          "给出至少一条检查 NULL 影响的对照查询及其结果差异"
+        ]
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "repair_attempts": 0,
+      "generation_path": "model_knowledge",
+      "fallback_used": false
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "learning_plan_id": "7875ff7b-09b6-4db7-88e8-0baef1ccaca2",
+    "node_count": 11,
+    "tool_call_count": 0,
+    "repair_attempts": 0,
+    "generation_path": "model_knowledge",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:08:25.858Z",
+  "finished_at": "2026-10-10T08:08:52.072Z"
+}

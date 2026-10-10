@@ -1,0 +1,328 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "2de4da8d-3009-459f-b11e-483810c7d670",
+  "case_id": "reg40-posttest-07-sql",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "posttest_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "post_test",
+    "question_count": 10,
+    "difficulty": "hard",
+    "plan_id": null,
+    "plan_node_id": "50000000-0000-4000-8000-000000000007",
+    "source_card_content_id": "60000000-0000-4000-8000-000000000007",
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "在 `SELECT team, SUM(amount) FROM sales WHERE ... GROUP BY team HAVING ... ORDER BY team` 这类查询中，WHERE 子句的作用是什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "在分组聚合之前，按条件过滤单个数据行"
+          },
+          {
+            "key": "B",
+            "text": "在分组聚合之后，按条件过滤整个分组"
+          },
+          {
+            "key": "C",
+            "text": "为每个 team 分组计算出 SUM 之类的聚合值"
+          },
+          {
+            "key": "D",
+            "text": "决定最终结果行按什么顺序排列返回"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "WHERE 作用于源数据行，发生在 GROUP BY 聚合之前；过滤分组要用 HAVING，算聚合值靠 SUM，排序由 ORDER BY 负责。",
+        "skill_tags": [
+          "WHERE 行过滤",
+          "子句执行顺序"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表 sales 中有 ('A',10)、('A',30)、('B',60)、('C',None)。某同学写了下面的查询，想把金额为空的行筛掉：\n```sql\nSELECT team, SUM(amount) AS total\nFROM sales\nWHERE amount = NULL\nGROUP BY team\n```\n这条查询实际会得到什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "效果和 WHERE amount IS NOT NULL 相同，正常返回 A、B 两组"
+          },
+          {
+            "key": "B",
+            "text": "只返回 C 组，因为 = NULL 专门匹配空值行"
+          },
+          {
+            "key": "C",
+            "text": "条件对每一行都不成立，过滤后没有数据行，结果为空"
+          },
+          {
+            "key": "D",
+            "text": "执行时报错，因为 WHERE 中不允许出现 NULL 关键字"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "普通等号比较 NULL 得不到真值，amount = NULL 对任何一行都不满足，所以行被全部过滤掉，分组也就无从产生；判断空值应使用 IS NULL 或 IS NOT NULL。",
+        "skill_tags": [
+          "NULL 处理",
+          "WHERE 行过滤"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "查询中的 `HAVING SUM(amount) >= 40` 是在什么阶段起作用的？",
+        "options": [
+          {
+            "key": "A",
+            "text": "先按 team 分组并算出各组 SUM(amount)，再据此决定保留哪些分组"
+          },
+          {
+            "key": "B",
+            "text": "从 sales 表读取每一行时就逐行判断金额，不满足条件的行先被丢掉"
+          },
+          {
+            "key": "C",
+            "text": "在结果集交给调用方之前，按总额把结果行重新排一次顺序"
+          },
+          {
+            "key": "D",
+            "text": "在向表中写入数据时检查每行金额，不满足的行不允许写入"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "HAVING 作用在 GROUP BY 产生的分组结果上，条件里可以使用 SUM 这类聚合值；逐行过滤是 WHERE 的职责，排序由 ORDER BY 负责。",
+        "skill_tags": [
+          "HAVING 分组过滤",
+          "子句执行顺序"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表 sales 中有 ('A',10)、('A',30)、('B',60)、('C',None)。执行下面的查询，结果是？\n```sql\nSELECT team, SUM(amount) AS total\nFROM sales\nWHERE amount IS NOT NULL\nGROUP BY team\nHAVING SUM(amount) >= 40\nORDER BY team\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "[('A',40),('B',60),('C',None)]"
+          },
+          {
+            "key": "B",
+            "text": "[('A',40)]"
+          },
+          {
+            "key": "C",
+            "text": "[('A',40),('B',60)]"
+          },
+          {
+            "key": "D",
+            "text": "[('B',60)]"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "WHERE 去掉 C 的空金额行后，A 组为 10+30=40，B 组为 60，两组都满足 HAVING SUM(amount) >= 40，按 team 排序得到 [('A',40),('B',60)]。",
+        "skill_tags": [
+          "结果推导",
+          "GROUP BY 分组",
+          "HAVING 分组过滤"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在上面的查询基础上，只把条件改成 `HAVING SUM(amount) >= 50`，其余不变（表 sales 仍为 ('A',10)、('A',30)、('B',60)、('C',None)）。结果是什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "[('A',40),('B',60)]"
+          },
+          {
+            "key": "B",
+            "text": "空结果，没有任何团队达标"
+          },
+          {
+            "key": "C",
+            "text": "[('A',40)]"
+          },
+          {
+            "key": "D",
+            "text": "[('B',60)]"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "团队汇总仍是 A:40、B:60，条件变成 >= 50 后只有 B 的 60 达标，A 的 40 不满足，所以只保留 B。",
+        "skill_tags": [
+          "HAVING 分组过滤",
+          "结果推导"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "有同学把条件写在了 WHERE 里：`SELECT team, SUM(amount) FROM sales WHERE SUM(amount) >= 40 GROUP BY team`。这条写法的错误在哪里？",
+        "options": [
+          {
+            "key": "A",
+            "text": "SUM 不能出现在 SELECT 子句里，只能出现在 HAVING 子句里"
+          },
+          {
+            "key": "B",
+            "text": "GROUP BY 子句必须写在 WHERE 子句的前面才行"
+          },
+          {
+            "key": "C",
+            "text": "只有 amount 含空值时会出错，其余情况下可以这样写"
+          },
+          {
+            "key": "D",
+            "text": "WHERE 在分组聚合之前执行，不能用来过滤聚合后的总额，该条件应放进 HAVING"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "WHERE 处理的是分组前的单个数据行，此时 SUM(amount) 还不存在，因此不能用它按团队总额过滤；聚合后的条件必须交由 HAVING 处理。",
+        "skill_tags": [
+          "WHERE 行过滤",
+          "HAVING 分组过滤",
+          "常见错误"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表 sales 中有 ('A',10)、('A',30)、('B',60)、('C',None)。执行下面这条既没有 WHERE 也没有 HAVING 的查询，结果是？\n```sql\nSELECT team, SUM(amount) AS total\nFROM sales\nGROUP BY team\nORDER BY team\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "[('A',40),('B',60),('C',None)]"
+          },
+          {
+            "key": "B",
+            "text": "[('A',40),('B',60),('C',0)]"
+          },
+          {
+            "key": "C",
+            "text": "[('A',40),('B',60)]"
+          },
+          {
+            "key": "D",
+            "text": "[('A',40),('B',60),('C',60)]"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "没有过滤时 C 行也会参与分组。C 组里只有 NULL，SUM 忽略 NULL 后该组没有任何非空值可累加，结果仍是 NULL，而不是 0。",
+        "skill_tags": [
+          "聚合与 NULL",
+          "GROUP BY 分组",
+          "结果推导"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表 sales 中仍是 ('A',10)、('A',30)、('B',60)、('C',None)。如果去掉上例中的 `WHERE amount IS NOT NULL`，其余保持不变：\n```sql\nSELECT team, SUM(amount) AS total\nFROM sales\nGROUP BY team\nHAVING SUM(amount) >= 40\nORDER BY team\n```\n结果是什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "[('A',40),('B',60),('C',None)]"
+          },
+          {
+            "key": "B",
+            "text": "[('A',40),('B',60)]"
+          },
+          {
+            "key": "C",
+            "text": "[('A',40),('B',60),('C',0)]"
+          },
+          {
+            "key": "D",
+            "text": "空结果，HAVING 把 A、B 也一起过滤掉了"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "C 组的 SUM(amount) 是 NULL，NULL >= 40 不成立，所以 C 分组仍被 HAVING 过滤掉，A、B 满足条件，结果与带 WHERE 时一样。",
+        "skill_tags": [
+          "HAVING 分组过滤",
+          "聚合与 NULL",
+          "结果推导"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于查询末尾的 `ORDER BY team`，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "它负责把金额为空的团队行过滤掉"
+          },
+          {
+            "key": "B",
+            "text": "没有它查询会报语法错误，无法执行"
+          },
+          {
+            "key": "C",
+            "text": "它会改变每个团队 SUM(amount) 的计算结果"
+          },
+          {
+            "key": "D",
+            "text": "它让结果按 team 排序，不必依赖数据库返回行的默认顺序"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "ORDER BY 只决定结果行的顺序，使输出可预期，不依赖数据库的默认行顺序；过滤行是 WHERE 的事，过滤分组是 HAVING 的事，它也不会改变聚合值。",
+        "skill_tags": [
+          "ORDER BY 排序"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "要得到「在金额不为空的记录中，按团队汇总金额，只保留总额不小于 40 的团队，并按团队名排序」，下面哪条查询是正确的？",
+        "options": [
+          {
+            "key": "A",
+            "text": "```sql\nSELECT team, SUM(amount) FROM sales WHERE SUM(amount) >= 40 GROUP BY team ORDER BY team\n```"
+          },
+          {
+            "key": "B",
+            "text": "```sql\nSELECT team, SUM(amount) FROM sales WHERE amount IS NULL GROUP BY team HAVING SUM(amount) >= 40 ORDER BY team\n```"
+          },
+          {
+            "key": "C",
+            "text": "```sql\nSELECT team, SUM(amount) FROM sales WHERE amount IS NOT NULL GROUP BY team HAVING SUM(amount) >= 40 ORDER BY team\n```"
+          },
+          {
+            "key": "D",
+            "text": "```sql\nSELECT team, SUM(amount) FROM sales WHERE amount IS NOT NULL HAVING SUM(amount) >= 40 GROUP BY team ORDER BY team\n```"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "行级条件 amount IS NOT NULL 放在 WHERE；分组汇总写入 GROUP BY team；团队总额条件 SUM(amount) >= 40 放在 HAVING；最后用 ORDER BY team 排序。A 把聚合条件写进了 WHERE，B 保留的恰好是空值行，D 把 HAVING 和 GROUP BY 的顺序写反了。",
+        "skill_tags": [
+          "查询编写",
+          "WHERE 行过滤",
+          "HAVING 分组过滤",
+          "ORDER BY 排序"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "source_card_content_id": "60000000-0000-4000-8000-000000000007",
+      "tool_call_count": 0,
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "e3b7d575-84e2-40db-8e97-4e4988bac70f",
+    "question_count": 10,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:17:06.448Z",
+  "finished_at": "2026-10-10T08:17:41.730Z"
+}

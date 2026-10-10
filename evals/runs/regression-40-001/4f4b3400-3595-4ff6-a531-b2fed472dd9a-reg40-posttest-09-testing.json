@@ -1,0 +1,266 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "4f4b3400-3595-4ff6-a531-b2fed472dd9a",
+  "case_id": "reg40-posttest-09-testing",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "posttest_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "post_test",
+    "question_count": 8,
+    "difficulty": "hard",
+    "plan_id": null,
+    "plan_node_id": "50000000-0000-4000-8000-000000000009",
+    "source_card_content_id": "60000000-0000-4000-8000-000000000009",
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "阅读下面的代码，如果 calculateTotal 错误地返回 251，脚本会怎样？\n```js\nconsole.log(calculateTotal(125, 2));\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "正常结束，因为 console.log 不会把 251 与 250 比较"
+          },
+          {
+            "key": "B",
+            "text": "抛出 AssertionError，因为 251 不等于 250"
+          },
+          {
+            "key": "C",
+            "text": "输出 undefined，因为 251 不是合法金额"
+          },
+          {
+            "key": "D",
+            "text": "抛出 RangeError，因为 251 不是安全整数"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "console.log 只输出实际值，没有把实际值与明确预期比较；脚本不会因为结果是 251 而失败。要发现错误需要断言，例如 assert.equal(calculateTotal(125, 2), 250)。",
+        "skill_tags": [
+          "断言与打印"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "根据 calculateTotal 的合同，对数量为 0 的输入，下面哪种用例设计最合理？",
+        "options": [
+          {
+            "key": "A",
+            "text": "作为合法边界，断言 calculateTotal(125, 0) 返回 0"
+          },
+          {
+            "key": "B",
+            "text": "作为非法输入，断言 calculateTotal(125, 0) 抛出 RangeError"
+          },
+          {
+            "key": "C",
+            "text": "作为缺省参数，断言 calculateTotal(125, 0) 返回 125"
+          },
+          {
+            "key": "D",
+            "text": "作为未定义行为，因此不给数量 0 写断言"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "合同允许数量为非负整数，0 是合法边界而不是异常；数量为 0 时乘积为 0，所以应独立断言返回 0。",
+        "skill_tags": [
+          "零值边界",
+          "边界用例"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "要断言 calculateTotal(125, -1) 抛出 RangeError，下面哪个写法正确？",
+        "options": [
+          {
+            "key": "A",
+            "text": "`assert.throws(() => calculateTotal(125, -1), RangeError);`"
+          },
+          {
+            "key": "B",
+            "text": "`assert.equal(calculateTotal(125, -1), RangeError);`"
+          },
+          {
+            "key": "C",
+            "text": "`assert.throws(calculateTotal(125, -1), RangeError);`"
+          },
+          {
+            "key": "D",
+            "text": "`assert.equal(() => calculateTotal(125, -1), RangeError);`"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "assert.throws 的第一个参数必须是函数，由断言库调用并捕获异常；C 会先执行 calculateTotal 并把异常抛到断言之外，B 和 D 用 assert.equal 比较返回值或函数，无法检查异常类型。",
+        "skill_tags": [
+          "异常断言",
+          "assert.throws"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "根据 calculateTotal 的合同，调用 `calculateTotal(125, 1.5)` 会发生什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "返回 187.5，因为函数允许金额出现小数"
+          },
+          {
+            "key": "B",
+            "text": "返回 187，因为函数会自动把小数向下取整"
+          },
+          {
+            "key": "C",
+            "text": "抛出 RangeError，因为 quantity 必须是非负整数"
+          },
+          {
+            "key": "D",
+            "text": "返回 250，因为函数会忽略数量的小数部分"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "quantity 的合同要求是非负整数；1.5 不满足 Number.isSafeInteger 检查，函数抛出 RangeError，而不是进行取整或小数乘法。",
+        "skill_tags": [
+          "非整数输入",
+          "边界用例"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "当调用 `calculateTotal(Number.MAX_SAFE_INTEGER, 2)` 时，函数按合同会怎样？",
+        "options": [
+          {
+            "key": "A",
+            "text": "抛出 RangeError，因为乘积超出安全整数范围"
+          },
+          {
+            "key": "B",
+            "text": "返回 2 * Number.MAX_SAFE_INTEGER，因为乘法本身不检查范围"
+          },
+          {
+            "key": "C",
+            "text": "返回 Infinity，因为乘积超过最大安全整数"
+          },
+          {
+            "key": "D",
+            "text": "返回 Number.MAX_SAFE_INTEGER，因为结果会被截断"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "两个参数各自是安全整数，但乘积超出 Number.isSafeInteger 范围；函数在计算后检查 total，不满足时抛出 RangeError('total exceeds safe integer range')。",
+        "skill_tags": [
+          "安全整数范围",
+          "异常断言"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于 calculateTotal 的测试为什么可以拆成多个独立用例？下面哪个说法符合节点内容？",
+        "options": [
+          {
+            "key": "A",
+            "text": "函数不依赖时间、网络和共享状态，相同输入结果相同"
+          },
+          {
+            "key": "B",
+            "text": "函数内部使用随机数，因此每次测试都能覆盖不同边界"
+          },
+          {
+            "key": "C",
+            "text": "函数会把结果缓存到全局变量，后一个用例依赖前一个用例"
+          },
+          {
+            "key": "D",
+            "text": "函数依赖系统时间来决定返回值，所以必须按顺序执行"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "calculateTotal 是确定性的：不读取时间、不访问网络、不修改共享状态，因此每个断言都可以用固定输入独立验证函数行为。",
+        "skill_tags": [
+          "确定性",
+          "独立用例"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "一个测试套件执行了 calculateTotal 的全部分支，覆盖率达到 100%，但其中一条断言写成 `assert.equal(calculateTotal(125, 2), 251)`。下面哪个判断正确？",
+        "options": [
+          {
+            "key": "A",
+            "text": "测试会失败，因为 250 与预期 251 不相等"
+          },
+          {
+            "key": "B",
+            "text": "测试会通过，因为函数所有分支都已被执行过"
+          },
+          {
+            "key": "C",
+            "text": "测试会失败，因为 251 不是安全整数范围"
+          },
+          {
+            "key": "D",
+            "text": "测试会通过，因为断言只比较两个值的类型"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "实际结果是 250，预期写成 251 时断言会抛出错误；覆盖率高只说明代码被执行过，不能替代正确的预期值。",
+        "skill_tags": [
+          "覆盖率",
+          "断言失败"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面四行测试中，哪一行违背了 calculateTotal 的合同？\n```js\nassert.equal(calculateTotal(125, 2), 250);\nassert.equal(calculateTotal(125, 0), 0);\nassert.throws(() => calculateTotal(125, -1), RangeError);\nassert.throws(() => calculateTotal(125, 0), RangeError);\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "第 4 行，数量 0 是合法边界，不应断言抛出异常"
+          },
+          {
+            "key": "B",
+            "text": "第 3 行，负数量应返回 0，不应断言抛出异常"
+          },
+          {
+            "key": "C",
+            "text": "第 2 行，数量 0 应抛出异常，不应断言返回 0"
+          },
+          {
+            "key": "D",
+            "text": "第 1 行，普通结果不应写成返回 250"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "数量 0 在合同中是合法边界，calculateTotal(125, 0) 返回 0；把它写成 assert.throws 违背合同。负数量 -1 才应抛出 RangeError。",
+        "skill_tags": [
+          "合法边界 vs 非法输入",
+          "异常断言"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "source_card_content_id": "60000000-0000-4000-8000-000000000009",
+      "tool_call_count": 0,
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "ad746cbb-9ccc-4dd8-8454-86bb306e3dbe",
+    "question_count": 8,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:17:50.916Z",
+  "finished_at": "2026-10-10T08:18:15.427Z"
+}

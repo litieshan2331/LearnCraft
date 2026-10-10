@@ -1,0 +1,253 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "045c0667-8f3b-4b3a-8433-aa056325c495",
+  "case_id": "reg40-plan-09-testing",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "plan_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "schema_version": "learning_plan.v1",
+    "title": "JavaScript 测试设计与可靠性学习路线",
+    "summary": "面向已有多年 JavaScript 经验的开发者，围绕数据处理模块的测试策略展开：先用测试义务清单界定「测什么」，再补强可控替身与契约测试、测试隔离与随机数据可复现、覆盖率盲区与变异测试三块薄弱环节，最后落到分层测试与 CI 准入门槛。前测已掌握等价类与边界分析、性质与变形测试、异步失败路径，本路线把它们作为可用工具直接复用，不重复讲基础语法与单元测试入门。全程只使用稳定的 JavaScript 与通用测试概念，不绑定特定测试框架版本。",
+    "nodes": [
+      {
+        "node_key": "strategy_obligations",
+        "ordinal": 1,
+        "title": "从模块规格推导测试义务清单",
+        "node_brief": "把数据处理模块的输入契约、输出契约与失败语义拆成可枚举的测试义务，并按缺陷风险排序。",
+        "learning_objective": "能为一个数据处理模块产出一份按风险排序的测试义务清单，并说明每一条义务对应哪类缺陷。",
+        "rationale": "后续章节分别解决清单中不同类别的义务，先有清单才能判断测试是否「测够了」，也才能把已掌握的边界分析与性质测试放到正确位置。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能写出目标模块的输入契约、输出契约与失败语义三段式规格",
+          "能把规格拆成不少于 10 条可执行的测试义务，并为每条标注风险等级",
+          "能指出清单中哪些义务属于边界类、哪些属于交互类、哪些属于属性类",
+          "能说明清单中哪些义务无法用示例测试表达，必须用属性或变形关系表达"
+        ]
+      },
+      {
+        "node_key": "deterministic_random_data",
+        "ordinal": 2,
+        "title": "种子化随机与可复现的失败用例",
+        "node_brief": "用固定种子、显式生成参数与失败回放流程，让随机生成的测试数据在 CI 中可复现、可缩小。",
+        "learning_objective": "能设计一套带种子的测试数据生成方案，使任意一次随机测试失败都能用记录下来的种子与参数在本地稳定重跑。",
+        "rationale": "随机化能扩大输入覆盖，但不可复现的失败在持续集成里无法定位，这是本次前测暴露的薄弱点之一，也是让性质测试真正可用的前提。",
+        "difficulty": 3,
+        "estimated_minutes": 300,
+        "prerequisite_node_keys": [
+          "strategy_obligations"
+        ],
+        "completion_criteria": [
+          "测试失败时输出中带有可复现的种子与生成参数",
+          "能用固定种子在本地稳定重跑同一次失败用例，连续多轮结果一致",
+          "生成器对同一输入是纯函数，不依赖未记录的全局状态或当前时间",
+          "能把反例收缩到最小可读输入，并说明其来源种子"
+        ]
+      },
+      {
+        "node_key": "test_isolation",
+        "ordinal": 3,
+        "title": "测试隔离：共享状态、时间与全局副作用",
+        "node_brief": "识别模块级单例、全局注册表、真实时钟、文件系统与环境变量造成的跨用例污染，并设计重置策略。",
+        "learning_objective": "能让测试套件在任意执行顺序与任意并行度下得到完全相同的结果。",
+        "rationale": "隔离是可控替身、契约测试与变异测试的共同前提；顺序相关的偶发失败会让后续所有可靠性度量失真，属于本次薄弱点。",
+        "difficulty": 3,
+        "estimated_minutes": 300,
+        "prerequisite_node_keys": [
+          "strategy_obligations"
+        ],
+        "completion_criteria": [
+          "能列出被测模块中所有跨用例存活的共享状态及其写入点",
+          "在随机执行顺序下连续多轮运行得到一致结果",
+          "把真实时间依赖替换为可手动推进的时间源，测试中不出现真实等待",
+          "能用一次刻意打乱顺序或并发执行的运行证明污染源已被消除"
+        ]
+      },
+      {
+        "node_key": "test_doubles_taxonomy",
+        "ordinal": 4,
+        "title": "替身的类型与可控性边界",
+        "node_brief": "区分 stub、spy、fake、mock 的职责差异，判断哪些协作者该替换、哪些该用真实实现。",
+        "learning_objective": "能为给定协作者选择恰当的替身类型，并说明不选择其他类型的理由。",
+        "rationale": "替身过度使用会把测试锁死在实现细节上，替身不足则让测试变慢变脆；这是可控替身主题的入口，也是契约测试的铺垫。",
+        "difficulty": 3,
+        "estimated_minutes": 240,
+        "prerequisite_node_keys": [
+          "test_isolation"
+        ],
+        "completion_criteria": [
+          "能为至少 5 个真实协作者分别给出替身类型与选择理由",
+          "能指出现有测试中哪些断言在验证行为、哪些只是在验证实现细节",
+          "能用 fake 替代内存外依赖，并保持其接口语义与真实实现一致",
+          "能删除至少一个只验证调用次数、不验证结果的脆弱断言并说明替代方案"
+        ]
+      },
+      {
+        "node_key": "contract_testing",
+        "ordinal": 5,
+        "title": "消费者驱动契约与提供方验证",
+        "node_brief": "把跨模块或跨服务的接口约定写成契约，在消费者侧生成期望、在提供方侧验证，替代脆弱的深度 mock。",
+        "learning_objective": "能为一条跨边界调用写出双向可验证的契约，并在提供方实现发生破坏性变更时定位到失败来源。",
+        "rationale": "深度 mock 只能证明「代码如我所想地调用」，契约测试才能证明双方对接口的理解一致，是可控替身主题在本路线中的落点，也是薄弱点之一。",
+        "difficulty": 4,
+        "estimated_minutes": 300,
+        "prerequisite_node_keys": [
+          "test_doubles_taxonomy"
+        ],
+        "completion_criteria": [
+          "能写出包含请求、响应与失败语义的契约描述",
+          "能在消费者侧由契约生成可执行的期望，而不复制提供方实现逻辑",
+          "能在提供方侧验证契约，并复现一次破坏性变更导致的失败",
+          "能说明契约测试与端到端测试在覆盖范围和运行成本上的分工"
+        ]
+      },
+      {
+        "node_key": "async_failure_paths",
+        "ordinal": 6,
+        "title": "确定性异步测试与失败路径覆盖",
+        "node_brief": "用可控时间源与显式刷新微任务队列，覆盖超时、退避重试、取消、乱序返回与未处理拒绝。",
+        "learning_objective": "能写出不依赖真实等待、可稳定复现的异步失败路径测试。",
+        "rationale": "异步失败路径是最难稳定复现的一类测试，只有在隔离与替身都可靠之后才能做到确定性；它同时为分层测试中的交互层提供义务来源。",
+        "difficulty": 4,
+        "estimated_minutes": 240,
+        "prerequisite_node_keys": [
+          "test_isolation",
+          "test_doubles_taxonomy"
+        ],
+        "completion_criteria": [
+          "异步测试中不出现真实 sleep 或固定超时等待",
+          "能推进可控时间源以覆盖超时与退避重试的完整分支",
+          "能覆盖乱序返回以及迟到的废弃响应，并断言其被正确忽略",
+          "能捕获并断言未处理的 Promise 拒绝，而不是让它静默通过"
+        ]
+      },
+      {
+        "node_key": "coverage_limits",
+        "ordinal": 7,
+        "title": "覆盖率的语义与盲区",
+        "node_brief": "语句、分支与路径覆盖各自度量什么，为什么高覆盖率仍然可能漏掉缺陷。",
+        "learning_objective": "能针对一份覆盖率报告指出风险最高的未覆盖分支，并解释覆盖率无法度量的缺陷类型。",
+        "rationale": "覆盖率是团队最常用的准入门槛，但把它当作可靠性指标会误导决策；先厘清它能与不能回答的问题，变异测试才有意义，这属于本次薄弱点。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "strategy_obligations"
+        ],
+        "completion_criteria": [
+          "能区分语句覆盖与分支覆盖在同一段代码上的差异并举例",
+          "能列举至少三类高覆盖率仍会漏掉的缺陷，例如缺失校验、组合条件、并发时序",
+          "能对一份覆盖率报告按风险而非按百分比排出补测顺序",
+          "能说明覆盖率为什么无法反映断言是否有效"
+        ]
+      },
+      {
+        "node_key": "mutation_testing",
+        "ordinal": 8,
+        "title": "变异测试与测试套件有效性评估",
+        "node_brief": "用变异体衡量测试套件发现缺陷的能力，识别存活变异体与等价变异体，设定合理的变异分数门槛。",
+        "learning_objective": "能运行一次变异测试，并根据存活变异体决定是补测试还是重构代码。",
+        "rationale": "变异分数直接度量「测试是否真的能发现缺陷」，补齐覆盖率的盲区；它需要可复现的输入与隔离的执行环境才跑得稳，因此放在本路线的后半段。",
+        "difficulty": 4,
+        "estimated_minutes": 300,
+        "prerequisite_node_keys": [
+          "coverage_limits",
+          "deterministic_random_data"
+        ],
+        "completion_criteria": [
+          "能对目标数据处理模块运行变异测试并导出存活变异体清单",
+          "能区分真实测试缺口与等价变异体，并给出判断依据",
+          "能针对至少三个存活变异体补出可杀死它们的测试",
+          "能说明变异分数与覆盖率对同一套件给出不同结论的具体案例"
+        ]
+      },
+      {
+        "node_key": "layered_suite_rollout",
+        "ordinal": 9,
+        "title": "数据处理模块的测试分层与 CI 准入门槛",
+        "node_brief": "把测试义务分配到示例、属性、契约与集成各层，确定数量比例、运行成本与准入指标。",
+        "learning_objective": "能为一个数据处理模块落地分层测试方案，说明每层承担的义务、运行成本与准入门槛依据。",
+        "rationale": "把前面各章的能力收敛为可维护的套件结构，回答期望结果中的问题：如何为数据处理模块设计稳定策略，以及为什么高覆盖率仍可能漏掉缺陷。",
+        "difficulty": 4,
+        "estimated_minutes": 300,
+        "prerequisite_node_keys": [
+          "contract_testing",
+          "async_failure_paths",
+          "mutation_testing"
+        ],
+        "completion_criteria": [
+          "能给出一份包含各层测试数量与预计运行时间的方案",
+          "能逐条说明第 1 章清单中的每条测试义务由哪一层承担以及原因",
+          "能在持续集成中区分快速反馈档与慢速回归档的执行范围",
+          "能给出覆盖率与变异分数作为准入门槛的具体取值，并说明取值依据而非沿用默认值",
+          "能针对一个高覆盖率却漏掉缺陷的案例，指出应补在哪一层"
+        ]
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "repair_attempts": 0,
+      "generation_path": "model_knowledge",
+      "fallback_used": false
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "概念表述与参考事实一致，知识依赖与章节顺序准确，未编造输入之外的经历或限制。",
+      "evidence": [
+        "nodes[6].completion_criteria：能说明覆盖率为什么无法反映断言是否有效，与 reference_facts[0] 一致",
+        "nodes[3].completion_criteria：能用 fake 替代内存外依赖并保持接口语义一致，与 reference_facts[1] 的替身约束一致",
+        "nodes[1].completion_criteria：测试失败时输出可复现的种子与生成参数，与 reference_facts[2] 一致"
+      ]
+    },
+    "completeness": {
+      "score": 4,
+      "reason": "needs_practice 三项与前测薄弱点全部覆盖，学习目标、理由、时长与可验证完成标准齐全；但前测已掌握的「等价类与边界分析」「性质与变形测试」仅在 nodes[0] 完成标准中被提及，没有独立学习目标或实质章节。",
+      "evidence": [
+        "nodes：无任何章节的 learning_objective 指向「等价类与边界分析」或「性质与变形测试」",
+        "nodes[0].completion_criteria：边界类、属性/变形关系只作为义务清单的分类出现"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "全篇围绕数据处理模块的测试策略展开，技术范围限定在稳定 JavaScript 与通用测试概念，未绑定框架版本。",
+      "evidence": [
+        "summary：明确『只使用稳定的 JavaScript 与通用测试概念，不绑定特定测试框架版本』",
+        "nodes[8].learning_objective：收敛到数据处理模块的分层测试与准入门槛，回应 desired_outcome"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "标题、摘要、依赖与完成标准结构清楚，每章字段完整，读者可据此执行。",
+      "evidence": [
+        "nodes[4]：node_brief、rationale、prerequisite_node_keys、completion_criteria 均齐全且指向具体动作",
+        "nodes[8].completion_criteria：给出可观察的交付物（各层测试数量与运行时间方案、准入取值依据）"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 4,
+      "reason": "整体匹配 advanced 与每周 300 分钟，按依赖分段、难度梯度合理，未把总时长压进一周；但 summary 称「异步失败路径」已掌握并将其作为工具复用，nodes[5] 却又设整章重讲，与前测结论存在轻微不一致。",
+      "evidence": [
+        "summary：『前测已掌握等价类与边界分析、性质与变形测试、异步失败路径，本路线把它们作为可用工具直接复用』",
+        "nodes[5].learning_objective：仍为『能写出不依赖真实等待、可稳定复现的异步失败路径测试』，构成对已掌握项的全章覆盖"
+      ]
+    }
+  },
+  "weighted_score": 4.7,
+  "percentage_score": 94,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:09:06.846Z",
+  "finished_at": "2026-10-10T10:12:27.438Z"
+}

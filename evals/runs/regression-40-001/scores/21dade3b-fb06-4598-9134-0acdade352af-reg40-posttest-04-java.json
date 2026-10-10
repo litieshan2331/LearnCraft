@@ -1,0 +1,248 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "21dade3b-fb06-4598-9134-0acdade352af",
+  "case_id": "reg40-posttest-04-java",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "posttest_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "kind": "post_test",
+    "question_count": 6,
+    "difficulty": "normal",
+    "plan_id": null,
+    "plan_node_id": "50000000-0000-4000-8000-000000000004",
+    "source_card_content_id": "60000000-0000-4000-8000-000000000004",
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "在 Java 中，关于构造方法的声明，下列说法正确的是哪个？",
+        "options": [
+          {
+            "key": "A",
+            "text": "与类同名，且不写返回值类型"
+          },
+          {
+            "key": "B",
+            "text": "与类同名，返回值类型写成 void"
+          },
+          {
+            "key": "C",
+            "text": "方法名可以任意取，只要用 new 调用"
+          },
+          {
+            "key": "D",
+            "text": "必须声明为 private，才能给字段赋值"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "构造方法与类同名并且没有返回类型；一旦写上 void 之类的返回类型，它就变成普通方法，不再承担构造初始化职责。",
+        "skill_tags": [
+          "构造方法定义"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在 Product 的构造方法中，参数名和实例字段名都叫 name。为什么写 `this.name = name;` 能完成字段初始化，而写成 `name = name;` 不行？",
+        "options": [
+          {
+            "key": "A",
+            "text": "`this.name` 指向当前对象的实例字段，而单独的 `name` 只表示参数自身"
+          },
+          {
+            "key": "B",
+            "text": "`this` 是触发构造方法执行的关键字，不加它构造方法就不会运行"
+          },
+          {
+            "key": "C",
+            "text": "`name = name;` 会报错，因为参数名不允许和字段名相同"
+          },
+          {
+            "key": "D",
+            "text": "加了 `this` 之后字段就变成 static，因此可以被赋值"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "同名的参数会遮蔽字段，`name = name;` 只是把参数赋给自己，没有写入对象状态；要用 `this.name = name;` 明确赋值给实例字段。",
+        "skill_tags": [
+          "this 关键字",
+          "字段与参数"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，程序输出是什么？\n```java\npublic class Product {\n    private final String name;\n\n    public Product(String name) {\n        this.name = name;\n    }\n\n    public String getName() {\n        return name;\n    }\n}\n```\n```java\npublic class Main {\n    public static void main(String[] args) {\n        Product first = new Product(\"Book\");\n        Product second = new Product(\"Pen\");\n        System.out.println(first.getName());\n        System.out.println(second.getName());\n    }\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "第一行 Book，第二行 Pen"
+          },
+          {
+            "key": "B",
+            "text": "第一行 Pen，第二行 Pen"
+          },
+          {
+            "key": "C",
+            "text": "第一行 Book，第二行 Book"
+          },
+          {
+            "key": "D",
+            "text": "编译错误，因为两个对象共用同一个 name 字段"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "first 和 second 是两个独立的实例，各自保存自己的 name 字段，所以 first.getName() 返回 Book，second.getName() 返回 Pen。",
+        "skill_tags": [
+          "实例状态",
+          "代码阅读"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "Product 类的字段声明为 `private final String name;`。如果在 Main 的 main 方法中写 `System.out.println(first.name);`，会发生什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "编译错误，类外不能直接读取 private 字段"
+          },
+          {
+            "key": "B",
+            "text": "正常输出 Book，private 只对子类生效"
+          },
+          {
+            "key": "C",
+            "text": "输出 null，private 字段默认不初始化"
+          },
+          {
+            "key": "D",
+            "text": "运行时抛出 NullPointerException"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "private 限制外部直接访问字段，main 中应通过公开的 getName 方法读取对象名称，而不是直接访问字段。",
+        "skill_tags": [
+          "private 字段",
+          "封装"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面这段代码中，构造方法的写法存在什么问题？\n```java\npublic class Product {\n    private final String name;\n\n    public void Product(String name) {\n        this.name = name;\n    }\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "它带有返回类型，不是构造方法，new 时无法用它初始化 name"
+          },
+          {
+            "key": "B",
+            "text": "把 void 改成 int，就能作为构造方法使用"
+          },
+          {
+            "key": "C",
+            "text": "构造方法不能带参数，必须删掉 String name"
+          },
+          {
+            "key": "D",
+            "text": "没有任何问题，new Product(\"Book\") 能正常初始化 name"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "有返回类型的同名声明只是普通方法，不能承担构造初始化职责；构造方法应使用类名并省略返回类型。",
+        "skill_tags": [
+          "构造方法定义",
+          "常见错误"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "先用 `new Product(\"Book\")` 创建 first，再用 `new Product(\"Pen\")` 创建 second。为什么创建 second 时不会覆盖 first 的名称？",
+        "options": [
+          {
+            "key": "A",
+            "text": "每个实例各有一份实例字段，构造方法只写入当前对象的字段"
+          },
+          {
+            "key": "B",
+            "text": "因为 name 是 final，second 不会执行构造方法"
+          },
+          {
+            "key": "C",
+            "text": "因为 name 是 static，所有对象共享同一个值"
+          },
+          {
+            "key": "D",
+            "text": "因为两次 new 传入的参数不同，Java 会自动隔离状态"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "字段属于实例，每次 new 都创建一份新的对象状态；构造方法通过 this 只修改当前对象的 name，因此两个实例互不影响。",
+        "skill_tags": [
+          "实例状态",
+          "构造方法初始化"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "source_card_content_id": "60000000-0000-4000-8000-000000000004",
+      "tool_call_count": 0,
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "六道题的答案与解析均与固定教材事实一致，构造方法无返回类型、this 区分字段与参数、实例状态独立等推导正确。",
+      "evidence": [
+        "candidate_output.questions[2].answer_key：\"A\"，解析与 reference_facts 中 first.getName() 返回 Book、second.getName() 返回 Pen 一致",
+        "candidate_output.questions[1].explanation：正确说明同名参数遮蔽字段、this.name 指向实例字段"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "题量恰好为 6 道单选题，覆盖全部 required_knowledge_points，并包含教材列出的两个主要误区及代码理解题。",
+      "evidence": [
+        "candidate_output.question_count：6，与 input_snapshot.question_count 一致",
+        "candidate_output.questions[4].prompt：针对「为构造方法写 void」误区设题；questions[1] 针对 name = name 误区"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "所有题目只考查构造方法、this、private 字段与实例状态等节点内容，未引入未学习的新概念或框架。",
+      "evidence": [
+        "candidate_output.questions[3].skill_tags：[\"private 字段\",\"封装\"]，均在 teaching_memory.key_concepts 范围内",
+        "candidate_output.questions[5].prompt：仅围绕两个 Product 实例状态是否互相覆盖发问"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "题干简洁，代码块与选项分列清楚，解析能对应到具体概念或代码行为。",
+      "evidence": [
+        "candidate_output.questions[2].prompt：代码块与问题分离，选项表述清晰",
+        "candidate_output.questions[0].explanation：直接指出带 void 即变为普通方法，定位明确"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 5,
+      "reason": "难度贴合刚学完本章的初学者，normal 难度下以已学概念的辨识、代码阅读和简单因果推理为主，题干提供足够上下文。",
+      "evidence": [
+        "candidate_output.questions[3].prompt：给出完整 Product 类与字段修饰符后再提问，符合初学者需要的上下文",
+        "candidate_output.questions[5].prompt：以 new Product(\"Book\")/new Product(\"Pen\") 的场景考查实例独立，属已学范围内的应用"
+      ]
+    }
+  },
+  "weighted_score": 5,
+  "percentage_score": 100,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:16:18.194Z",
+  "finished_at": "2026-10-10T09:56:33.136Z"
+}

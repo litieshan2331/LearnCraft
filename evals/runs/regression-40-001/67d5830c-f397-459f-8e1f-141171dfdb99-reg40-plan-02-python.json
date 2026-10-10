@@ -1,0 +1,245 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "67d5830c-f397-459f-8e1f-141171dfdb99",
+  "case_id": "reg40-plan-02-python",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "plan_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "schema_version": "learning_plan.v1",
+    "title": "Python 数据处理入门学习路线",
+    "summary": "面向刚开始学编程的学习者，只用 Python 3 稳定语法与标准库，从变量与类型出发，经过条件、循环、函数、列表与字典，最终落到“把一组分数整理成有效数据并统计、能处理空输入”这一条完整任务上。按每周 90 分钟的节奏，共 11 章、约 13 周。",
+    "nodes": [
+      {
+        "node_key": "variables_and_types",
+        "ordinal": 1,
+        "title": "变量与四种基本数据类型",
+        "node_brief": "变量赋值与重新赋值，int、float、str、bool 四种类型，type() 查看类型，以及数字与字符串之间的显式转换。",
+        "learning_objective": "能声明变量、用 type() 判断一个值的类型，并写出把字符串转成数字的转换代码。",
+        "rationale": "前测显示“基础类型与变量”只达到部分掌握，而后面所有数据处理都以“值是什么类型、能不能计算”为前提。",
+        "difficulty": 1,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能写出至少 4 个变量分别存放整数、小数、字符串和布尔值，并用 type() 打印各自类型",
+          "能解释为什么 \"3\" + \"4\" 的结果不是 7，并写出得到 7 的写法",
+          "能说明 input() 返回的值的类型，以及为什么需要转换后才能做加法"
+        ]
+      },
+      {
+        "node_key": "conditionals",
+        "ordinal": 2,
+        "title": "条件分支：让程序做判断",
+        "node_brief": "if / elif / else 结构，比较运算符，以及用 and、or、not 组合条件判断一个值是否落在有效区间。",
+        "learning_objective": "能根据数值或字符串条件写出多路分支，并判断一个分数是否在有效范围内。",
+        "rationale": "“哪些数据有效、哪些要丢弃”这件事本质上是条件判断，输入检查与数据过滤都依赖这一章。",
+        "difficulty": 2,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [
+          "variables_and_types"
+        ],
+        "completion_criteria": [
+          "能写出三路分支，分别输出“高于平均”“正常”“需要关注”",
+          "能用 and 组合两个条件判断分数是否在 0 到 100 之间",
+          "能说明 = 与 == 的区别，并指出写错时会出现的现象"
+        ]
+      },
+      {
+        "node_key": "list_basics_and_for",
+        "ordinal": 3,
+        "title": "列表与 for 循环遍历",
+        "node_brief": "列表的创建、索引与切片，range() 的用法，以及用 for 循环逐个访问列表元素。",
+        "learning_objective": "能创建列表、按下标取出元素，并用 for 循环遍历列表完成打印或逐项处理。",
+        "rationale": "一组分数天然用列表表示，而遍历是后续所有统计的前提；前测显示“循环与列表遍历”明确需要练习。",
+        "difficulty": 2,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "variables_and_types"
+        ],
+        "completion_criteria": [
+          "能创建含 5 个分数的列表，并正确取出第 1 个和最后一个元素",
+          "能用 for 循环遍历列表并打印每个元素",
+          "能说出 range(3) 会产生哪些值，并说明它与列表下标的对应关系"
+        ]
+      },
+      {
+        "node_key": "while_and_loop_control",
+        "ordinal": 4,
+        "title": "while 循环与循环控制",
+        "node_brief": "while 循环的退出条件，break 与 continue 的使用场景，以及“累加器”“计数器”两个循环惯用写法。",
+        "learning_objective": "能选择合适的循环形式处理数据，并用累加器和计数器变量写出求和与计数的循环逻辑。",
+        "rationale": "统计分数必须依赖“边遍历边累加”的模式，这一章把 for 遍历升级成真正的数据处理循环。",
+        "difficulty": 3,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [
+          "list_basics_and_for"
+        ],
+        "completion_criteria": [
+          "能写出一个带明确退出条件的 while 循环",
+          "能用累加器求出一组分数的总和，并用计数器统计元素个数",
+          "能说明在什么场景下用 break 提前结束循环更合适"
+        ]
+      },
+      {
+        "node_key": "functions",
+        "ordinal": 5,
+        "title": "函数：参数、返回值与复用",
+        "node_brief": "用 def 定义函数，位置参数与带默认值的参数，return 返回结果，以及把重复出现的代码抽成一个函数。",
+        "learning_objective": "能定义带参数并返回结果的函数，并用它替换流程中重复的代码段。",
+        "rationale": "前测显示“函数参数和返回值”需要练习；本路线要求的清洗与统计都要以函数形式被反复调用。",
+        "difficulty": 3,
+        "estimated_minutes": 150,
+        "prerequisite_node_keys": [
+          "conditionals",
+          "while_and_loop_control"
+        ],
+        "completion_criteria": [
+          "能定义接受一个参数的函数并通过 return 返回计算结果",
+          "能定义带默认参数的函数，并演示不传参和传参两种调用结果",
+          "能说明 return 与 print 的区别，并指出只写 print 的函数会带来什么问题"
+        ]
+      },
+      {
+        "node_key": "list_methods",
+        "ordinal": 6,
+        "title": "列表的增删改查与排序",
+        "node_brief": "append、remove、insert、len、in 的用法，sort 与 sorted 的区别，以及列表切片读取局部数据。",
+        "learning_objective": "能对列表完成添加、删除、查找、长度统计和排序，得到一份有序的结果列表。",
+        "rationale": "清洗过程的产物是一个列表，需要靠这些方法把它整理成可读、可排序的有效数据。",
+        "difficulty": 2,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [
+          "list_basics_and_for"
+        ],
+        "completion_criteria": [
+          "能用 append 逐个加入分数，并用 len 报告当前个数",
+          "能用 sort 或 sorted 把分数从小到大排序，并说明两者对原列表的影响差异",
+          "能用 in 判断某个分数是否已经在列表中"
+        ]
+      },
+      {
+        "node_key": "dictionaries",
+        "ordinal": 7,
+        "title": "字典：用键组织带标签的数据",
+        "node_brief": "字典的创建与按键取值，get 提供默认值，以及遍历 keys、values、items 三种方式。",
+        "learning_objective": "能用字典存放带标签的数据，并遍历字典取出键和对应的值。",
+        "rationale": "前测显示“列表与字典”需要练习；“总分、平均分、有效个数”这类结果用字典表达最直观。",
+        "difficulty": 3,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [
+          "list_basics_and_for"
+        ],
+        "completion_criteria": [
+          "能创建一个记录姓名与分数的字典，并通过键取出分数",
+          "能用 get 在键不存在时返回默认值而不报错",
+          "能用 for 遍历 items 并格式化打印每一个键值对"
+        ]
+      },
+      {
+        "node_key": "strings_and_parsing",
+        "ordinal": 8,
+        "title": "字符串清洗与类型转换",
+        "node_brief": "strip 去空白、split 按分隔符拆分、join 拼接，以及用 int()、float() 把文本字段转成可计算的数字。",
+        "learning_objective": "能把一行原始文本按分隔符拆成若干字段，并判断其中哪些字段能转换成数字。",
+        "rationale": "真实数据常常是文本形式，转换失败与否决定了后面要不要丢弃这条数据。",
+        "difficulty": 3,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "conditionals",
+          "list_methods"
+        ],
+        "completion_criteria": [
+          "能用 split 把 \"85,90,,70\" 这样的字符串拆成列表",
+          "能用 strip 去掉字段首尾的空格与换行符",
+          "能手写列出至少两个无法转换成数字的字符串，并说明转换会失败的原因"
+        ]
+      },
+      {
+        "node_key": "input_validation_and_errors",
+        "ordinal": 9,
+        "title": "输入检查与异常处理",
+        "node_brief": "input() 读取输入，用条件判断识别空字符串，用 try / except ValueError 捕获转换失败，避免程序直接崩溃。",
+        "learning_objective": "能写出对单条输入做校验的代码，让空输入、非数字输入、超范围数值都被识别并给出提示。",
+        "rationale": "这是本路线“处理空输入”要求的核心技能，也是清洗流程能安全运行的前提。",
+        "difficulty": 3,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [
+          "strings_and_parsing",
+          "functions"
+        ],
+        "completion_criteria": [
+          "能用 try / except ValueError 包住类型转换，并在失败时输出提示",
+          "能判断输入是否为空字符串，并让两种情况走不同分支",
+          "能在分数超出 0 到 100 时给出提示，而不是算出错误结果"
+        ]
+      },
+      {
+        "node_key": "cleaning_pipeline",
+        "ordinal": 10,
+        "title": "分数数据清洗流程",
+        "node_brief": "把一份混合了空串与非法值的字符串清单，逐步清洗成只含有效分数的数字列表：去空白、跳过空项、丢弃转换失败项、做范围校验。",
+        "learning_objective": "能写出一个清洗函数，输入字符串列表，输出只包含合法分数的数字列表。",
+        "rationale": "这一章把前面所有碎片技能串成“整理成有效数据”的完整步骤，是目标中“把一组分数整理成有效数据”的直接落地。",
+        "difficulty": 4,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "input_validation_and_errors",
+          "list_methods"
+        ],
+        "completion_criteria": [
+          "清洗函数遇到含空串的输入时不报错，并把空项排除在结果之外",
+          "清洗函数遇到含非数字项的输入时，返回丢弃该项之后的列表",
+          "当输入全部为无效值时，函数返回空列表而不是抛出异常",
+          "能用一份自造的三到五行测试数据演示清洗前后的列表对比"
+        ]
+      },
+      {
+        "node_key": "statistics_and_empty_input",
+        "ordinal": 11,
+        "title": "统计计算与空输入处理",
+        "node_brief": "用函数和循环计算总分、平均分、最高分、最低分与有效个数，把结果放进字典返回，并显式处理空列表。",
+        "learning_objective": "能把清洗后的分数列表交给统计算数函数，得到可核对的统计结果，并在列表为空时返回明确提示而不崩溃。",
+        "rationale": "这一章完成目标的最后一步：用函数与循环算出统计结果，并覆盖“空输入”这一边界情况。",
+        "difficulty": 4,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "cleaning_pipeline",
+          "dictionaries",
+          "functions"
+        ],
+        "completion_criteria": [
+          "统计函数返回包含总分、平均分、最高分、最低分、有效个数的字典",
+          "统计结果能用纸笔手算复核，且与程序输出一致",
+          "传入空列表时不做除法运算，而是返回明确的提示信息",
+          "能口头或书面说明从原始字符串清单到统计结果的完整调用链：清洗函数 → 统计函数"
+        ]
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "repair_attempts": 0,
+      "generation_path": "model_knowledge",
+      "fallback_used": false
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "learning_plan_id": "3bf02302-8af5-4892-8b66-ff97b85f43db",
+    "node_count": 11,
+    "tool_call_count": 0,
+    "repair_attempts": 0,
+    "generation_path": "model_knowledge",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:06:49.459Z",
+  "finished_at": "2026-10-10T08:07:12.897Z"
+}

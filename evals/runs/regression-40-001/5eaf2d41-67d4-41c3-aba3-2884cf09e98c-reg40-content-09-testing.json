@@ -1,0 +1,153 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "5eaf2d41-67d4-41c3-aba3-2884cf09e98c",
+  "case_id": "reg40-content-09-testing",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "card_content_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "schema_version": "card_content.v2",
+    "foundation": "## 本章要解决的问题\n\n**测试的价值来自“比较”，而不是“展示”。** 打印只是把计算结果摆给人看，程序自己并不知道这个值对不对；断言则把“实际值”和“期望值”同时写进代码，两者不一致时立刻抛出错误。所以能读懂断言，才算真正会写自动化验证。\n\n## 函数合同决定测试输入\n\n**选测试输入不是靠感觉，而是先读函数合同，再挑代表值。** 合同是调用方与被调用方之间的约定：本章的 totalCents(unitPriceCents, quantity) 约定单价单位为分、单价与数量都必须是非负整数，返回值是二者的乘积。围绕这份合同，输入可以分成三类。\n\n- **普通值**：能走通主流程的典型输入，例如单价 250 分、数量 4 件，期望得到 1000。\n- **边界值**：处在允许范围两端、最容易被写错的输入，例如数量为 0、单价为 0、数量为 1。零数量是合同允许的合法输入，所以应当返回 0，而不是抛错。\n- **非法值**：合同明确排除的输入，例如负数量或小数数量，期望的行为是抛出异常。\n\n判断一个用例属于哪一类，只要问：这个输入在合同里是被允许的，还是被禁止的？\n\n## 断言的两类写法\n\n**返回值和异常要用不同的断言方式。** 正常结果是“函数算出了一个值”，用 assert.strictEqual(actual, expected, message) 来比；非法输入是“函数拒绝执行”，用 assert.throws(fn, ErrorClass) 来验证它抛出的错误类型。\n\n- assert.strictEqual 会同时比较值和类型，250 与 \"250\" 不会被认为是相等。\n- assert.throws 的第一个参数必须是一个**函数**，断言会代替你去调用它；第二个参数可以写错误构造函数（如 RangeError），用来检查错误的类型而不只是文本。\n- 使用 node:assert/strict 入口可以避免宽松比较带来的误判，本章所有断言都用它。\n\n## 打印与自动验证的区别\n\n**打印是过程信息，断言才是判定机制。** 打印出来的值即使完全错误，程序也会正常结束，人还可能没注意到；断言失败会抛出 AssertionError，并在消息里带上期望值、实际值和比较方式，明确指出哪一项不符合合同。\n\n因此在测试代码里，输出语句可以保留当提示，但“通过”这个结论必须来自断言：只有所有断言都不抛错，才说明这次检查成立。",
+    "worked_example": {
+      "explanation": "示例由三个文件组成：money.js 定义函数与它的合同，checks/money.checks.js 用 assert/strict 写出普通、边界和非法输入三类检查，run-checks.js 作为入口按顺序执行这些检查。读代码时先看 totalCents 的合同与非负整数校验，再看三类断言如何分别覆盖普通值、零数量和负数量，最后看入口怎么组织执行顺序并输出过程信息。注意入口里的输出语句只是提示，真正决定成败的是 assert 是否抛错。",
+      "files": [
+        {
+          "path": "src/money.js",
+          "language": "js",
+          "role": "module",
+          "content": "'use strict';\n\n// 合同：unitPriceCents 与 quantity 都必须是非负整数，\n// 返回 unitPriceCents * quantity，单位仍为分。\nfunction assertNonNegativeInteger(value, name) {\n  if (!Number.isInteger(value) || value < 0) {\n    throw new RangeError(name + ' 必须是非负整数，收到：' + value);\n  }\n}\n\nfunction totalCents(unitPriceCents, quantity) {\n  assertNonNegativeInteger(unitPriceCents, 'unitPriceCents');\n  assertNonNegativeInteger(quantity, 'quantity');\n  return unitPriceCents * quantity;\n}\n\nmodule.exports = { totalCents };\n"
+        },
+        {
+          "path": "src/checks/money.checks.js",
+          "language": "js",
+          "role": "test",
+          "content": "'use strict';\n\nconst assert = require('node:assert/strict');\nconst { totalCents } = require('../money');\n\nfunction checkNormalTotal() {\n  assert.strictEqual(totalCents(250, 4), 1000, '4 件、单价 250 分应得到 1000 分');\n}\n\nfunction checkZeroQuantity() {\n  assert.strictEqual(totalCents(250, 0), 0, '数量为 0 时总金额应为 0');\n}\n\nfunction checkZeroUnitPrice() {\n  assert.strictEqual(totalCents(0, 5), 0, '单价为 0 时总金额应为 0');\n}\n\nfunction checkNegativeQuantityThrows() {\n  assert.throws(\n    () => totalCents(250, -1),\n    RangeError,\n    '负数量应触发 RangeError'\n  );\n}\n\nfunction checkFractionalQuantityThrows() {\n  assert.throws(\n    () => totalCents(250, 1.5),\n    RangeError,\n    '小数数量应触发 RangeError'\n  );\n}\n\nfunction runAllChecks() {\n  const checks = [\n    ['普通数量', checkNormalTotal],\n    ['零数量', checkZeroQuantity],\n    ['零单价', checkZeroUnitPrice],\n    ['负数量抛出 RangeError', checkNegativeQuantityThrows],\n    ['小数数量抛出 RangeError', checkFractionalQuantityThrows],\n  ];\n\n  for (const [name, check] of checks) {\n    check();\n    console.log('已通过：' + name);\n  }\n\n  return checks.length;\n}\n\nmodule.exports = { runAllChecks };\n"
+        },
+        {
+          "path": "src/run-checks.js",
+          "language": "js",
+          "role": "entry",
+          "content": "'use strict';\n\nconst { runAllChecks } = require('./checks/money.checks');\n\nfunction main() {\n  const passed = runAllChecks();\n  console.log('全部 ' + passed + ' 项断言通过');\n}\n\nmain();\n"
+        }
+      ],
+      "entry_file": "src/run-checks.js",
+      "call_sequence": [
+        {
+          "step": 1,
+          "file": "src/money.js",
+          "function": "totalCents",
+          "note": "先读函数合同：单价与数量都必须是非负整数，返回乘积"
+        },
+        {
+          "step": 2,
+          "file": "src/checks/money.checks.js",
+          "function": "checkNormalTotal",
+          "note": "普通输入用 strictEqual 断言返回值 1000"
+        },
+        {
+          "step": 3,
+          "file": "src/checks/money.checks.js",
+          "function": "checkZeroQuantity",
+          "note": "边界输入数量为 0，断言返回 0 而不是抛错"
+        },
+        {
+          "step": 4,
+          "file": "src/checks/money.checks.js",
+          "function": "checkNegativeQuantityThrows",
+          "note": "非法输入负数量，用 assert.throws 断言错误类型为 RangeError"
+        },
+        {
+          "step": 5,
+          "file": "src/checks/money.checks.js",
+          "function": "runAllChecks",
+          "note": "按数组顺序逐项执行检查并返回通过数量"
+        },
+        {
+          "step": 6,
+          "file": "src/run-checks.js",
+          "function": "main",
+          "note": "入口调用 runAllChecks，再输出一句汇总提示"
+        }
+      ],
+      "expected_output": "src/run-checks.js › main：五项检查依次执行，每通过一项输出一条提示，最后给出通过数量；如果某个断言不成立，执行会在这里停下，Node 抛出 AssertionError，并在消息里给出期望值、实际值和比较方式。"
+    },
+    "pitfalls_debug": [
+      {
+        "title": "用打印结果代替断言",
+        "cause": "console.log 只是把值写到输出，程序没有把它和期望值做任何比较，值算错了也不会报错。",
+        "fix": "把期望值写成 assert.strictEqual 的第二个参数，把打印语句降级为过程提示，通过与否只看断言是否抛错。"
+      },
+      {
+        "title": "把已经调用完的结果传给 assert.throws",
+        "cause": "写成 assert.throws(totalCents(250, -1), RangeError) 时，totalCents 会先被调用并直接抛出未被捕获的 RangeError，断言根本没机会检查。",
+        "fix": "第一个参数传回调函数，写成 assert.throws(() => totalCents(250, -1), RangeError)，让断言自己去调用。"
+      },
+      {
+        "title": "只测普通情况，漏掉零和边界",
+        "cause": "只写一个 250 乘 4 的用例时，代码即使把数量 0 当成非法输入或者返回 NaN，也照样能通过。",
+        "fix": "按合同补上边界输入：数量 0、单价 0、数量 1，分别断言返回值为 0、0、单价本身。"
+      },
+      {
+        "title": "用宽松比较判断返回值",
+        "cause": "引入非 strict 的 assert 入口再用 assert.equal 时，字符串 '1000' 和数字 1000 可能被判为相等，掩盖类型错误。",
+        "fix": "统一 require('node:assert/strict')，并用 assert.strictEqual 同时比较值和类型。"
+      },
+      {
+        "title": "断言失败后以为剩下的检查也跑了",
+        "cause": "断言失败会抛错并中断当前执行流，后面的检查不会执行，容易误判成只有一处问题。",
+        "fix": "每次修正一处失败后重新执行，直到所有检查都走完；需要一次性看完所有失败时，再考虑把每项检查包起来分别执行。"
+      }
+    ],
+    "source_refs": [
+      {
+        "title": "Node.js 官方文档：assert（断言）",
+        "url": "https://nodejs.org/api/assert.html"
+      },
+      {
+        "title": "Node.js 官方文档：assert.throws",
+        "url": "https://nodejs.org/api/assert.html#assertthrowsfn-error-message"
+      }
+    ],
+    "teaching_memory": {
+      "key_concepts": [
+        "函数合同：单价单位为分，单价与数量均为非负整数",
+        "断言通过比较实际值与期望值来判定，而不是靠人看输出",
+        "assert.strictEqual 验证返回值，assert.throws 验证异常类型",
+        "普通值、边界值、非法值三类测试输入"
+      ],
+      "common_mistakes": [
+        "把 console.log 的输出当成验证通过的证据",
+        "把已执行完的函数调用结果传给 assert.throws",
+        "只覆盖普通输入，忽略数量为 0 这类合法边界"
+      ],
+      "assessment_targets": [
+        "能根据 totalCents 的合同挑出普通、边界与非法输入各至少一个",
+        "能用 assert.strictEqual 断言普通结果和零数量结果，用 assert.throws 断言负数量触发 RangeError",
+        "能说明断言失败会抛出 AssertionError 并报告问题，而只打印结果不会自动验证"
+      ]
+    },
+    "plan_node_id": "50000000-0000-4000-8000-000000000009",
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "logical_session_key": "reg40-session-testing"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "card_content_id": "fcde29b5-27b6-4283-9086-ee4e5c987d8f",
+    "plan_node_id": "50000000-0000-4000-8000-000000000009",
+    "tool_call_count": 0,
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:14:08.397Z",
+  "finished_at": "2026-10-10T08:14:58.051Z"
+}

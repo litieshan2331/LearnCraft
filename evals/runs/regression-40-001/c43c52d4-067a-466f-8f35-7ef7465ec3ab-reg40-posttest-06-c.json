@@ -1,0 +1,183 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "c43c52d4-067a-466f-8f35-7ef7465ec3ab",
+  "case_id": "reg40-posttest-06-c",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "posttest_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "post_test",
+    "question_count": 5,
+    "difficulty": "normal",
+    "plan_id": null,
+    "plan_node_id": "50000000-0000-4000-8000-000000000006",
+    "source_card_content_id": "60000000-0000-4000-8000-000000000006",
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "下面的求和函数被调用时传入 3 个有效整数，`sum_array({2,4,6}, 3)` 会出现什么问题？\n```c\nint sum_array(const int *values, size_t count) {\n    int total = 0;\n    for (size_t i = 0; i <= count; ++i) {\n        total += values[i];\n    }\n    return total;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "最后一次迭代会读取 values[3]，超出 0 到 2 的有效索引范围"
+          },
+          {
+            "key": "B",
+            "text": "循环会提前结束，只累加了前两个元素，结果偏小"
+          },
+          {
+            "key": "C",
+            "text": "编译不通过，因为 size_t 类型的 i 不能与 count 比较"
+          },
+          {
+            "key": "D",
+            "text": "结果仍然是 12，与写成 i < count 时完全相同"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "循环条件写成 i <= count 时，i 最后一次取到 count，也就是索引 3，而有效索引只有 0、1、2，因此会越界访问。应改为 i < count。",
+        "skill_tags": [
+          "循环边界",
+          "数组越界"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在 `sum_array` 函数体内写 `sizeof(values) / sizeof(values[0])`，得到的结果是什么？\n```c\nint sum_array(const int *values, size_t count) {\n    size_t n = sizeof(values) / sizeof(values[0]);\n    /* ... */\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "指针本身的大小除以 int 的大小，通常得不到调用方数组的元素个数"
+          },
+          {
+            "key": "B",
+            "text": "调用方数组的元素个数，因为 values 仍然指向那个数组"
+          },
+          {
+            "key": "C",
+            "text": "调用方数组占用的总字节数，可以直接当作 count 使用"
+          },
+          {
+            "key": "D",
+            "text": "编译错误，因为 values 带有 const 修饰，不能参与 sizeof 运算"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "数组作为参数传入后，形参 values 是指针，sizeof(values) 测量的是指针本身而不是调用方的整个数组，所以得不到元素个数。元素数量必须由调用方计算后显式传入。",
+        "skill_tags": [
+          "指针 sizeof",
+          "显式传递元素数量"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "函数原型为 `int sum_array(const int *values, size_t count);`，关于形参 `values` 的说法哪一项正确？",
+        "options": [
+          {
+            "key": "A",
+            "text": "函数可以借助 values 读取元素，但不能通过它修改指向的数组元素"
+          },
+          {
+            "key": "B",
+            "text": "const 表示 values 这个指针变量自身不能被重新赋值指向别处"
+          },
+          {
+            "key": "C",
+            "text": "调用时实参数组会被整体复制一份，函数操作的是副本"
+          },
+          {
+            "key": "D",
+            "text": "函数内可以用 sizeof(values) 推算出调用方数组的元素个数"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "`const int *values` 中 const 修饰的是 values 指向的元素，表示函数只读访问、不修改输入数组；它并不限制指针变量本身被重新赋值。数组传参不会整体复制，函数内也无法用 sizeof 得到调用方数组长度。",
+        "skill_tags": [
+          "const 只读访问",
+          "指针与元素访问"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "把数组传给 `sum_array` 时，为什么还要额外传入 `count`，而不是让函数自己算出元素个数？",
+        "options": [
+          {
+            "key": "A",
+            "text": "形参收到的是指向首元素的指针，不���保存数组的元素个数信息"
+          },
+          {
+            "key": "B",
+            "text": "数组在传参过程中会被完整复制，形参和实参不是同一块内存"
+          },
+          {
+            "key": "C",
+            "text": "C 语言不允许把数组名直接作为函数实参出现在调用中"
+          },
+          {
+            "key": "D",
+            "text": "函数必须先返回一次总和，之后才能知道数组有多长"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "数组传入函数后，参数不自动保存原数组长度，形参只是一个指向首元素的指针，因此元素数量必须由调用方计算并显式传入。",
+        "skill_tags": [
+          "显式传递元素数量",
+          "指针与元素访问"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的程序，输出结果是什么？\n```c\n#include <stdio.h>\n#include <stddef.h>\n\nint sum_array(const int *values, size_t count) {\n    int total = 0;\n    for (size_t i = 0; i < count; ++i) {\n        total += values[i];\n    }\n    return total;\n}\n\nint main(void) {\n    int values[] = {1, 3, 5, 7};\n    size_t count = sizeof(values) / sizeof(values[0]);\n    printf(\"%d\\n\", sum_array(values, count));\n    return 0;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "16"
+          },
+          {
+            "key": "B",
+            "text": "15"
+          },
+          {
+            "key": "C",
+            "text": "8"
+          },
+          {
+            "key": "D",
+            "text": "4"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "在 main 中 values 是实际数组，sizeof(values) / sizeof(values[0]) 得到元素个数 4；sum_array 用 i < count 遍历 0 到 3，累加 1+3+5+7 = 16。",
+        "skill_tags": [
+          "有效数组索引",
+          "数组 sizeof 计算"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "source_card_content_id": "60000000-0000-4000-8000-000000000006",
+      "tool_call_count": 0,
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "18af9504-0214-45ac-a318-97b2608a63f5",
+    "question_count": 5,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:16:56.209Z",
+  "finished_at": "2026-10-10T08:17:06.443Z"
+}

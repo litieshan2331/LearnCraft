@@ -32,6 +32,21 @@ node scripts/agent-eval-command.mjs score --owner-id <用户UUID> --dataset eval
 `build` 校验并标准化 `evals/datasets/default.json`，`run` 只生成并保存业务 Agent 候选结果，`score` 读取候选结果并调用 Judge；
 三阶段分开保存，便于先人工检查候选输出，再重复评分。
 
+评分结束后，如果只有部分用例的 Judge 请求或评分解析失败，可在原命令末尾加 `--retry-failed`：
+
+```powershell
+node scripts/agent-eval-command.mjs score --owner-id <用户UUID> --dataset evals/datasets/built.json --output evals/runs/smoke-001 --retry-failed
+```
+
+该开关只重新处理已有评分中 `status=failed` 的用例，保留 `scored` 和 `invalid` 的单条结果，
+随后合并全部用例重新写入 `scores/report.json`；成功结果在终端显示 `reused=true`。
+失败项不参与平均分，但计入总数与失败数。重试无需重新执行 `build` 或 `run`；
+业务生成阶段失败的用例仍需要先修复生成结果，`score` 不重新调用业务模型。
+
+重试要求全部用例已有评分文件、运行身份与候选内容匹配，并且已有成功评分使用当前配置的 Judge 模型。
+缺少评分文件时请执行普通 `score`；更换 Judge 模型后请执行完整 `score`，避免混用不同模型的评分。
+不带 `--retry-failed` 的普通 `score` 仍会重新评分全部用例并覆盖原评分。
+
 ## 三、处理流程
 
 ```text

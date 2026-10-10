@@ -1,0 +1,234 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "7e62d59a-0b14-4e17-aadc-9a53fa620096",
+  "case_id": "reg40-plan-10-algorithms",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "plan_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "schema_version": "learning_plan.v1",
+    "title": "算法设计与复杂度分析学习路线",
+    "summary": "面向已有扎实编程与数据结构基础的学习者，把复杂度与循环不变量的功底延伸到递归定量分析、二分答案、动态规划状态设计、贪心正确性论证与解法的选择判断上；每条路线章节都以「能说明正确性与复杂度、能用边界用例和随机对拍检验实现」为完成标准，而不是只背复杂度结论。",
+    "nodes": [
+      {
+        "node_key": "complexity_toolkit",
+        "ordinal": 1,
+        "title": "复杂度的紧界、摊还分析与不变量证明模板",
+        "node_brief": "在大 O 与循环不变量的既有基础上，补齐摊还分析（聚合法、记账法）、紧界与常见复杂度误判，并把不变量论证固化成可复用的三段式模板。",
+        "learning_objective": "能对一段给定算法给出紧的时空复杂度界，并用循环不变量写出该算法正确性的证明要点。",
+        "rationale": "这是全路线的分析工具层：后续递归定量分析、DP 复杂度核算、贪心正确性论证都要复用它，因此先在这里把分析语言统一。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能对给出的三段代码分别写出紧界与一个明显宽松的上界，并说明两者差在哪",
+          "能用聚合法或记账法证明动态数组扩容的均摊 O(1)",
+          "能针对一个给定循环写出「进入前成立、每次迭代保持、退出后推出结论」的不变量论证",
+          "能指出至少三处常见复杂度误判，例如把内层循环长度一律当成 n"
+        ]
+      },
+      {
+        "node_key": "recursion_recurrence",
+        "ordinal": 2,
+        "title": "递归与递推的定量分析",
+        "node_brief": "递归树展开、主定理的适用条件与非均匀划分的递推、递归转迭代与栈空间核算，重点是把「感觉是 O(n log n)」变成可推导的结论。",
+        "learning_objective": "能对给定递归算法写出递推式并求出渐近紧界，同时说明递归深度带来的空间开销。",
+        "rationale": "前测显示递推分析需要加强，而它又是分治、记忆化搜索、树形 DP 复杂度的共同前置。",
+        "difficulty": 4,
+        "estimated_minutes": 420,
+        "prerequisite_node_keys": [
+          "complexity_toolkit"
+        ],
+        "completion_criteria": [
+          "能对 T(n)=2T(n/2)+n 与 T(n)=T(n-1)+n 等写出递推式并给出紧界",
+          "能判断主定理三种情形是否适用，并举出一个违反其前提的反例",
+          "能估算一个递归实现的最大栈深度，并改写为使用显式栈的迭代版本",
+          "能说明记忆化把指数级递归降到多项式级所需的条件，并给出一个不满足该条件的例子"
+        ]
+      },
+      {
+        "node_key": "binary_search_advanced",
+        "ordinal": 3,
+        "title": "二分答案与单调谓词建模",
+        "node_brief": "把二分从有序数组查找推广到「在答案空间上二分单调谓词」的判定问题：可行性判定、答案上界选取、整数与浮点边界的终止条件。",
+        "learning_objective": "能把一个求最小/最大值的优化问题转化为在答案空间上二分单调谓词，并写出无死循环的边界实现。",
+        "rationale": "二分边界你已掌握，这里升级到「二分答案」这一常见优化问题范式，并为后续贪心、DP 的方案比较提供对照解法。",
+        "difficulty": 3,
+        "estimated_minutes": 300,
+        "prerequisite_node_keys": [
+          "complexity_toolkit"
+        ],
+        "completion_criteria": [
+          "能为至少两个优化问题写出判定函数 check(mid) 并论证其单调性",
+          "能分别用闭区间与半开区间两种写法实现同一二分，并各自给出循环不变式",
+          "能处理答案上界选取不当与 mid 计算的溢出问题",
+          "能说明浮点二分的终止条件与结��误差界的关系"
+        ]
+      },
+      {
+        "node_key": "divide_conquer_analysis",
+        "ordinal": 4,
+        "title": "分治与减治中的合并代价结构",
+        "node_brief": "分治三段式（划分、递归、合并）中合并代价如何决定总复杂度，划分不平衡导致的退化，以及分治正确性的归纳证明。",
+        "learning_objective": "能判断一个问题是否适合分治，并通过改变合并方式或划分方式降低总复杂度。",
+        "rationale": "分治是递推分析最直接的应用场景，也是理解 DP 与「合并子问题」思路差异的桥梁。",
+        "difficulty": 4,
+        "estimated_minutes": 360,
+        "prerequisite_node_keys": [
+          "recursion_recurrence"
+        ],
+        "completion_criteria": [
+          "能用归纳法写出一个分治算法的正确性证明",
+          "能说明把合并步骤从 O(n) 降到 O(log n) 后总复杂度的变化",
+          "能举出一个看似分治、但因划分不平衡而退化的例子并分析其复杂度",
+          "能把一个减治算法改写为分治形式，并比较两种写法的复杂度与实现代价"
+        ]
+      },
+      {
+        "node_key": "dp_state_design",
+        "ordinal": 5,
+        "title": "动态规划的状态定义与转移正确性",
+        "node_brief": "从暴力递归出发定义状态、验证无后效性与最优子结构，核算状态空间与转移代价，并正确区分初始状态、边界状态与非法状态。",
+        "learning_objective": "能针对一个问题给出状态定义，论证该定义满足无后效性，并写出可实现的转移方程。",
+        "rationale": "状态设计是前测暴露的核心薄弱点，也是后续空间压缩与转移优化的唯一入口。",
+        "difficulty": 4,
+        "estimated_minutes": 480,
+        "prerequisite_node_keys": [
+          "recursion_recurrence"
+        ],
+        "completion_criteria": [
+          "能对同一问题给出两种不同的状态定义并比较状态数与转移代价",
+          "能用「状态中是否遗漏了影响后续决策的信息」这一检查来判断无后效性",
+          "能明确写出一组 DP 的初始状态、边界状态与非法状态及各自的取值理由",
+          "能把一个指数级暴力递归改写为带记忆化的 DP，并给出时空复杂度",
+          "能构造一个状态定义遗漏信息、导致结果错误的反例"
+        ]
+      },
+      {
+        "node_key": "dp_optimization",
+        "ordinal": 6,
+        "title": "DP 的空间压缩与转移优化",
+        "node_brief": "滚动数组与原地压缩的适用条件、区间 DP 与树形 DP 的枚举顺序、状态压缩，以及前缀和与单调队列对特定转移形式的优化。",
+        "learning_objective": "能在不改变 DP 语义的前提下压缩空间，并识别可用前缀和或单调队列优化的转移形式。",
+        "rationale": "有了正确的状态设计后，优化才是安全的；这一章解决的正是「状态对了但规模跑不动」的问题。",
+        "difficulty": 5,
+        "estimated_minutes": 480,
+        "prerequisite_node_keys": [
+          "dp_state_design"
+        ],
+        "completion_criteria": [
+          "能判断哪些 DP 可以原地压缩、哪些不行，并说明依赖方向上的原因",
+          "能为一个区间 DP 正确给出枚举顺序并说明为什么不能颠倒",
+          "能把形如 dp[i]=min(dp[j]+w(j,i)) 的转移用前缀和或单调队列优化，并证明优化后与原转移等价",
+          "能对压缩前后的实现随机对拍，结果完全一致"
+        ]
+      },
+      {
+        "node_key": "greedy_correctness",
+        "ordinal": 7,
+        "title": "贪心的正确性论证与反例构造",
+        "node_brief": "交换论证、归纳论证与「领先一步」策略的完整结构，以及如何快速构造最小反例来否定一个贪心猜想。",
+        "learning_objective": "能对一个贪心策略给出完整的正确性证明，或构造出使其失效的反例。",
+        "rationale": "前测显示贪心正确性论证需要加强，这一章把「看起来对」变成「能证明或能证伪」，并为下一章的解法选择提供判据。",
+        "difficulty": 4,
+        "estimated_minutes": 420,
+        "prerequisite_node_keys": [
+          "complexity_toolkit"
+        ],
+        "completion_criteria": [
+          "能写出交换论证的完整结构：取最优解、找首个不同选择、交换后仍不劣",
+          "能用归纳法证明一个贪心算法的贪心选择性质",
+          "能在 30 分钟内为一个错误贪心猜想构造出最小反例",
+          "能说明交换性质或拟阵结构成立时贪心最优的条件"
+        ]
+      },
+      {
+        "node_key": "greedy_vs_dp",
+        "ordinal": 8,
+        "title": "在贪心、动态规划与二分之间做选择",
+        "node_brief": "从问题的结构性特征（最优子结构、选择是否独立、单调性、能否局部决策）出发选择解法，并比较各候选方案的复杂度与实现代价。",
+        "learning_objective": "面对一个新的查找或优化问题，能给出候选解法清单并说明最终选择的理由。",
+        "rationale": "这正是本次学习目标的核心能力：不是会写某个算法，而是能为问题挑对算法。",
+        "difficulty": 4,
+        "estimated_minutes": 360,
+        "prerequisite_node_keys": [
+          "greedy_correctness",
+          "dp_state_design"
+        ],
+        "completion_criteria": [
+          "能对同一问题给出贪心、DP、二分三种候选方案并比较时空复杂度",
+          "能指出问题中哪一条性质决定了贪心可用或不可用",
+          "能判断某问题是否存在更简单的做法，并说明其下界依据或为什么难以降低",
+          "能写出一份可复用的解法选择清单，并在一道新题上按清单给出选择理由"
+        ]
+      },
+      {
+        "node_key": "boundary_and_testing",
+        "ordinal": 9,
+        "title": "边界用例设计与随机对拍验证",
+        "node_brief": "针对实现的边界（空输入、单元素、极值、重复值、溢出、退化结构）设计测试，并用暴力对照与随机对拍定位错误。",
+        "learning_objective": "能为一个算法实现列出一组能暴露常见错误的边界用例，并搭建可持续运行的随机对拍脚本。",
+        "rationale": "期望结果要求用边界用例检验实现，这一章把「手测几个样例」升级为系统化的验证流程，供综合案例使用。",
+        "difficulty": 3,
+        "estimated_minutes": 300,
+        "prerequisite_node_keys": [
+          "binary_search_advanced",
+          "dp_state_design"
+        ],
+        "completion_criteria": [
+          "能对给定实现列出至少 6 类边界用例，并说明每类分别能暴露哪类错误",
+          "能写出与优化实现对照的暴力版本，并实现自动化的随机对拍",
+          "能用对拍定位出一处真实存在的实现错误",
+          "能说明对拍数据生成器覆盖的分布：随机、极端、退化、重复"
+        ]
+      },
+      {
+        "node_key": "capstone_algorithm_design",
+        "ordinal": 10,
+        "title": "综合案例：从问题陈述到方案与验证",
+        "node_brief": "用 3 至 4 个完整的查找与优化问题，走完「建模—选择解法—证明正确性—给出复杂度—边界测试」的全流程。",
+        "learning_objective": "能独立完成一个中等难度问题的完整解法报告：方案选择、正确性论证、复杂度分析与测试记录。",
+        "rationale": "把前九章的能力串成一条可交付的工作流程，检验学习目标中「能说明正确性与复杂度并用边界用例检验实现」是否真正达成。",
+        "difficulty": 5,
+        "estimated_minutes": 420,
+        "prerequisite_node_keys": [
+          "greedy_vs_dp",
+          "boundary_and_testing",
+          "dp_optimization"
+        ],
+        "completion_criteria": [
+          "能对至少三个新问题分别给出方案选择理由与正确性论证",
+          "报告能区分复杂度的上界与紧界，并说明各自依据",
+          "每个问题都给出通过随机对拍的实现与配套边界用例清单",
+          "能复盘自己在方案选择中至少一次错误判断，并给出修正后的判据"
+        ]
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "repair_attempts": 0,
+      "generation_path": "model_knowledge",
+      "fallback_used": false
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "learning_plan_id": "522731ea-5835-4203-8736-3f7c4ca88556",
+    "node_count": 10,
+    "tool_call_count": 0,
+    "repair_attempts": 0,
+    "generation_path": "model_knowledge",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:09:32.167Z",
+  "finished_at": "2026-10-10T08:10:01.815Z"
+}

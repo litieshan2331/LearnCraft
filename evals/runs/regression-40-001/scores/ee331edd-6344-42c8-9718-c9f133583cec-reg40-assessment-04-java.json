@@ -1,0 +1,502 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "ee331edd-6344-42c8-9718-c9f133583cec",
+  "case_id": "reg40-assessment-04-java",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "assessment_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "kind": "diagnostic",
+    "question_count": 15,
+    "difficulty": "normal",
+    "plan_id": null,
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "在 Java 中，关于类和对象的关系，下列描述正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "类是一个具体的对象，而对象是类的模板"
+          },
+          {
+            "key": "B",
+            "text": "类是模板，对象是根据类创建出来的具体实例"
+          },
+          {
+            "key": "C",
+            "text": "一个类只能创建一个对象，再创建就会报错"
+          },
+          {
+            "key": "D",
+            "text": "对象必须在类的外部定义，类中不能包含对象"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "类是描述字段和方法的模板，使用 new 关键字可以按这个模板创建出多个互相独立的对象实例。",
+        "skill_tags": [
+          "类与对象"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的类定义，然后用 `new Product()` 创建一个对象。此时 name、price、onSale 三个实例字段的值分别是什么？\n```java\npublic class Product {\n    String name;\n    double price;\n    boolean onSale;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "null、0.0、false"
+          },
+          {
+            "key": "B",
+            "text": "\"\"、0.0、false"
+          },
+          {
+            "key": "C",
+            "text": "null、0.0、true"
+          },
+          {
+            "key": "D",
+            "text": "null、null、null"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "没有显式赋值的实例字段会得到类型默认值：引用类型 String 默认是 null，double 默认是 0.0，boolean 默认是 false。",
+        "skill_tags": [
+          "实例字段",
+          "默认值"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于 Java 类的构造方法，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "构造方法必须显式声明返回值类型 void"
+          },
+          {
+            "key": "B",
+            "text": "构造方法的名字可以和类名不相同"
+          },
+          {
+            "key": "C",
+            "text": "构造方法的名字必须与类名相同，并且不写返回值类型"
+          },
+          {
+            "key": "D",
+            "text": "每个类都必须手写至少一个构造方法，否则编译报错"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "构造方法名与类名相同且没有返回值类型声明。如果类里没有写任何构造方法，编译器会自动提供一个无参构造方法；一旦手写了有参构造方法，这个默认无参构造方法就不再自动提供。",
+        "skill_tags": [
+          "构造方法"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码：\n```java\nProduct p = new Product(\"apple\", 5.0);\n```\n关于这行代码，下列描述正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "p 中保存了对象的全部字段内容，赋值时会复制整个对象"
+          },
+          {
+            "key": "B",
+            "text": "new Product(...) 只是声明了变量，并没有创建对象"
+          },
+          {
+            "key": "C",
+            "text": "p 是类名，Product 才是对象名"
+          },
+          {
+            "key": "D",
+            "text": "p 是引用变量，指向 new 创建出来的对象"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "new Product(\"apple\", 5.0) 创建对象并调用带参构造方法，p 是保存该对象地址的引用变量，字段内容存放在对象里而不是 p 里。",
+        "skill_tags": [
+          "对象创建",
+          "引用变量"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```java\nProduct a = new Product(\"apple\", 5.0);\nProduct b = new Product(\"apple\", 5.0);\na.price = 8.0;\nSystem.out.println(b.price);\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "5.0"
+          },
+          {
+            "key": "B",
+            "text": "8.0"
+          },
+          {
+            "key": "C",
+            "text": "0.0"
+          },
+          {
+            "key": "D",
+            "text": "编译错误，price 不能被赋值"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "每次 new 都会创建独立的对象，a 和 b 拥有各自的实例字段，修改 a.price 不会影响 b.price。",
+        "skill_tags": [
+          "实例状态",
+          "对象独立性"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```java\npublic class Counter {\n    int count;\n    void increase() {\n        count = count + 1;\n    }\n}\n\nCounter c = new Counter();\nc.increase();\nc.increase();\nSystem.out.println(c.count);\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "0"
+          },
+          {
+            "key": "B",
+            "text": "1"
+          },
+          {
+            "key": "C",
+            "text": "2"
+          },
+          {
+            "key": "D",
+            "text": "编译错误，count 没有初始化"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "increase() 每次把该对象自己的 count 加 1，调用两次后 count 为 2。实例方法操作的是当前对象的实例字段。",
+        "skill_tags": [
+          "方法调用",
+          "实例字段"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "某商品的类把价格字段声明为 `private double price;`，并提供了 `public double getPrice()` 和 `public void setPrice(double price)` 两个方法。在另一个类中操作商品对象时，下列写法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "直接写 product.price = 10.0; 访问该字段"
+          },
+          {
+            "key": "B",
+            "text": "调用 product.setPrice(10.0); 修改价格"
+          },
+          {
+            "key": "C",
+            "text": "调用 product.getPrice(10.0); 修改价格"
+          },
+          {
+            "key": "D",
+            "text": "因为字段是 private，其他类无法读取它的价格"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "private 字段只能在本类内部直接访问，外部要通过 public 方法。setPrice 带参数用于修改，getPrice 无参用于读取，不能在 getPrice 中传参数。",
+        "skill_tags": [
+          "封装",
+          "访问控制"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，`new Product(\"apple\").getName()` 返回什么？\n```java\npublic class Product {\n    private String name;\n    public Product(String name) {\n        name = name;\n    }\n    public String getName() {\n        return name;\n    }\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "\"apple\""
+          },
+          {
+            "key": "B",
+            "text": "\"\""
+          },
+          {
+            "key": "C",
+            "text": "编译错误，参数不能与字段同名"
+          },
+          {
+            "key": "D",
+            "text": "null，因为 name = name 只是把参数赋给了参数自身，字段没有被赋值"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "在构造方法里，name 指的是参数，两个 name 都是参数，字段仍然是 String 的默认值 null。正确写法是 this.name = name;",
+        "skill_tags": [
+          "this 关键字",
+          "构造方法"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码：\n```java\npublic class Cart {\n    private List<Product> items = new ArrayList<>();\n    public void add(Product p) {\n        items.add(p);\n    }\n}\n```\n关于 Cart 与 Product 的关系，下列描述正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "Cart 通过持有 Product 对象实现组合，对象间职责分离"
+          },
+          {
+            "key": "B",
+            "text": "Cart 必须继承 Product 才能添加商品"
+          },
+          {
+            "key": "C",
+            "text": "Cart 是 Product 的子类，会继承商品的价格字段"
+          },
+          {
+            "key": "D",
+            "text": "Cart 与 Product 必须实现同一个接口才能组合"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "把一个类的对象作为另一个类的字段就是组合。Cart 负责管理商品集合，Product 负责自己的名称和价格，组合不需要继承或实现同一接口。",
+        "skill_tags": [
+          "组合",
+          "类职责设计"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码：\n```java\npublic class Product {\n    protected String name;\n    public Product(String name) {\n        this.name = name;\n    }\n}\n\npublic class DiscountProduct extends Product {\n    private double discount;\n    public DiscountProduct(String name, double discount) {\n        super(name);\n        this.discount = discount;\n    }\n}\n```\n下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "不必调用 super(name)，编译器会自动调用 Product 的无参构造方法"
+          },
+          {
+            "key": "B",
+            "text": "DiscountProduct 无法访问 name，因为它是 private"
+          },
+          {
+            "key": "C",
+            "text": "extends 表示继承，子类可继承父类非 private 成员，super(name) 调用父类构造方法"
+          },
+          {
+            "key": "D",
+            "text": "DiscountProduct 必须重写 Product 的所有方法，否则编译报错"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "extends 建立继承关系，子类构造方法通过 super(...) 调用父类构造方法。父类只写了带参构造方法，编译器不再提供无参构造，所以 super(name) 是必须的；name 是 protected，子类可以访问。",
+        "skill_tags": [
+          "继承",
+          "super",
+          "访问控制"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码：\n```java\npublic interface Discountable {\n    double applyDiscount(double price);\n}\n\npublic class Coupon implements Discountable {\n    public double applyDiscount(double price) {\n        return price * 0.8;\n    }\n}\n```\n下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "接口中的方法必须有方法体，因此 Coupon 的写法会编译错误"
+          },
+          {
+            "key": "B",
+            "text": "一个类只能实现一个接口，因此 Coupon 不能再实现其他接口"
+          },
+          {
+            "key": "C",
+            "text": "implements Discountable 表示 Coupon 继承了 Discountable 中的字段"
+          },
+          {
+            "key": "D",
+            "text": "类通过 implements 实现接口，必须为接口中的抽象方法提供具体实现"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "接口里的抽象方法只有方法签名，实现类用 implements 声明并必须给出 public 的具体实现。一个类可以实现多个接口，接口本身也不能被当作字段的继承来源。",
+        "skill_tags": [
+          "接口",
+          "方法实现"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，运行结果是什么？\n```java\npublic class Cart {\n    private Product item;\n    public double itemPrice() {\n        return item.getPrice();\n    }\n}\n\nCart cart = new Cart();\nSystem.out.println(cart.itemPrice());\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "输出 0.0，因为价格字段的默认值是 0.0"
+          },
+          {
+            "key": "B",
+            "text": "抛出 NullPointerException，因为字段 item 仍然是 null"
+          },
+          {
+            "key": "C",
+            "text": "输出 null，因为 item 没有被赋值"
+          },
+          {
+            "key": "D",
+            "text": "编译错误，因为 item 字段没有初始化"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "实例字段 item 没有被赋值，默认是 null。通过 null 引用调用方法会抛出 NullPointerException，所以先给字段赋值（例如在构造方法中）再使用是常见做法。",
+        "skill_tags": [
+          "空指针",
+          "实例字段"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "要记录每个商品的名称与价格，并由购物车计算所有商品的总价。下列哪种职责划分最合理？",
+        "options": [
+          {
+            "key": "A",
+            "text": "Product 保存自己的名称和价格，Cart 保存商品集合并提供计算总价的方法"
+          },
+          {
+            "key": "B",
+            "text": "Product 保存所有商品的列表并计算总价，Cart 只保存一个总价数字"
+          },
+          {
+            "key": "C",
+            "text": "把所有字段和方法都放进一个 Cart 类，不再需要 Product 类"
+          },
+          {
+            "key": "D",
+            "text": "Cart 保存商品名称和价格，Product 只保存一个价格"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "每个类承担明确职责：Product 管好自己的数据，Cart 管好一组商品并对外提供总价计算。这样修改商品信息或购物车逻辑时影响范围小，也便于新增商品类型。",
+        "skill_tags": [
+          "类职责设计",
+          "组合"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```java\npublic class Product {\n    private final String name;\n    private final double price;\n    public Product(String name, double price) {\n        this.name = name;\n        this.price = price;\n    }\n    public double getPrice() { return price; }\n    public String getName() { return name; }\n}\n\npublic class Cart {\n    private final List<Product> items = new ArrayList<>();\n    public void add(Product p) { items.add(p); }\n    public double total() {\n        double sum = 0;\n        for (Product p : items) {\n            sum += p.getPrice();\n        }\n        return sum;\n    }\n    public int size() { return items.size(); }\n}\n```\n```java\nCart cart = new Cart();\nProduct a = new Product(\"apple\", 5.0);\ncart.add(a);\ncart.add(new Product(\"pear\", 3.0));\ncart.add(a);\nSystem.out.println(cart.size() + \" \" + cart.total());\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "2 8.0"
+          },
+          {
+            "key": "B",
+            "text": "3 8.0"
+          },
+          {
+            "key": "C",
+            "text": "2 13.0"
+          },
+          {
+            "key": "D",
+            "text": "3 13.0"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "同一个 Product 对象 a 被加入了两次，列表中一共有 3 个元素，所以 size() 是 3；总价是 5.0 + 3.0 + 5.0 = 13.0。Cart 通过组合持有 Product 对象，并只通过 getPrice() 读取价格，没有破坏封装。",
+        "skill_tags": [
+          "组合",
+          "封装",
+          "集合遍历"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```java\npublic class Product {\n    private final double price;\n    public Product(double price) { this.price = price; }\n    public double finalPrice() { return price; }\n}\n\npublic class DiscountProduct extends Product {\n    private final double rate;\n    public DiscountProduct(double price, double rate) {\n        super(price);\n        this.rate = rate;\n    }\n    @Override\n    public double finalPrice() { return super.finalPrice() * rate; }\n}\n```\n```java\nList<Product> list = new ArrayList<>();\nlist.add(new Product(100.0));\nlist.add(new DiscountProduct(100.0, 0.8));\nlist.add(new DiscountProduct(50.0, 0.5));\ndouble sum = 0;\nfor (Product p : list) {\n    sum += p.finalPrice();\n}\nSystem.out.println(sum);\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "250.0"
+          },
+          {
+            "key": "B",
+            "text": "180.0"
+          },
+          {
+            "key": "C",
+            "text": "205.0"
+          },
+          {
+            "key": "D",
+            "text": "130.0"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "循环变量 p 的编译类型是 Product，但 finalPrice() 被 DiscountProduct 重写了，运行时按对象实际类型调用：100.0 + 100.0×0.8 + 50.0×0.5 = 100.0 + 80.0 + 25.0 = 205.0。子类通过 super.finalPrice() 复用父类的计算并读取父类的 private 字段。",
+        "skill_tags": [
+          "继承",
+          "方法重写",
+          "多态"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "topic": "Java 面向对象基础",
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "search_extract": "not_used",
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "15 题的代码语义、默认值、构造方法、this、继承 super、多态重写等答案均正确，关键事实与参考事实一致。",
+      "evidence": [
+        "reference_facts 与 questions[2].explanation：均指出构造方法名与类名相同且无返回值类型、new 负责创建对象",
+        "questions[4].answer_key：A，正确体现不同对象各自拥有独立实例字段；questions[14].answer_key：C，205.0 与重写后动态调用计算一致"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "恰好 15 道单选题，每题 prompt、options、answer_key、explanation 字段齐全，覆盖类与对象、构造方法、实例字段、封装、组合、继承、接口与多态等目标要点。",
+      "evidence": [
+        "candidate_output.question_count：15，且 questions 长度为 15",
+        "questions[6]（封装）、questions[8]（组合）、questions[10]（接口）、questions[14]（多态）覆盖输入目标主要方面"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "全部题目围绕「Java 面向对象基础」及输入学习目标，仅用基础语法和小型商品/购物车示例，未引入框架或超范围内容。",
+      "evidence": [
+        "questions[12].prompt：以 Product 与 Cart 的职责划分考查类职责设计，贴合 desired_outcome",
+        "questions 中未出现框架、集合高级 API 等描述范围外的考点"
+      ]
+    },
+    "readability": {
+      "score": 4,
+      "reason": "题干与解析整体清楚，但个别题目的正确选项明显长于干扰项，存在轻微泄露答案的倾向。",
+      "evidence": [
+        "questions[9].options[2]：正确项『extends 表示继承，子类可继承父类非 private 成员，super(name) 调用父类构造方法』明显长于其余选项",
+        "questions[12].options[0] 与 questions[10].options[3] 亦为最长且正确，长度差异可能提示答案位置"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 4,
+      "reason": "15 题对应 2 道提高题（Q14 组合去重计数、Q15 多态重写）在配额内，答案分布 A4/B3/C4/D4 且相邻题答案均不同，诊断性良好；但继承/接口/多态题集中在 Q10—Q15，部分题需超出 beginner 的前置规则知识，难度略偏上。",
+      "evidence": [
+        "questions[9].answer_key：C，需掌握『父类无无参构造时子类必须 super(...)』这一题干未解释的规则",
+        "questions[14].explanation：依赖运行时动态分派与 super.finalPrice() 复用，属较高综合复杂度",
+        "questions answer_key 序列 B,A,C,D,A,C,B,D,A,C,D,B,A,D,C：无相邻重复，分布均衡"
+      ]
+    }
+  },
+  "weighted_score": 4.7,
+  "percentage_score": 94,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:00:55.272Z",
+  "finished_at": "2026-10-10T10:03:39.059Z"
+}

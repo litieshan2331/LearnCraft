@@ -1,0 +1,25 @@
+{
+  "case_id": "reg40-assessment-02-python",
+  "model": "deepseek-v4-flash-0731",
+  "timeout_ms": 180000,
+  "payload_chars": 11168,
+  "headers_ms": 72206,
+  "http_status": 200,
+  "elapsed_ms": 72208,
+  "response_chars": 12416,
+  "finish_reason": "stop",
+  "content_chars": 1389,
+  "reasoning_chars": 10273,
+  "usage": {
+    "prompt_tokens": 4277,
+    "total_tokens": 9996,
+    "completion_tokens": 5719,
+    "prompt_tokens_details": {
+      "cached_tokens": 4096
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 5177
+    }
+  },
+  "score_valid": true
+}

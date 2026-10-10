@@ -1,0 +1,157 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "eaa38fa5-e433-4be3-88da-cedf330dcc16",
+  "case_id": "reg40-content-06-c",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "card_content_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "schema_version": "card_content.v2",
+    "foundation": "## 先记住结论：数组交给函数后，长度信息就丢了\n\n传入函数的数组会退化为指向首元素的指针，指针只记录从哪里开始，不记录到哪里结束，所以函数没法自己知道里面有多少个元素；长度必须由调用方作为独立参数一起传进来。由此得到一个判断方式：看到函数参数里有数组，就先找它配套的个数参数或其它结束标记，找不到就说明这个函数不可能安全地知道边界。\n\n## sum_array 的参数合同：指针和个数共同描述一段可读内存\n\nsum_array 的合同由两个参数共同组成：第一个参数 arr 指向一段连续内存的起始位置，第二个参数 count 说明这段内存里恰好有几个 int 可以被安全读取。这份合同包含三件事：\n\n- arr 必须指向至少 count 个有效元素，不能是空指针，也不能是已经失效的内存；\n- count 必须是元素个数，不是字节数；\n- 函数只在第 0 号到第 count - 1 号元素上做累加，不做任何越界访问。\n\n只要调用方和被调方对这三点理解一致，数组求和就是安全的；任何一方理解有偏差，就会变成越界读写。\n\n## 索引边界：有效下标是 0 到 count - 1，循环条件写 i < count\n\nC 数组的下标从 0 开始计数，有 count 个元素时最后一个合法下标是 count - 1，所以循环条件应当写成 i < count。写成 i <= count 会让循环多跑一次，多出来的那一次访问的是下标 count 处的内存，它已经不属于这个数组，可能读到无关数据，也可能因为踩到不可访问的地址而让程序崩溃。用 count 控制循环还有一个好处：循环次数与参数合同承诺的元素个数完全一致，读代码的人一眼就能验证两者是否匹配。\n\n## sizeof：在 main 里量的是数组，在函数里量的是指针\n\n同一个 sizeof(arr) 写在两个位置，含义完全不同。在 main 里用 int values[] 这样的写法声明的确实是一个数组，sizeof(values) 得到整个数组占用的字节数，除以单个元素的字节数 sizeof(values[0]) 就得到元素个数。到了 sum_array 里，参数 arr 的类型已经变成指针，sizeof(arr) 得到的是指针本身的字节数（常见平台上通常是 8 字节），再除以单个元素的字节数只会得到一个与真实长度无关的小数字。所以长度只能在数组还保持数组类型的地方算好，再用参数传进函数。\n\n## 落到判断方式\n\n- 看到数组参数，先追问它的边界从哪来，找不到 count 或者结束标记，就不要相信这段遍历；\n- 看到遍历数组的循环，先检查上下界是不是 0 和 count，特别留意 i <= count 这种写法；\n- 看到函数内部用 sizeof 求长度，先确认这个名字当前是数组还是指针，是指针就不能这样求长度。",
+    "worked_example": {
+      "explanation": "示例分成三个文件：头文件给出 sum_array 的声明，也就是参数合同；源文件给出定义，遍历时用 i < count 控制边界；main 文件负责声明真实数组、用 sizeof 算出元素个数，再把数组和个数一起传进去。阅读顺序是先看合同，再看函数怎么遵守合同，最后看调用方怎么满足合同。",
+      "files": [
+        {
+          "path": "include/sum_array.h",
+          "language": "c",
+          "role": "types",
+          "content": "#ifndef SUM_ARRAY_H\n#define SUM_ARRAY_H\n\n/* 返回 arr 中前 count 个元素的和。\n * 合同：arr 指向至少 count 个 int，count 是元素个数。 */\nint sum_array(int *arr, int count);\n\n#endif\n"
+        },
+        {
+          "path": "src/sum_array.c",
+          "language": "c",
+          "role": "module",
+          "content": "#include \"sum_array.h\"\n\nint sum_array(int *arr, int count) {\n    int total = 0;\n\n    for (int i = 0; i < count; i++) {\n        total += arr[i];\n    }\n\n    return total;\n}\n"
+        },
+        {
+          "path": "src/main.c",
+          "language": "c",
+          "role": "entry",
+          "content": "#include <stdio.h>\n#include \"sum_array.h\"\n\nint main(void) {\n    int values[] = {3, 1, 4, 1, 5};\n\n    int count = sizeof(values) / sizeof(values[0]);\n\n    int total = sum_array(values, count);\n\n    printf(\"count=%d total=%d\\n\", count, total);\n\n    return 0;\n}\n"
+        }
+      ],
+      "entry_file": "src/main.c",
+      "call_sequence": [
+        {
+          "step": 1,
+          "file": "include/sum_array.h",
+          "function": "sum_array",
+          "note": "先看声明，确认合同是两个参数：数组指针加元素个数"
+        },
+        {
+          "step": 2,
+          "file": "src/sum_array.c",
+          "function": "sum_array",
+          "note": "看定义如何用 i < count 遍历有效下标并累加"
+        },
+        {
+          "step": 3,
+          "file": "src/main.c",
+          "function": "main",
+          "note": "看调用处如何用 sizeof 算出 count，并把数组与 count 一起传入"
+        }
+      ],
+      "expected_output": "src/main.c › main：main 中 count 计算为 5，sum_array 对 5 个元素累加后返回 14，随后由 printf 把 count 与 total 这两个数值打印成一行。"
+    },
+    "pitfalls_debug": [
+      {
+        "title": "循环条件写成 i <= count",
+        "cause": "把「元素个数」误当成「最大下标」，于是循环跑到下标 count，访问了数组之外的内存。",
+        "fix": "记住最后一个合法下标是 count - 1，循环条件固定写成 i < count。"
+      },
+      {
+        "title": "在 sum_array 里用 sizeof(arr) / sizeof(arr[0]) 求元素个数",
+        "cause": "函数参数 arr 已经是指针而不是数组，sizeof(arr) 得到的是指针大小，不是整个数组的字节数。",
+        "fix": "元素个数只能在数组仍是数组类型的地方算好，再作为 count 参数传进函数；函数内部一律使用传入的 count。"
+      },
+      {
+        "title": "调用时只传数组，不传元素个数",
+        "cause": "数组退化为指针后不带长度信息，函数没有任何依据判断边界，只能凭猜想读取内存。",
+        "fix": "把 count 作为固定参数写在声明和定义里，调用处每次都必须一起传，例如 sum_array(values, count)。"
+      },
+      {
+        "title": "把字节数当成元素个数传进去",
+        "cause": "直接传 sizeof(values) 得到的是总字节数，比真实元素个数大，循环会读越界。",
+        "fix": "传参前先算成元素个数，即 sizeof(values) / sizeof(values[0])。"
+      }
+    ],
+    "source_refs": [],
+    "teaching_memory": {
+      "key_concepts": [
+        "数组作为函数参数时会退化为指向首元素的指针，长度信息随之丢失",
+        "sum_array 的参数合同：指针指向一段内存，count 说明可安全读取的元素个数",
+        "有效下标范围是 0 到 count - 1，循环条件用 i < count",
+        "sizeof 对数组和对指针的含义不同，长度必须在数组类型仍成立的地方计算"
+      ],
+      "common_mistakes": [
+        "循环条件写成 i <= count 造成越界访问",
+        "在函数内部用 sizeof(arr) / sizeof(arr[0]) 求指针参数的长度",
+        "调用时漏传或错传元素个数，把字节数当成个数"
+      ],
+      "assessment_targets": [
+        "能说明 sum_array 的两个参数各自承诺了什么",
+        "能解释为什么 i <= count 会读到不属于数组的内存",
+        "能区分 main 中 sizeof(values) 与 sum_array 中 sizeof(arr) 的含义差别"
+      ]
+    },
+    "plan_node_id": "50000000-0000-4000-8000-000000000006",
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "logical_session_key": "reg40-session-c"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "概念、代码与预期行为均准确：指针退化、count 语义、i < count 边界、main 与函数内 sizeof 差异都符合参考事实，示例求和结果 14 与所选数组一致。",
+      "evidence": [
+        "candidate_output.worked_example.files[2].content：values={3,1,4,1,5}，count=5，总和与 expected_output 中返回 14 一致",
+        "candidate_output.foundation：明确说明越界“可能读到无关数据，也可能…崩溃”，未把越界说成必然固定异常"
+      ]
+    },
+    "completeness": {
+      "score": 4,
+      "reason": "覆盖了有效下标、指针与元素访问、显式传递元素数量三项知识点以及三条节点完成标准，但缺少 required_knowledge_points 中的 const 只读访问。",
+      "evidence": [
+        "candidate_output.worked_example.files[0].content：声明为 int sum_array(int *arr, int count)，未出现 const int *",
+        "candidate_output.teaching_memory.key_concepts：只列出指针退化、参数合同、索引边界、sizeof，未包含 const 只读访问"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "内容全程聚焦「数组求和与长度传递」这一节点，未扩展到整条学习路线的其它主题，语言和前置范围与节点声明一致。",
+      "evidence": [
+        "candidate_output.foundation：四个小节均围绕 sum_array 合同、索引边界、sizeof 与判断方式展开"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "分节标题明确，术语先定义后使用，三文件示例配合 call_sequence 给出清晰阅读顺序，便于初学者按步理解。",
+      "evidence": [
+        "candidate_output.worked_example.call_sequence：按 h→c→main 声明、定义、调用的顺序标注每一步目的"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 5,
+      "reason": "面向初学者从“长度信息丢失”这一直觉切入，提供完整可运行上下文、边界说明与可检验目标，未假设未教授的高级知识。",
+      "evidence": [
+        "candidate_output.teaching_memory.assessment_targets：目标为说明参数承诺、解释越界原因、区分两处 sizeof 含义，与初学者层次匹配"
+      ]
+    }
+  },
+  "weighted_score": 4.8,
+  "percentage_score": 96,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:12:21.574Z",
+  "finished_at": "2026-10-10T09:49:42.352Z"
+}

@@ -1,0 +1,217 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "5214dc63-cc21-4bef-a4c6-272d153e127e",
+  "case_id": "reg40-plan-01-typescript",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "plan_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "schema_version": "learning_plan.v1",
+    "title": "TypeScript 类型安全基础学习路线",
+    "summary": "面向有 JavaScript 基础、但类型思维还不牢固的初学者，按依赖顺序覆盖基础类型与推断、函数签名、接口与对象建模、联合类型与收窄、类型断言的边界、外部输入的运行时校验，以及常见类型错误的阅读与修复，最后一章完成一个小型 JS 数据处理模块的类型迁移。全程不涉及框架与高级类型编程，按每周 120 分钟设计，约 10 周完成。",
+    "nodes": [
+      {
+        "node_key": "ts_primitive_types_and_toolchain",
+        "ordinal": 1,
+        "title": "编译流程与基础类型标注",
+        "node_brief": "tsc 与最小 tsconfig.json 的配置、strict 模式的含义，以及 string、number、boolean、数组、元组等基础类型的标注方式。",
+        "learning_objective": "能在开启 strict 的项目里为变量、数组和元组写出正确的基础类型标注，并用 tsc 定位报错位置。",
+        "rationale": "后续的类型推断、函数签名与对象建模都以基础类型和编译流程为前提；前测显示基础类型部分只是部分掌握，需要先补牢。",
+        "difficulty": 1,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能新建 tsconfig.json 并说明 strict 开启后会额外启用哪些检查",
+          "能用 tsc 编译单个 .ts 文件，并根据报错的文件名与行号定位问题代码",
+          "能为 string、number、boolean、string[]、[number, string] 各自写出正确的类型标注",
+          "能说出在不开启 strict 的项目里，null 与 undefined 带来的风险"
+        ]
+      },
+      {
+        "node_key": "ts_type_inference",
+        "ordinal": 2,
+        "title": "类型推断与显式标注的取舍",
+        "node_brief": "let 与 const 的推断差异、对象与数组字面量的推断结果、最佳公共类型，以及什么时候必须显式写出类型。",
+        "learning_objective": "能对一段已有代码判断出 TypeScript 会推断出什么类型，并只在推断不足或需要约束时才补显式标注。",
+        "rationale": "读懂推断结果才能读懂后续所有类型报错；前测中「基础类型与类型推断」为部分掌握，这一章专门把推断讲透。",
+        "difficulty": 2,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "ts_primitive_types_and_toolchain"
+        ],
+        "completion_criteria": [
+          "能对比 let 与 const 声明同一字面量时推断结果的差异并说出原因",
+          "能判断对象字面量与数组字面量在混合元素类型下的推断结果",
+          "能在一个函数内指出哪些变量可以省略标注、哪些必须标注",
+          "能把一段过度标注的代码精简到只保留必要的类型注解"
+        ]
+      },
+      {
+        "node_key": "ts_function_signatures",
+        "ordinal": 3,
+        "title": "函数参数与返回值类型",
+        "node_brief": "参数类型与返回值类型的标注、可选参数与默认值参数的位置规则、void 与 never 的语义，以及回调函数的参数类型。",
+        "learning_objective": "能为普通函数、箭头函数和回调函数写出完整的参数与返回值类型，并解释 void 与 never 的区别。",
+        "rationale": "函数是数据处理模块的最小单元，参数与返回值类型是接口设计和联合类型收窄的直接输入；前测显示这部分为部分掌握。",
+        "difficulty": 2,
+        "estimated_minutes": 150,
+        "prerequisite_node_keys": [
+          "ts_type_inference"
+        ],
+        "completion_criteria": [
+          "能为带可选参数和默认值的函数写出类型签名且不产生编译错误",
+          "能写出返回 void 的函数与返回 never 的函数各一个，并说明调用处的差异",
+          "能为 map、filter 等数组方法的回调参数标注类型并读懂推断结果",
+          "能解释函数类型赋值时参数「可以多、不能少」的兼容规则"
+        ]
+      },
+      {
+        "node_key": "ts_object_modeling",
+        "ordinal": 4,
+        "title": "接口与对象建模",
+        "node_brief": "interface 与类型别名的定义与选用、可选属性、readonly 属性、索引签名、接口继承与交叉类型，以及结构化类型带来的影响。",
+        "learning_objective": "能把一组相关的业务数据用 interface 或类型别名描述出来，并用可选、只读与索引签名表达真实约束。",
+        "rationale": "对象建模是接口设计与后续判别联合的基础；前测中「接口与对象建模」列为需要练习，本章安排从字段定义到嵌套结构的完整训练。",
+        "difficulty": 2,
+        "estimated_minutes": 150,
+        "prerequisite_node_keys": [
+          "ts_type_inference"
+        ],
+        "completion_criteria": [
+          "能为一个嵌套对象结构（含可选字段与只读字段）写出完整的类型定义",
+          "能说明在什么场景下选 interface、什么场景下选类型别名",
+          "能用索引签名描述键名不固定的字典结构，并写出至少一处访问示例",
+          "能通过接口继承或交叉类型复用已有类型而不是重复字段定义"
+        ]
+      },
+      {
+        "node_key": "ts_union_narrowing",
+        "ordinal": 5,
+        "title": "联合类型与控制流收窄",
+        "node_brief": "联合类型与字面量类型的组合、typeof、instanceof 与 in 三种收窄手段、判别联合的建模，以及用 never 做穷尽检查。",
+        "learning_objective": "能为多形态的数据建模成判别联合，并在分支中把类型收窄到具体形态后安全访问其专有字段。",
+        "rationale": "联合类型是表达「可能是 A 也可能是 B」的核心工具，也是判断外部数据是否合法的前提；前测显示这块需要练习。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "ts_function_signatures",
+          "ts_object_modeling"
+        ],
+        "completion_criteria": [
+          "能把一个由多个对象形态组成的结构改写成带公共判别字段的联合类型",
+          "能在函数体里用 typeof 与 in 收窄后直接访问专有属性而不报错",
+          "能写出带 never 分支的穷尽检查，并说明新增一种形态时编译器会如何提示",
+          "能解释未收窄就直接访问联合类型专有属性时出现报错的原因"
+        ]
+      },
+      {
+        "node_key": "ts_assertions_and_unknown",
+        "ordinal": 6,
+        "title": "类型断言、unknown 与断言的边界",
+        "node_brief": "as 断言与双重断言的风险、非空断言的作用范围、unknown 与 any 在检查行为上的差异，以及为什么断言只是让编译器闭嘴而非校验数据。",
+        "learning_objective": "能判断一处类型断言是否安全，并在处理来源不明的数据时优先使用 unknown 配合收窄而不是直接断言。",
+        "rationale": "把断言当成校验是初学者最典型的类型安全隐患；前测中「类型断言与运行时校验边界」需要练习，本章负责建立这道边界意识。",
+        "difficulty": 3,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "ts_union_narrowing"
+        ],
+        "completion_criteria": [
+          "能举出一个断言在编译期通过、但在运行时崩溃的代码片段",
+          "能把一段使用 any 的代码改写成 unknown 加显式收窄的版本",
+          "能说明非空断言在什么情况下会掩盖真实的空值缺陷",
+          "能口头或书面区分「编译期类型检查」与「运行时数据校验」各自能挡住什么问题"
+        ]
+      },
+      {
+        "node_key": "ts_runtime_validation",
+        "ordinal": 7,
+        "title": "外部输入的运行时校验",
+        "node_brief": "针对 JSON、接口响应、表单与本地存储等外部数据编写校验逻辑，用类型谓词把校验结果转成类型收窄，让类型在边界处真正可信。",
+        "learning_objective": "能为一个外部数据入口写出校验函数与类型谓词，使后续代码只在数据通过校验后才按目标类型使用。",
+        "rationale": "类型系统管不到运行时，外部输入必须显式校验；这一章把第 5、6 章的类型工具落到真实的数据边界上。",
+        "difficulty": 3,
+        "estimated_minutes": 150,
+        "prerequisite_node_keys": [
+          "ts_assertions_and_unknown"
+        ],
+        "completion_criteria": [
+          "能写出返回 x is T 的类型谓词函数，并在 if 分支内获得正确的类型收窄",
+          "能对一个嵌套的 JSON 响应逐层校验必需字段、字段类型与可选字段",
+          "能说明校验失败时的处理策略（抛错、返回错误对象或给默认值）并实现其中一种",
+          "能指出不校验就直接断言外部数据的代码存在哪些具体风险"
+        ]
+      },
+      {
+        "node_key": "ts_reading_type_errors",
+        "ordinal": 8,
+        "title": "读懂常见类型错误并正确修复",
+        "node_brief": "识别 is not assignable to、possibly undefined、property does not exist 等高频报错，按类型收窄的思路修复，而不是用 as 或忽略注释压过去。",
+        "learning_objective": "面对常见类型报错能定位真正原因，并用收窄、补类型定义或修正数据流向的方式修复。",
+        "rationale": "读懂报错是从「能写类型」到「能独立排错」的关键一步；本章也是第 9 章迁移练习的必要准备。",
+        "difficulty": 3,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "ts_union_narrowing",
+          "ts_assertions_and_unknown"
+        ],
+        "completion_criteria": [
+          "能针对给出的报错信息说出错误发生在赋值、访问属性还是调用哪一个环节",
+          "能对同一个报错给出「收窄后再用」与「补全类型定义」两种修复方案并比较优劣",
+          "能在不使用 as 的情况下修复至少三处典型赋值兼容性报错",
+          "能解释在文件顶部加忽略注释会隐藏掉哪些后续检查"
+        ]
+      },
+      {
+        "node_key": "ts_js_module_migration",
+        "ordinal": 9,
+        "title": "小型 JavaScript 数据处理模块的类型迁移",
+        "node_brief": "在 strict 模式下把一个已有的小型 JS 数据处理模块逐文件迁移到 TypeScript：从外部边界开始标注、抽取共享类型、检查残留的 any 与未校验入口。",
+        "learning_objective": "能独立完成一个含数据入口、转换函数与输出的 JS 模块的类型迁移，并给出迁移前后的检查结论。",
+        "rationale": "把前八章的基础类型、函数签名、对象建模、联合收窄、断言边界与校验串成一次完整实践，对应前测中「小型 JavaScript 模块的类型迁移」这一薄弱点。",
+        "difficulty": 4,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "ts_function_signatures",
+          "ts_object_modeling",
+          "ts_union_narrowing",
+          "ts_runtime_validation",
+          "ts_reading_type_errors"
+        ],
+        "completion_criteria": [
+          "能把模块中至少两个文件从 .js 迁移为 .ts 并在 strict 下编译通过",
+          "能在迁移后的代码中为所有外部数据入口保留运行时校验",
+          "能统计并说明模块中是否还残留 any、assertion 或忽略注释，并给出保留或消除的理由",
+          "能为模块导出函数写出完整的参数与返回值类型，并说明共享类型的抽取位置",
+          "能写出一份迁移记录，列出遇到的三类类型错误及其修复方式"
+        ]
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "repair_attempts": 0,
+      "generation_path": "model_knowledge",
+      "fallback_used": false
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "learning_plan_id": "bc2ffe19-2d02-4d4f-aa28-9731b078e7e6",
+    "node_count": 9,
+    "tool_call_count": 0,
+    "repair_attempts": 0,
+    "generation_path": "model_knowledge",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:06:27.115Z",
+  "finished_at": "2026-10-10T08:06:49.455Z"
+}

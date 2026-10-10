@@ -1,0 +1,466 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "53d75f06-dc8d-485b-80ab-064604267132",
+  "case_id": "reg40-assessment-07-sql",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "assessment_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "diagnostic",
+    "question_count": 15,
+    "difficulty": "hard",
+    "plan_id": null,
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "表 users(id, name, age) 中部分行的 age 为 NULL。执行下面的查询：\n```sql\nSELECT name FROM users WHERE age <> 30;\n```\n关于返回结果，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "age 为 NULL 的行会被返回，因为 NULL 不等于 30。"
+          },
+          {
+            "key": "B",
+            "text": "age 为 NULL 的行不会被返回，因为 NULL <> 30 的结果是 unknown，不满足 WHERE 条件。"
+          },
+          {
+            "key": "C",
+            "text": "语句会报错，必须写成 age IS NOT 30。"
+          },
+          {
+            "key": "D",
+            "text": "所有 age 不是 30 的行，包括 age 为 NULL 的行，都会被返回。"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "NULL 与任何值做普通比较（=、<>、>）结果都是 unknown，而 WHERE 只保留结果为真的行，所以 age 为 NULL 的行不会出现在结果里。判断这类行需要写 IS NULL 或 IS NOT NULL。",
+        "skill_tags": [
+          "NULL 处理",
+          "WHERE 过滤"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在 SQL 查询中，关于 WHERE 与 HAVING 的区别，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "二者完全等价，只是书写顺序不同。"
+          },
+          {
+            "key": "B",
+            "text": "WHERE 在分组后过滤分组，HAVING 在分组前过滤行。"
+          },
+          {
+            "key": "C",
+            "text": "HAVING 只能配合 WHERE 一起使用，单独使用会报错。"
+          },
+          {
+            "key": "D",
+            "text": "WHERE 在分组前过滤行，通常不能直接使用聚合函数；HAVING 在分组后过滤分组，可以使用聚合函数。"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "WHERE 作用于分组之前的行，因此不能用聚合结果做条件；HAVING 作用于 GROUP BY 之后的分组，可以写 COUNT(*)、SUM(...) 这类聚合条件。",
+        "skill_tags": [
+          "WHERE 与 HAVING",
+          "GROUP BY"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表 orders(order_id, customer_id, amount) 与 customers(customer_id, name)。执行下面的查询：\n```sql\nSELECT c.name, o.order_id\nFROM customers c\nLEFT JOIN orders o ON o.customer_id = c.customer_id;\n```\n关于结果行数与内容，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "对于在 orders 中没有匹配订单的客户，结果中仍会出现一行，其 order_id 为 NULL。"
+          },
+          {
+            "key": "B",
+            "text": "结果行数一定等于 customers 的行数。"
+          },
+          {
+            "key": "C",
+            "text": "结果行数一定等于 orders 的行数。"
+          },
+          {
+            "key": "D",
+            "text": "没有匹配订单的客户不会出现在结果里。"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "LEFT JOIN 保留左表所有行，左表有匹配时展开成多行，没有匹配时右表列用 NULL 补齐，因此无订单的客户会以 order_id 为 NULL 的一行出现，结果行数不一定等于任一表的行数。",
+        "skill_tags": [
+          "LEFT JOIN"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表 orders(order_id, customer_id, amount)，其中 amount 有一部分为 NULL。执行：\n```sql\nSELECT COUNT(*), COUNT(amount) FROM orders;\n```\n关于这两个值，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "COUNT(*) 返回 amount 非 NULL 的行数，COUNT(amount) 返回总行数。"
+          },
+          {
+            "key": "B",
+            "text": "两个值相同，都等于表的总行数。"
+          },
+          {
+            "key": "C",
+            "text": "COUNT(*) 返回总行数，COUNT(amount) 只统计 amount 非 NULL 的行数。"
+          },
+          {
+            "key": "D",
+            "text": "两个值相同，都等于 amount 非 NULL 的行数。"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "COUNT(*) 统计行数，包括列为 NULL 的行；COUNT(列名) 只统计该列非 NULL 的行，会忽略 NULL。",
+        "skill_tags": [
+          "聚合函数",
+          "NULL 处理"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "观察下面的查询：\n```sql\nSELECT c.name, o.amount\nFROM customers c\nLEFT JOIN orders o ON o.customer_id = c.customer_id\nWHERE o.amount > 100;\n```\n关于这个查询的实际效果，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "没有订单的客户仍然保留，其 amount 显示为 NULL。"
+          },
+          {
+            "key": "B",
+            "text": "没有订单的客户被 WHERE 排除，结果只保留存在 amount > 100 订单的客户，效果类似 INNER JOIN。"
+          },
+          {
+            "key": "C",
+            "text": "语句会报错，因为 WHERE 不能引用 LEFT JOIN 右侧表的列。"
+          },
+          {
+            "key": "D",
+            "text": "结果与把 o.amount > 100 写在 ON 子句里完全一致。"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "LEFT JOIN 为无匹配行补出的 NULL 在 WHERE 中无法满足 o.amount > 100（结果为 unknown），这些行被过滤掉，于是 LEFT JOIN 退化成了类似 INNER JOIN 的效果。若想保留它们，应把条件写在 ON 子句里。",
+        "skill_tags": [
+          "LEFT JOIN",
+          "连接与过滤"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表 customers(customer_id, name)、orders(customer_id, amount) 和 payments(customer_id, amount)。同一个客户可能有多条订单，也可能有多条付款记录。执行：\n```sql\nSELECT c.customer_id, SUM(o.amount)\nFROM customers c\nJOIN orders o ON o.customer_id = c.customer_id\nJOIN payments p ON p.customer_id = c.customer_id\nGROUP BY c.customer_id;\n```\n这个查询可能出现什么问题？",
+        "options": [
+          {
+            "key": "A",
+            "text": "每个订单会与多条付款记录配对，订单金额被重复累加，SUM 结果偏大。"
+          },
+          {
+            "key": "B",
+            "text": "SUM 会自动识别重复值并去重，结果仍然正确。"
+          },
+          {
+            "key": "C",
+            "text": "JOIN 会按 payments 去重，SUM 结果偏小。"
+          },
+          {
+            "key": "D",
+            "text": "只要 customers 表有主键，SUM 就不会受影响。"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "两个一对多表连续 JOIN 会产生行的组合放大：一条订单会与多条付款记录配对而重复出现，SUM(o.amount) 就被重复计算。正确做法是先分别按客户聚合，再把聚合结果连接起来。",
+        "skill_tags": [
+          "重复连接与汇总偏差",
+          "聚合函数"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "应用需要根据用户在表单里输入的 email 查询用户记录。下列做法最能防止 SQL 注入的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "拼接 SQL 字符串，但限制用户输入的最大长度。"
+          },
+          {
+            "key": "B",
+            "text": "拼接 SQL 字符串，并把用户输入统一转换成大写。"
+          },
+          {
+            "key": "C",
+            "text": "拼接 SQL 字符串，并替换掉输入中出现的所有单引号。"
+          },
+          {
+            "key": "D",
+            "text": "使用参数化查询（占位符 + 绑定参数），例如 `SELECT * FROM users WHERE email = ?`。"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "参数化查询把 SQL 语句结构与数据分离，用户输入始终作为值处理，不会被当作 SQL 代码解析，因此能从根本上避免注入。限制长度、转换大小写或手工替换单引号都容易被绕过。",
+        "skill_tags": [
+          "参数化查询",
+          "SQL 注入防护"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表 orders(order_id PRIMARY KEY, customer_id, status, amount, created_at)，目前只在 customer_id 上建有索引。执行：\n```sql\nSELECT * FROM orders WHERE status = 'paid';\n```\n关于索引使用情况，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "该查询一定能用到 customer_id 上的索引，因为索引可以被任何列复用。"
+          },
+          {
+            "key": "B",
+            "text": "只要表里存在任意一个索引，所有查询都会自动变快。"
+          },
+          {
+            "key": "C",
+            "text": "status 上没有索引，数据库通常只能全表扫描；为 status 建立索引可能对这个查询有帮助。"
+          },
+          {
+            "key": "D",
+            "text": "为这个查询在 status 上建索引没有意义，因为 status 是字符串类型的列。"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "索引通常只对作为过滤、连接条件的列有帮助。这个查询按 status 过滤，而索引建在 customer_id 上，写操作以外的场景基本用不上，只能全表扫描；在 status 上建索引可以让数据库更快定位符合条件的行，字符串列同样可以建索引。",
+        "skill_tags": [
+          "索引基础",
+          "查询性能判断"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表 t(x) 中有三行，值依次为 1、NULL、3。执行：\n```sql\nSELECT SUM(x), AVG(x), COUNT(*) FROM t;\n```\n返回的三个值分别是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "SUM 为 4，AVG 为 1.33，COUNT(*) 为 3。"
+          },
+          {
+            "key": "B",
+            "text": "SUM 为 NULL，AVG 为 NULL，COUNT(*) 为 3。"
+          },
+          {
+            "key": "C",
+            "text": "SUM 为 4，AVG 为 2，COUNT(*) 为 2。"
+          },
+          {
+            "key": "D",
+            "text": "SUM 为 4，AVG 为 2，COUNT(*) 为 3。"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "SUM 和 AVG 都忽略 NULL：SUM 为 1 + 3 = 4，AVG 为 (1 + 3) / 2 = 2，注意分母是非 NULL 值个数而不是行数；COUNT(*) 统计所有行，因此为 3。",
+        "skill_tags": [
+          "NULL 与聚合",
+          "聚合函数"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表 orders(order_id, customer_id, amount) 与 customers(customer_id, name)。需要列出每个客户的名字以及该客户的订单数，没有订单的客户也要显示为 0。下列写法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "`SELECT c.name, COUNT(o.order_id) FROM customers c JOIN orders o ON o.customer_id = c.customer_id GROUP BY c.name;`"
+          },
+          {
+            "key": "B",
+            "text": "`SELECT c.name, COUNT(*) FROM customers c LEFT JOIN orders o ON o.customer_id = c.customer_id GROUP BY c.name HAVING COUNT(*) > 0;`"
+          },
+          {
+            "key": "C",
+            "text": "`SELECT c.name, COUNT(DISTINCT o.order_id) FROM customers c LEFT JOIN orders o ON o.customer_id = c.customer_id GROUP BY c.customer_id, c.name;`"
+          },
+          {
+            "key": "D",
+            "text": "`SELECT c.name, COUNT(*) FROM customers c LEFT JOIN orders o ON o.customer_id = c.customer_id;`"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "要保留没有订单的客户必须用 LEFT JOIN。选项 A 用 INNER JOIN，会丢掉这些客户；选项 B 的 COUNT(*) 会把 LEFT JOIN 补出的 NULL 行也计成 1，得不到 0；选项 D 缺少 GROUP BY。选项 C 用 COUNT(DISTINCT o.order_id) 只统计真实存在的订单，并按 customer_id、name 分组，结果正确。",
+        "skill_tags": [
+          "GROUP BY",
+          "LEFT JOIN",
+          "聚合函数"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的查询想为每个客户显示订单金额合计，没有订单的客户希望显示 0：\n```sql\nSELECT c.name, SUM(o.amount) AS total\nFROM customers c\nLEFT JOIN orders o ON o.customer_id = c.customer_id\nGROUP BY c.name;\n```\n对于没有订单的客户，total 的值是什么，怎样才能显示 0？",
+        "options": [
+          {
+            "key": "A",
+            "text": "total 为 NULL，需要用 COALESCE(SUM(o.amount), 0) 才能显示 0。"
+          },
+          {
+            "key": "B",
+            "text": "total 为 0，因为 LEFT JOIN 会自动补 0。"
+          },
+          {
+            "key": "C",
+            "text": "语句会报错，因为 SUM 不能作用在 NULL 上。"
+          },
+          {
+            "key": "D",
+            "text": "total 为 NULL，必须把 SUM 换成 COUNT 才能显示 0。"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "LEFT JOIN 为无订单客户补出的行中 o.amount 为 NULL，SUM 在没有任何非 NULL 输入时返回 NULL，而不是 0。用 COALESCE(SUM(o.amount), 0) 可以把 NULL 转成 0；换成 COUNT 得到的是计数，语义不同。",
+        "skill_tags": [
+          "COALESCE",
+          "NULL 与聚合",
+          "LEFT JOIN"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "执行下面的查询：\n```sql\nSELECT * FROM customers\nWHERE customer_id NOT IN (SELECT customer_id FROM orders);\n```\n如果子查询返回的 orders.customer_id 中出现了 NULL，结果会怎样？",
+        "options": [
+          {
+            "key": "A",
+            "text": "正常返回所有没有订单的客户。"
+          },
+          {
+            "key": "B",
+            "text": "结果为空，因为 NOT IN 的列表中包含 NULL，比较结果为 unknown，没有任何行能满足条件。"
+          },
+          {
+            "key": "C",
+            "text": "只返回 customer_id 不为 NULL 的客户。"
+          },
+          {
+            "key": "D",
+            "text": "语句会报错，因为子查询返回了 NULL。"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "NOT IN 等价于对列表中的每个值逐一做 <> 比较。只要列表里有 NULL，就会产生 unknown 的比较结果，整个条件不可能为真，查询返回空集。需要先排除 NULL，或改用 NOT EXISTS。",
+        "skill_tags": [
+          "NOT IN 与 NULL",
+          "子查询"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表 orders(order_id, customer_id, status, amount)。要统计每个客户已支付订单（status = 'paid'）的金额合计，下列查询正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "`SELECT customer_id, SUM(amount) FROM orders WHERE status = 'paid' GROUP BY customer_id;`"
+          },
+          {
+            "key": "B",
+            "text": "`SELECT customer_id, SUM(amount) FROM orders GROUP BY customer_id HAVING status = 'paid';`"
+          },
+          {
+            "key": "C",
+            "text": "`SELECT customer_id, SUM(amount) FROM orders GROUP BY customer_id WHERE status = 'paid';`"
+          },
+          {
+            "key": "D",
+            "text": "`SELECT customer_id, SUM(amount) FROM orders HAVING status = 'paid';`"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "过滤单个订单行应该用 WHERE，且必须在 GROUP BY 之前；HAVING 用于过滤分组结果，而 status 既没有出现在 GROUP BY 中也没有被聚合，写在 HAVING 里不合法。选项 C 的子句顺序错误，选项 D 缺少 GROUP BY。",
+        "skill_tags": [
+          "WHERE 与 HAVING",
+          "GROUP BY"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "表结构为 orders(order_id, customer_id, amount) 和 refunds(refund_id, order_id, amount)，一个订单可能对应多条退款记录。现在要统计每个客户已产生退款的订单数（同一订单只算一次），没有退款的客户显示为 0。下列写法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "`SELECT c.customer_id, COUNT(r.refund_id) FROM customers c LEFT JOIN orders o ON o.customer_id = c.customer_id LEFT JOIN refunds r ON r.order_id = o.order_id GROUP BY c.customer_id;`"
+          },
+          {
+            "key": "B",
+            "text": "`SELECT c.customer_id, COUNT(DISTINCT o.order_id) FROM customers c LEFT JOIN orders o ON o.customer_id = c.customer_id LEFT JOIN refunds r ON r.order_id = o.order_id GROUP BY c.customer_id;`"
+          },
+          {
+            "key": "C",
+            "text": "`SELECT c.customer_id, COUNT(DISTINCT o.order_id) FROM customers c LEFT JOIN orders o ON o.customer_id = c.customer_id JOIN refunds r ON r.order_id = o.order_id GROUP BY c.customer_id;`"
+          },
+          {
+            "key": "D",
+            "text": "`SELECT c.customer_id, COUNT(DISTINCT r.order_id) FROM customers c LEFT JOIN orders o ON o.customer_id = c.customer_id LEFT JOIN refunds r ON r.order_id = o.order_id GROUP BY c.customer_id;`"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "目标是同时满足两点：保留没有退款的客户，并对订单去重。选项 A 的 COUNT(r.refund_id) 统计的是退款记录条数，同订单多条退款会重复计数；选项 B 的 COUNT(DISTINCT o.order_id) 会把没有退款但有订单的客户也算进去；选项 C 用 INNER JOIN 丢掉了没有退款的客户。选项 D 用 LEFT JOIN 保留所有客户，再对 r.order_id 去重计数，结果正确。",
+        "skill_tags": [
+          "多表连接与去重统计",
+          "LEFT JOIN",
+          "COUNT DISTINCT"
+        ],
+        "max_score": 2
+      },
+      {
+        "prompt": "某个应用允许用户按金额阈值筛选订单，用户输入的阈值可能为 NULL，表示不限制金额；同时还要求 status = 'paid'。下列实现方式正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "把用户输入直接拼接到 SQL 中 `amount > ` 之后，避免使用占位符带来的开销。"
+          },
+          {
+            "key": "B",
+            "text": "写成 `WHERE amount > NULL AND status = 'paid'`，数据库会自动忽略这个 NULL 条件。"
+          },
+          {
+            "key": "C",
+            "text": "写成 `WHERE (? IS NULL OR amount > ?) AND status = 'paid'`，并把同一个阈值绑定到两个占位符上。"
+          },
+          {
+            "key": "D",
+            "text": "写成 `WHERE amount > ? OR ? IS NULL AND status = 'paid'`，不需要括号，NULL 会被自动处理。"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "NULL 与任何值做 > 比较结果都是 unknown，所以 amount > NULL 会过滤掉所有行，选项 B 不成立。选项 A 拼接用户输入会带来注入风险。选项 D 缺少括号，AND 优先级高于 OR，条件含义被改变，可能返回与 status 无关的行。选项 C 用占位符绑定参数，阈值参数为 NULL 时通过 ? IS NULL 跳过金额条件，逻辑和安全都正确。",
+        "skill_tags": [
+          "参数绑定与动态条件",
+          "NULL 处理",
+          "SQL 注入防护"
+        ],
+        "max_score": 2
+      }
+    ],
+    "generation_metadata": {
+      "topic": "SQL 查询与数据汇总",
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "search_extract": "not_used",
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "968dd919-7248-4247-87fb-bbbe06bf02d6",
+    "status": "ready",
+    "question_count": 15,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:02:40.657Z",
+  "finished_at": "2026-10-10T08:03:29.744Z"
+}

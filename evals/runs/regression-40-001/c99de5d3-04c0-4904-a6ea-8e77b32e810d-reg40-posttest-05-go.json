@@ -1,0 +1,268 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "c99de5d3-04c0-4904-a6ea-8e77b32e810d",
+  "case_id": "reg40-posttest-05-go",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "posttest_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "post_test",
+    "question_count": 8,
+    "difficulty": "hard",
+    "plan_id": null,
+    "plan_node_id": "50000000-0000-4000-8000-000000000005",
+    "source_card_content_id": "60000000-0000-4000-8000-000000000005",
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```go\nvalues := []int{2, 4}\nappend(values, 6)\nfmt.Println(len(values))\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "3"
+          },
+          {
+            "key": "B",
+            "text": "2"
+          },
+          {
+            "key": "C",
+            "text": "6"
+          },
+          {
+            "key": "D",
+            "text": "程序会 panic"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "append 返回包含新元素的切片，这段代码没有把返回值赋回 values，所以 values 仍然是长度 2 的切片，len(values) 为 2。",
+        "skill_tags": [
+          "append 返回值"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，total 最终是多少？\n```go\nvalues := []int{2, 4, 6}\ntotal := 0\nfor i := range values {\n    total += i\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "12"
+          },
+          {
+            "key": "B",
+            "text": "0"
+          },
+          {
+            "key": "C",
+            "text": "3"
+          },
+          {
+            "key": "D",
+            "text": "6"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "只用一个变量接收 range 时拿到的是索引，i 依次为 0、1、2，累加结果是 3。要累加元素应写成 for _, value := range values。",
+        "skill_tags": [
+          "range 遍历",
+          "索引与元素区分"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```go\nfunc sum(values []int) int {\n    total := 0\n    for _, value := range values {\n        total += value\n    }\n    return total\n}\n\nfunc main() {\n    fmt.Println(sum([]int{}))\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "0"
+          },
+          {
+            "key": "B",
+            "text": "panic：空切片无法遍历"
+          },
+          {
+            "key": "C",
+            "text": "编译错误：空切片不能作为参数"
+          },
+          {
+            "key": "D",
+            "text": "结果取决于是否分配了底层数组"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "空切片长度为 0，range 不会执行循环体，total 保持循环外初始化的 0，所以返回 0。",
+        "skill_tags": [
+          "空切片处理",
+          "循环外初始化累加变量"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于 append 与底层数组的关系，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "append 一定分配新的底层数组，原切片的长度和内容都不受影响"
+          },
+          {
+            "key": "B",
+            "text": "只要容量足够，append 一定原地追加，原切片一定能看到新元素"
+          },
+          {
+            "key": "C",
+            "text": "append 可能更换底层数组，所以要保存返回值，不能假定原地追加"
+          },
+          {
+            "key": "D",
+            "text": "append 返回的就是原切片本身，保存不保存返回值结果都一样"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "append 在容量不足时可能更换底层数组，因此不能认为所有追加都必然原地完成，必须用 values = append(values, item) 保存返回值。",
+        "skill_tags": [
+          "append 返回值",
+          "切片容量与底层数组"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```go\nfunc sum(values []int) int {\n    total := 0\n    for _, value := range values {\n        total += value\n    }\n    return total\n}\n\nfunc main() {\n    values := []int{2, 4}\n    values = append(values, 6)\n    fmt.Println(len(values), sum(values))\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "3 12"
+          },
+          {
+            "key": "B",
+            "text": "2 6"
+          },
+          {
+            "key": "C",
+            "text": "3 6"
+          },
+          {
+            "key": "D",
+            "text": "2 12"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "把 append 的返回值赋给 values 后，切片包含 2、4、6 三个元素，长度为 3，总和为 12。",
+        "skill_tags": [
+          "append 返回值",
+          "切片长度",
+          "range 求和"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，total 最终是多少？\n```go\nvalues := []int{2, 4}\ntotal := 0\nfor i, value := range values {\n    total += i + value\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "12"
+          },
+          {
+            "key": "B",
+            "text": "7"
+          },
+          {
+            "key": "C",
+            "text": "6"
+          },
+          {
+            "key": "D",
+            "text": "3"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "range 的第一个返回值是索引，第二个是元素值：第一轮 0+2，第二轮 1+4，累加得到 7。",
+        "skill_tags": [
+          "range 遍历",
+          "索引与元素区分"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的函数无法编译，最小改动是？\n```go\nfunc sum(values []int) int {\n    for _, value := range values {\n        total := 0\n        total += value\n    }\n    return total\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "把 total := 0 移到 for 之前"
+          },
+          {
+            "key": "B",
+            "text": "把 total := 0 改成 total = 0"
+          },
+          {
+            "key": "C",
+            "text": "把 _, value 改成 i, value，并在循环体里用 i"
+          },
+          {
+            "key": "D",
+            "text": "把返回类型从 int 改成 int64"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "用 := 在循环体内声明 total，它的作用域只在循环体内，return total 处找不到该变量。把 total := 0 移到 for 之前，循环内外就都能访问它。",
+        "skill_tags": [
+          "循环外初始化累加变量",
+          "range 遍历"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的程序期望输出 3 12，但实际输出不符合预期，原因和修正是？\n```go\nfunc main() {\n    values := []int{2, 4}\n    append(values, 6)\n    fmt.Println(len(values), sum(values))\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "输出 2 6；应写成 values = append(values, 6)"
+          },
+          {
+            "key": "B",
+            "text": "输出 3 12；append 会直接更新 values 的长度"
+          },
+          {
+            "key": "C",
+            "text": "输出 2 12；len 没有更新但遍历能看到新元素"
+          },
+          {
+            "key": "D",
+            "text": "输出 3 6；sum 只统计追加之前的元素"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "append 的返回值被丢弃，values 仍是 []int{2, 4}，所以长度是 2、总和是 6。追加后必须保存返回值：values = append(values, 6)。",
+        "skill_tags": [
+          "append 返回值",
+          "切片长度",
+          "常见错误排查"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "source_card_content_id": "60000000-0000-4000-8000-000000000005",
+      "tool_call_count": 0,
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "c0e62f4d-164d-49dc-a857-4c9de76f0be1",
+    "question_count": 8,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:16:34.402Z",
+  "finished_at": "2026-10-10T08:16:56.206Z"
+}

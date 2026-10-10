@@ -2,7 +2,8 @@
  * 独立 Agent 评测进程入口。
  *
  * 调用顺序：main 解析 build/run/score CLI；build 校验并标准化评测集，run 装配业务模型网关并保存候选结果，
- * score 读取候选结果后调用独立 Judge 并生成加权报告。业务模型沿用现有受控出网网关；Judge 只使用
+ * score 读取候选结果后调用独立 Judge 并生成加权报告；--retry-failed 先校验并复用已有评分，再仅重试失败项。
+ * 业务模型沿用现有受控出网网关；Judge 只使用
  * AGENT_EVAL_JUDGE_* 环境变量。
  */
 
@@ -10,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 import pg from 'pg';
 
@@ -40,6 +42,7 @@ import {
   writeEvaluationReport,
 } from '../evaluation/report.js';
 import {
+  EvaluationCaseResultSchema,
   EvaluationRunCaseResultSchema,
   EvaluationRunReportSchema,
   type EvaluationCaseResult,
@@ -72,7 +75,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     await runBusinessEvaluation(parsed.ownerId, parsed.datasetPath, parsed.outputDir);
     return;
   }
-  await scoreBusinessEvaluation(parsed.ownerId, parsed.datasetPath, parsed.outputDir);
+  await scoreBusinessEvaluation(parsed.ownerId, parsed.datasetPath, parsed.outputDir, parsed.retryFailed);
 }
 
 /** 必须配置数据库连接，以便读取 owner-id 默认模型并复用业务出网审计。 */
@@ -166,11 +169,12 @@ async function runBusinessCase(
   }
 }
 
-/** 读取 run 阶段候选结果，调用 Judge 并把评分与汇总报告写入 scores 子目录。 */
+/** 读取候选结果并评分；重试模式保留已有非失败结果，将全部结果重新汇总到 scores 子目录。 */
 async function scoreBusinessEvaluation(
   ownerId: string,
   datasetPath: string,
   outputDir: string,
+  retryFailed = false,
 ): Promise<void> {
   const dataset = await readEvaluationDataset(datasetPath);
   const runReport = JSON.parse(await readFile(join(resolve(outputDir), 'run.json'), 'utf8')) as unknown;
@@ -181,15 +185,35 @@ async function scoreBusinessEvaluation(
   if (parsedRunReport.dataset_version !== dataset.dataset_version) {
     throw new Error('run.json 的 dataset_version 与当前评测集不一致。');
   }
-  const judge = createJudgeClient();
   const scoreDir = join(resolve(outputDir), 'scores');
-  const results: EvaluationCaseResult[] = [];
+  const scoringCases: Array<{
+    runResult: EvaluationRunCaseResult;
+    evaluationCase: EvaluationCase;
+    previousResult?: EvaluationCaseResult;
+  }> = [];
+  // 先读取并校验完整输入，避免发现缺失或错配的旧评分前已发送部分 Judge 请求。
   for (const item of parsedRunReport.cases) {
     const raw = JSON.parse(await readFile(join(resolve(outputDir), item.file_name), 'utf8')) as unknown;
     const runResult = EvaluationRunCaseResultSchema.parse(raw);
     const evaluationCase = dataset.cases.find((candidate) => candidate.case_id === runResult.case_id);
     if (evaluationCase === undefined) {
       throw new Error('run 结果找不到对应评测用例：' + runResult.case_id);
+    }
+    const previousResult = retryFailed
+      ? await readPreviousScore(join(scoreDir, item.file_name), ownerId, runResult)
+      : undefined;
+    scoringCases.push({ runResult, evaluationCase, previousResult });
+  }
+  const judge = createJudgeClient();
+  if (scoringCases.some(({ previousResult }) => previousResult?.status === 'scored' && previousResult.judge_model !== judge.modelName())) {
+    throw new Error('--retry-failed 的已有成功评分与当前 Judge 模型不一致，请恢复原 Judge 模型或执行完整 score。');
+  }
+  const results: EvaluationCaseResult[] = [];
+  for (const { runResult, evaluationCase, previousResult } of scoringCases) {
+    if (previousResult !== undefined && previousResult.status !== 'failed') {
+      results.push(previousResult);
+      console.log('[agent-eval] score case=' + previousResult.case_id + ' status=' + previousResult.status + ' reused=true');
+      continue;
     }
     const result = await scoreEvaluationCaseWithJudge({
       ownerId,
@@ -211,6 +235,37 @@ async function scoreBusinessEvaluation(
   });
   const reportPath = await writeEvaluationReport(scoreDir, report);
   console.log('[agent-eval] 评分报告已写入：' + reportPath);
+}
+
+/** 读取重试所需的已有评分，并核对运行身份、候选内容和结构检查，防止复用错配结果。 */
+async function readPreviousScore(
+  path: string,
+  ownerId: string,
+  runResult: EvaluationRunCaseResult,
+): Promise<EvaluationCaseResult> {
+  let content: string;
+  try {
+    content = await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error('--retry-failed 找不到已有评分：' + runResult.case_id + '。请先执行不带 --retry-failed 的 score。');
+    }
+    throw error;
+  }
+  const result = EvaluationCaseResultSchema.parse(JSON.parse(content) as unknown);
+  if (
+    result.owner_id !== ownerId
+    || runResult.owner_id !== ownerId
+    || result.run_id !== runResult.run_id
+    || result.case_id !== runResult.case_id
+    || result.run_type !== runResult.run_type
+    || !isDeepStrictEqual(result.business_model, runResult.business_model)
+    || !isDeepStrictEqual(result.candidate_output, runResult.candidate_output)
+    || !isDeepStrictEqual(result.structure_check, runResult.structure_check)
+  ) {
+    throw new Error('--retry-failed 的已有评分与 run 候选结果不一致：' + runResult.case_id + '。请执行完整 score。');
+  }
+  return result;
 }
 
 /** 装配现有业务模型网关和按 owner-id 读取默认模型的适配器。 */

@@ -1,0 +1,323 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "368912c7-bf48-4a60-9e30-5ce4cfbeef36",
+  "case_id": "reg40-posttest-10-algorithms",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "posttest_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "post_test",
+    "question_count": 10,
+    "difficulty": "hard",
+    "plan_id": null,
+    "plan_node_id": "50000000-0000-4000-8000-000000000010",
+    "source_card_content_id": "60000000-0000-4000-8000-000000000010",
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "使用节点中的 `binary_search` 在 `[1, 3, 5, 7, 9]` 中查找 `7`，依次被比较的中点索引 mid 是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "2、3"
+          },
+          {
+            "key": "B",
+            "text": "1、2、3"
+          },
+          {
+            "key": "C",
+            "text": "2、4"
+          },
+          {
+            "key": "D",
+            "text": "3、4"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "初始 low=0、high=4，mid=(0+4)//2=2，比较 values[2]=5，5<7 所以 low=mid+1=3；此时 low=3、high=4，mid=(3+4)//2=3，比较 values[3]=7 命中，返回索引 3。",
+        "skill_tags": [
+          "中点计算",
+          "区间缩小"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码：\n```python\ndef binary_search(values, target):\n    low = 0\n    high = len(values) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if values[mid] == target:\n            return mid\n        if values[mid] < target:\n            low = mid\n        else:\n            high = mid - 1\n    return -1\n```\n对 `[1, 3, 5]` 查找 `4`，会发生什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "正常退出循环并返回 -1"
+          },
+          {
+            "key": "B",
+            "text": "陷入死循环，low 一直停在 1"
+          },
+          {
+            "key": "C",
+            "text": "返回索引 2"
+          },
+          {
+            "key": "D",
+            "text": "抛出 IndexError"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "low=0、high=2，mid=1，values[1]=3<4 使 low=mid=1；下一轮 low=1、high=2，mid 仍为 1，区间不再缩小，循环永不结束。未命中分支必须写成 low=mid+1 才能排除已比较的中点。",
+        "skill_tags": [
+          "边界更新",
+          "死循环排查"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于节点中给出的迭代版二分搜索的时间与额外空间复杂度，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "时间 O(log n)，额外空间 O(1)，每轮把候选数量约减半，且只使用常数个变量"
+          },
+          {
+            "key": "B",
+            "text": "时间 O(n)，因为最坏情况下要检查列表中所有元素"
+          },
+          {
+            "key": "C",
+            "text": "时间 O(log n)，额外空间 O(log n)，因为每轮都要保存中点"
+          },
+          {
+            "key": "D",
+            "text": "时间 O(n log n)，因为每次比较都涉及 log n 个元素"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "每轮比较中点后区间约减半，所以时间与候选数量的对数成正比；迭代实现只用 low、high、mid 等常数个变量，不需要与 n 相关的额外空间。",
+        "skill_tags": [
+          "时间复杂度",
+          "空间复杂度"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在空列表上调用 `binary_search([], 7)`，关于这个过程下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "high 初始为 -1，`low <= high` 不成立，循环体一次都不执行，直接返回 -1"
+          },
+          {
+            "key": "B",
+            "text": "会先访问 values[0]，抛出 IndexError"
+          },
+          {
+            "key": "C",
+            "text": "high 初始为 0，循环执行一次后返回 -1"
+          },
+          {
+            "key": "D",
+            "text": "函数返回 None"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "空列表时 len(values)-1 = -1，初始区间为 [0, -1]，`low <= high` 为假，循环立即跳过并返回 -1，不会访问任何元素。",
+        "skill_tags": [
+          "空列表处理",
+          "边界条件"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "对升序列表 `[1, 3, 5, 7, 9, 11, 13]` 调用 `binary_search(values, 13)`，结果是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "返回索引 6，共比较 3 次"
+          },
+          {
+            "key": "B",
+            "text": "返回元素值 13"
+          },
+          {
+            "key": "C",
+            "text": "返回索引 6，共比较 5 次"
+          },
+          {
+            "key": "D",
+            "text": "返回 -1，因为目标在区间最右端"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "low=0、high=6，mid=3（值 7<13）→ low=4；low=4、high=6，mid=5（值 11<13）→ low=6；low=6、high=6，mid=6（值 13）命中，返回索引 6，共 3 次中点比较。",
+        "skill_tags": [
+          "执行追踪",
+          "返回索引"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "对 `[1, 3, 3, 3, 5]` 调用 `binary_search(values, 3)`，结果是什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "返回 1，即第一个 3 的位置"
+          },
+          {
+            "key": "B",
+            "text": "返回 2，即中间那个 3 的位置"
+          },
+          {
+            "key": "C",
+            "text": "返回 3，即最后一个 3 的位置"
+          },
+          {
+            "key": "D",
+            "text": "返回 -1，因为目标值重复、无法确定唯一位置"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "low=0、high=4，mid=2，values[2] 正好等于 3，函数立即返回 2。该实现只保证返回某个匹配位置，不保证是第一个匹配位置，所以不能把它当作找重复元素左边界的方法。",
+        "skill_tags": [
+          "重复元素",
+          "返回值语义"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "对未排序的列表 `[5, 1, 9, 3]` 调用 `binary_search(values, 3)`，结果是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "返回 3，也就是目标所在的下标"
+          },
+          {
+            "key": "B",
+            "text": "返回 -1，尽管 3 在下标 3 处"
+          },
+          {
+            "key": "C",
+            "text": "返回 1，因为第一次比较就命中"
+          },
+          {
+            "key": "D",
+            "text": "抛出异常，因为输入没有升序"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "low=0、high=3，mid=1，values[1]=1<3 所以 low=2；low=2、high=3，mid=2，values[2]=9>3 所以 high=1；此时 low=2>high=1，区间为空，返回 -1。中点比较只有在升序前提下才能判断目标方向，否则会错误地丢弃目标所在的一半。",
+        "skill_tags": [
+          "升序前提",
+          "误用场景"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "如果把初始化写成 `high = len(values)` 而不是 `high = len(values) - 1`，最直接的后果是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "闭区间的右端包含了不存在的索引，可能访问 values[len(values)] 造成越界"
+          },
+          {
+            "key": "B",
+            "text": "循环总会少执行一轮，导致漏掉最后一个元素"
+          },
+          {
+            "key": "C",
+            "text": "空列表时 high 变成 0，会多做一次比较"
+          },
+          {
+            "key": "D",
+            "text": "函数返回的索引整体偏大 1"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "闭区间 [low, high] 的右端必须是最大有效索引 len(values)-1，因为索引范围是 0 到 len(values)-1。把 high 设为 len(values) 会让区间包含一个不存在的下标，mid 可能落到该位置并被访问。",
+        "skill_tags": [
+          "high 初始化",
+          "闭区间"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "若把循环条件 `while low <= high` 改成 `while low < high`，其余代码不变，在 `[1, 3, 5]` 中查找 `5` 的结果是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "返回 2，正常命中"
+          },
+          {
+            "key": "B",
+            "text": "返回 -1，因为只剩一个候选元素时就退出了循环"
+          },
+          {
+            "key": "C",
+            "text": "返回 1，命中中间元素"
+          },
+          {
+            "key": "D",
+            "text": "陷入死循环"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "low=0、high=2，mid=1，values[1]=3<5 使 low=2；此时 `low < high` 为 2<2，不成立而退出循环，索引 2 上的 5 从未被比较过，于是返回 -1。闭区间写法必须用 `low <= high`，因为 low 等于 high 时区间里还有一个候选元素。",
+        "skill_tags": [
+          "循环条件",
+          "边界错误"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "如果把命中分支的 `return mid` 改成 `return values[mid]`，那么 `binary_search([10, 20, 30], 30)` 会返回什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "返回 2"
+          },
+          {
+            "key": "B",
+            "text": "返回 30"
+          },
+          {
+            "key": "C",
+            "text": "返回 -1"
+          },
+          {
+            "key": "D",
+            "text": "抛出异常，因为返回类型不一致"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "该函数约定命中时返回目标的索引、未命中时返回 -1。改成 `return values[mid]` 后，命中时返回的是元素值 30 而不是索引 2，破坏了返回值语义，调用者无法再用它定位元素。",
+        "skill_tags": [
+          "返回值语义",
+          "索引与元素值"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "source_card_content_id": "60000000-0000-4000-8000-000000000010",
+      "tool_call_count": 0,
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "a2701e73-8885-4c3d-8b4d-c1c447d88191",
+    "question_count": 10,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:18:15.430Z",
+  "finished_at": "2026-10-10T08:18:36.760Z"
+}

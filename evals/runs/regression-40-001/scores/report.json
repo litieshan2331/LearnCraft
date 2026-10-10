@@ -1,0 +1,264 @@
+{
+  "schema_version": "agent_eval.report.v1",
+  "run_id": "agent-eval-mv23s8vb",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "dataset_version": "regression-40-v1",
+  "judge_model": "deepseek-v4.1-flash",
+  "total_cases": 40,
+  "scored_cases": 40,
+  "invalid_cases": 0,
+  "failed_cases": 0,
+  "dimension_averages": {
+    "correctness": 4.875,
+    "completeness": 4.9,
+    "relevance": 4.975,
+    "readability": 4.65,
+    "teaching_adaptation": 4.625
+  },
+  "weighted_average": 4.83,
+  "percentage_average": 96.6,
+  "cases": [
+    {
+      "case_id": "reg40-assessment-01-typescript",
+      "status": "scored",
+      "weighted_score": 4.9,
+      "percentage_score": 98.00000000000001
+    },
+    {
+      "case_id": "reg40-assessment-02-python",
+      "status": "scored",
+      "weighted_score": 4.8,
+      "percentage_score": 96
+    },
+    {
+      "case_id": "reg40-assessment-03-javascript",
+      "status": "scored",
+      "weighted_score": 4.8,
+      "percentage_score": 96
+    },
+    {
+      "case_id": "reg40-assessment-04-java",
+      "status": "scored",
+      "weighted_score": 4.7,
+      "percentage_score": 94
+    },
+    {
+      "case_id": "reg40-assessment-05-go",
+      "status": "scored",
+      "weighted_score": 4.7,
+      "percentage_score": 94
+    },
+    {
+      "case_id": "reg40-assessment-06-c",
+      "status": "scored",
+      "weighted_score": 4.9,
+      "percentage_score": 98.00000000000001
+    },
+    {
+      "case_id": "reg40-assessment-07-sql",
+      "status": "scored",
+      "weighted_score": 4.5,
+      "percentage_score": 90
+    },
+    {
+      "case_id": "reg40-assessment-08-http",
+      "status": "scored",
+      "weighted_score": 4.8,
+      "percentage_score": 96
+    },
+    {
+      "case_id": "reg40-assessment-09-testing",
+      "status": "scored",
+      "weighted_score": 4.3,
+      "percentage_score": 86
+    },
+    {
+      "case_id": "reg40-assessment-10-algorithms",
+      "status": "scored",
+      "weighted_score": 4.8,
+      "percentage_score": 96
+    },
+    {
+      "case_id": "reg40-plan-01-typescript",
+      "status": "scored",
+      "weighted_score": 4.7,
+      "percentage_score": 94
+    },
+    {
+      "case_id": "reg40-plan-02-python",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-plan-03-javascript",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-plan-04-java",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-plan-05-go",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-plan-06-c",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-plan-07-sql",
+      "status": "scored",
+      "weighted_score": 4.9,
+      "percentage_score": 98.00000000000001
+    },
+    {
+      "case_id": "reg40-plan-08-http",
+      "status": "scored",
+      "weighted_score": 4.7,
+      "percentage_score": 94
+    },
+    {
+      "case_id": "reg40-plan-09-testing",
+      "status": "scored",
+      "weighted_score": 4.7,
+      "percentage_score": 94
+    },
+    {
+      "case_id": "reg40-plan-10-algorithms",
+      "status": "scored",
+      "weighted_score": 4.8,
+      "percentage_score": 96
+    },
+    {
+      "case_id": "reg40-content-01-typescript",
+      "status": "scored",
+      "weighted_score": 4.7,
+      "percentage_score": 94
+    },
+    {
+      "case_id": "reg40-content-02-python",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-content-03-javascript",
+      "status": "scored",
+      "weighted_score": 4.9,
+      "percentage_score": 98.00000000000001
+    },
+    {
+      "case_id": "reg40-content-04-java",
+      "status": "scored",
+      "weighted_score": 4.9,
+      "percentage_score": 98.00000000000001
+    },
+    {
+      "case_id": "reg40-content-05-go",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-content-06-c",
+      "status": "scored",
+      "weighted_score": 4.8,
+      "percentage_score": 96
+    },
+    {
+      "case_id": "reg40-content-07-sql",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-content-08-http",
+      "status": "scored",
+      "weighted_score": 4.9,
+      "percentage_score": 98.00000000000001
+    },
+    {
+      "case_id": "reg40-content-09-testing",
+      "status": "scored",
+      "weighted_score": 4.8,
+      "percentage_score": 96
+    },
+    {
+      "case_id": "reg40-content-10-algorithms",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-posttest-01-typescript",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-posttest-02-python",
+      "status": "scored",
+      "weighted_score": 4.8,
+      "percentage_score": 96
+    },
+    {
+      "case_id": "reg40-posttest-03-javascript",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-posttest-04-java",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-posttest-05-go",
+      "status": "scored",
+      "weighted_score": 4.3,
+      "percentage_score": 86
+    },
+    {
+      "case_id": "reg40-posttest-06-c",
+      "status": "scored",
+      "weighted_score": 4.4,
+      "percentage_score": 88.00000000000001
+    },
+    {
+      "case_id": "reg40-posttest-07-sql",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-posttest-08-http",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    },
+    {
+      "case_id": "reg40-posttest-09-testing",
+      "status": "scored",
+      "weighted_score": 4.7,
+      "percentage_score": 94
+    },
+    {
+      "case_id": "reg40-posttest-10-algorithms",
+      "status": "scored",
+      "weighted_score": 5,
+      "percentage_score": 100
+    }
+  ],
+  "started_at": "2026-10-10T07:59:11.591Z",
+  "finished_at": "2026-10-10T10:13:03.076Z"
+}

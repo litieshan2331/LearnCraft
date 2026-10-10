@@ -1,0 +1,19 @@
+{
+  "schema_version": "agent_eval.run_report.v1",
+  "run_id": "agent-eval-mv23s8vb",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "dataset_version": "regression-40-v1",
+  "total_cases": 1,
+  "completed_cases": 1,
+  "invalid_cases": 0,
+  "failed_cases": 0,
+  "cases": [
+    {
+      "case_id": "reg40-assessment-02-python",
+      "status": "completed",
+      "file_name": "4c3da6e3-c323-4cfc-be6e-e2aaa20221da-reg40-assessment-02-python.json"
+    }
+  ],
+  "started_at": "2026-10-10T07:59:11.591Z",
+  "finished_at": "2026-10-10T08:18:36.774Z"
+}

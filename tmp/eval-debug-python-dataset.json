@@ -1,0 +1,55 @@
+{
+  "schema_version": "agent_eval.dataset.v1",
+  "dataset_version": "regression-40-v1",
+  "cases": [
+    {
+      "case_id": "reg40-assessment-02-python",
+      "dataset_version": "regression-40-v1",
+      "run_type": "assessment_generate",
+      "input_snapshot": {
+        "topic": "Python 数据处理入门",
+        "title": "Python 数据处理入门诊断前测",
+        "description": "学习 Python 的基本数据类型、条件分支、循环、函数、列表与字典，并使用输入检查处理简单的数据清洗任务。只使用稳定的 Python 3 语法和标准库，不引入数据分析框架。",
+        "desired_outcome": "能够把一组分数整理成有效数据，使用函数和循环计算统计结果，并处理空输入。",
+        "question_count": 10,
+        "difficulty": "normal",
+        "kind": "diagnostic",
+        "overall_experience": "beginner",
+        "background": "刚开始学习编程，能读懂变量赋值和简单加法，还不熟悉循环与函数。"
+      },
+      "learner_profile": {
+        "current_level": "beginner",
+        "overall_experience": "beginner",
+        "background_summary": "刚开始学习编程，能读懂变量赋值和简单加法，还不熟悉循环与函数。"
+      },
+      "reference_facts": [
+        "Python 函数没有执行带值的 return 时返回 None；print 展示内容并不等于返回计算结果。",
+        "Python 列表的有效非负索引从 0 开始；遍历空列表时循环体不执行。"
+      ],
+      "required_knowledge_points": [],
+      "acceptable_answer_points": [
+        "恰好生成 10 道独立可读的单选题，每题答案唯一，解析与答案一致。",
+        "根据主题、描述和目标选择具有诊断价值的核心概念、常见错误和应用考点，不要求覆盖输入未指定的额外清单。",
+        "相邻题的正确选项字母不同，正确答案位置尽量均衡，并避免明显可预测的排列规律。",
+        "按照整体编程经验 beginner 确定学习者水平。",
+        "本题量安排 9 道当前水平题及 1 道提高题；仅提高题允许跨到高一级。normal 和 hard 均保留这个配额。",
+        "normal 以当前水平的核心概念、常见错误和简单应用为主；必要的术语有足够题干或代码支持。"
+      ],
+      "scoring_rubric": {
+        "correctness": "技术事实、代码语义、唯一正确选项与解析准确；参考事实用于核对准确性，不是额外必测清单。",
+        "completeness": "题量及每题字段齐全，考点覆盖输入目标的主要方面；只因明确遗漏扣分，不以复杂考点数量或提高题比例重复扣分。",
+        "relevance": "围绕「Python 数据处理入门」和输入学习目标出题，遵守描述中的范围边界。",
+        "readability": "题干可独立理解，代码、选项和解析清楚；各选项表达与长度不应明显泄露正确答案。",
+        "teaching_adaptation": "按初学者的实际作答能力判断；10 题安排 1 道提高题。hard 提高当前水平内的应用复杂度；跨级判断必须说明前置能力和题干支持，不凭术语名称。检查答案分布对诊断性的影响。"
+      },
+      "tags": [
+        "regression",
+        "python",
+        "assessment",
+        "beginner",
+        "normal",
+        "questions-10"
+      ]
+    }
+  ]
+}

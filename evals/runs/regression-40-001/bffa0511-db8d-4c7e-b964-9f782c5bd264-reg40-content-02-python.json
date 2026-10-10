@@ -1,0 +1,126 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "bffa0511-db8d-4c7e-b964-9f782c5bd264",
+  "case_id": "reg40-content-02-python",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "card_content_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "schema_version": "card_content.v2",
+    "foundation": "本章的核心是一个固定三步的**累加器模式**：先把结果变量初始化，再在循环里把每个元素加进去，最后在循环结束后把结果返回。sum_scores 就是这个模式的最小例子，输入一个数值列表，输出它们的总和。掌握这个模式之后，求和、计数、找最大值都只是换了「怎么累加」这一环。\n\n## for 循环拿到的是元素本身\n\nPython 的 for 循环直接交出列表里的元素：写 for score in scores 时，循环变量 score 每一轮依次等于列表中的下一个数值，不需要用下标去取值。判断方式是：如果你习惯写 scores[i] 才能拿到元素，说明你还在用其它语言的思路；Python 里直接使用循环变量即可。这也意味着循环变量只是一个临时的名字，给它重新赋值不会写回列表。\n\n## 缩进决定一行代码执行几次\n\n循环体内的代码每轮执行一次，循环体外的代码只执行一次，Python 靠缩进层次区分两者。所以 total = 0 必须写在 for 之前、缩进更浅的一层，否则每一轮都会把 total 清回 0，最后只剩下最后一个元素的值；return total 必须写在 for 之后、与 for 同一层，否则函数在第一轮就返回，后面的元素根本没机会被累加。读代码时先看缩进层级，再问「这一行会被执行几次」，很多错误一眼就能定位。\n\n## 空列表与输入列表是两个独立的关注点\n\n空列表时循环体一次都不执行，这时函数返回什么完全由**初始化时给的值**决定：total = 0 让空列表自然返回 0，这正是边界情况该有的行为。同时，累加是**只读**操作：函数读取每个元素的值，从不给列表赋值，也不调用 append 之类的修改方法，所以调用结束后输入列表的内容保持不变。判断一个函数会不会改动输入，要看它有没有对参数赋值或调用修改方法，而不是看它有没有遍历参数。",
+    "worked_example": {
+      "explanation": "示例拆成两个文件：score_utils.py 只放纯函数 sum_scores，main.py 负责用两个输入验证它的行为。读 sum_scores 时按三步核对：初始化在不在循环前、累加在不在循环体内、return 在不在循环之后。再看 main 如何用 [2, 4, 6] 和空列表各调用一次，并在调用之后打印原列表，确认它没有被改动。",
+      "files": [
+        {
+          "path": "src/score_utils.py",
+          "language": "python",
+          "role": "module",
+          "content": "def sum_scores(scores):\n    \"\"\"返回 scores 中所有数值的总和；空列表返回 0。\"\"\"\n    total = 0\n    for score in scores:\n        total += score\n    return total\n"
+        },
+        {
+          "path": "src/main.py",
+          "language": "python",
+          "role": "entry",
+          "content": "from score_utils import sum_scores\n\n\ndef main():\n    scores = [2, 4, 6]\n    print(sum_scores(scores))\n    print(sum_scores([]))\n    print(scores)\n\n\nmain()\n"
+        }
+      ],
+      "entry_file": "src/main.py",
+      "call_sequence": [
+        {
+          "step": 1,
+          "file": "src/score_utils.py",
+          "function": "sum_scores",
+          "note": "先看函数体：total = 0 在循环之前，total += score 在循环体内，return total 在循环之后"
+        },
+        {
+          "step": 2,
+          "file": "src/main.py",
+          "function": "main",
+          "note": "再看入口如何用 [2, 4, 6] 和空列表各调用一次 sum_scores，并打印原列表确认它没被改动"
+        }
+      ],
+      "expected_output": "src/main.py › main：先用 [2, 4, 6] 调用 sum_scores 得到 12，再用空列表调用得到 0，最后打印的 scores 仍然是 [2, 4, 6]，说明输入列表没有被修改"
+    },
+    "pitfalls_debug": [
+      {
+        "title": "把 total = 0 写进了循环体里",
+        "cause": "初始化语句的缩进跟循环体一样深，每轮循环都会把累加结果清回 0，最后只剩最后一个元素的值。",
+        "fix": "把 total = 0 提到 for 之前、缩进更浅的一层，让它只在函数开始时执行一次。"
+      },
+      {
+        "title": "把 return total 写进了循环体里",
+        "cause": "return 一旦执行，函数立刻结束。写在循环体内时，处理完第一个元素就返回，后面的元素没被累加；遇到空列表时循环体根本不会执行，函数会返回 None。",
+        "fix": "把 return total 与 for 对齐、写在循环之后，保证所有元素都加完、并且空列表也能执行到这一行。"
+      },
+      {
+        "title": "忘记初始化累加变量就直接累加",
+        "cause": "写了 total += score 却没有先写 total = 0，变量在使用前没有值，会抛出 NameError。",
+        "fix": "养成固定顺序：先给累加变量赋初值，再进入循环；初值同时决定了空列表的返回值。"
+      },
+      {
+        "title": "空列表没有返回 0 而是返回了 None",
+        "cause": "常见写法是让 return 依附在循环体内，或者只在循环里判断后返回，导致空列表一次都不进入循环、函数走到末尾也没有返回值。",
+        "fix": "让唯一的 return 待在循环外，返回初始值 0；空列表时循环体不执行，直接返回 0 就是正确结果。"
+      },
+      {
+        "title": "以为 sum_scores 会修改传入的列表",
+        "cause": "把「遍历列表」和「修改列表」混为一谈，担心累加会改动原数据。",
+        "fix": "累加只读取元素的值，没有对参数赋值、也没有调用 append 等方法，因此不会改变输入；可以像示例那样在调用后打印原列表来验证。"
+      }
+    ],
+    "source_refs": [
+      {
+        "title": "Python 官方教程：for 语句",
+        "url": "https://docs.python.org/3/tutorial/controlflow.html#for-statements"
+      },
+      {
+        "title": "Python 官方文档：内置函数 sum",
+        "url": "https://docs.python.org/3/library/functions.html#sum"
+      }
+    ],
+    "teaching_memory": {
+      "key_concepts": [
+        "累加器模式的三步：初始化、循环内累加、循环后返回",
+        "for 循环变量是元素本身而不是下标",
+        "缩进决定代码执行一次还是多次",
+        "空列表的返回值由初始值决定",
+        "累加是只读操作，不改变输入列表"
+      ],
+      "common_mistakes": [
+        "把 total = 0 写在循环体内，导致每轮都被重置",
+        "把 return 写在循环体内，只累加第一个元素就返回",
+        "忘记初始化累加变量，触发 NameError",
+        "空列表返回 None 而不是 0",
+        "误以为遍历累加会修改传入的列表"
+      ],
+      "assessment_targets": [
+        "能为数值列表写出返回总和的 sum_scores 函数",
+        "能解释 total 初始化在循环外、return 放在循环后的原因",
+        "能说明 [2, 4, 6] 返回 12、空列表返回 0，并验证输入列表未被修改"
+      ]
+    },
+    "plan_node_id": "50000000-0000-4000-8000-000000000002",
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "logical_session_key": "reg40-session-python"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "card_content_id": "5b7a4cd7-ba3b-4b0b-9aad-b857a5d6c4f7",
+    "plan_node_id": "50000000-0000-4000-8000-000000000002",
+    "tool_call_count": 0,
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:10:19.120Z",
+  "finished_at": "2026-10-10T08:10:41.432Z"
+}

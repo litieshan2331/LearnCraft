@@ -1,0 +1,644 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "de2eb89d-ccd6-4725-86ea-4fae0a367dc9",
+  "case_id": "reg40-assessment-05-go",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "assessment_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "kind": "diagnostic",
+    "question_count": 20,
+    "difficulty": "normal",
+    "plan_id": null,
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "阅读下面的代码，输出是什么？\n```go\ns := make([]int, 3, 5)\ns = append(s, 10)\nfmt.Println(len(s), cap(s))\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "3 5"
+          },
+          {
+            "key": "B",
+            "text": "4 5"
+          },
+          {
+            "key": "C",
+            "text": "4 10"
+          },
+          {
+            "key": "D",
+            "text": "3 6"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "make([]int, 3, 5) 得到长度 3、容量 5 的切片；append 一个元素后长度变为 4，而容量 5 还有空位，因此不会扩容，容量仍为 5，输出 4 5。",
+        "skill_tags": [
+          "切片",
+          "长度与容量"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出是什么？\n```go\na := []int{1, 2, 3, 4}\nb := a[1:3]\nb[0] = 100\nfmt.Println(a, b)\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "[1 100 3 4] [100 3]"
+          },
+          {
+            "key": "B",
+            "text": "[1 2 3 4] [100 3]"
+          },
+          {
+            "key": "C",
+            "text": "[1 100 3 4] [1 100 3]"
+          },
+          {
+            "key": "D",
+            "text": "[100 2 3 4] [100 3]"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "切片表达式 a[1:3] 不会复制底层数组，b 与 a 共享同一段存储。修改 b[0] 就等于修改 a[1]，所以 a 变为 [1 100 3 4]，b 为 [100 3]。",
+        "skill_tags": [
+          "切片",
+          "底层数组共享"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出是什么？\n```go\ncounts := map[string]int{\"go\": 3}\nv, ok := counts[\"rust\"]\nfmt.Println(v, ok)\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "0 true"
+          },
+          {
+            "key": "B",
+            "text": "编译错误，不能读取不存在的键"
+          },
+          {
+            "key": "C",
+            "text": "0 false"
+          },
+          {
+            "key": "D",
+            "text": "panic: assignment to entry in nil map"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "用两个变量接收 map 取值时，第二个变量 ok 表示键是否存在。键 \"rust\" 不存在，因此返回值的零值 0，ok 为 false，不会 panic 也不会编译错误。",
+        "skill_tags": [
+          "map",
+          "comma-ok"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下列哪段代码在运行时会 panic？",
+        "options": [
+          {
+            "key": "A",
+            "text": "对 nil map 执行读取操作，例如 `_ = m[\"k\"]`"
+          },
+          {
+            "key": "B",
+            "text": "对 nil slice 执行 append，例如 `var s []int; s = append(s, 1)`"
+          },
+          {
+            "key": "C",
+            "text": "对 nil map 执行 for range 遍历"
+          },
+          {
+            "key": "D",
+            "text": "对 nil map 执行赋值，例如 `var m map[string]int; m[\"k\"] = 1`"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "读取和遍历 nil map 都是安全的，只会得到零值或零次迭代；append 到 nil slice 也是允许的。但向 nil map 写入元素会因为底层哈希表未初始化而 panic。",
+        "skill_tags": [
+          "map",
+          "nil 值的边界"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "有下面这个函数：\n```go\nfunc div(a, b int) (int, error) {\n    if b == 0 {\n        return 0, errors.New(\"division by zero\")\n    }\n    return a / b, nil\n}\n```\n调用方处理返回值时，下列哪种写法最符合 Go 的惯例？",
+        "options": [
+          {
+            "key": "A",
+            "text": "直接使用返回的商，出错时由上层调用方承担后果"
+          },
+          {
+            "key": "B",
+            "text": "先判断 err != nil 并处理错误，确认没有错误后再使用商"
+          },
+          {
+            "key": "C",
+            "text": "用 recover() 捕获除零产生的 panic，再继续执行"
+          },
+          {
+            "key": "D",
+            "text": "只有当 err 为 nil 时才打印错误提示并继续下一步"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "Go 用多返回值显式传递错误，惯例是紧接着检查 err != nil 并处理或向上返回，绝不在未检查的情况下使用其他返回值；错误是返回值而不是异常，recover 只用于真正的 panic。",
+        "skill_tags": [
+          "多返回值",
+          "error 处理惯例"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "需要把底层错误包装后向上返回，同时让上层调用方能用 errors.Is 判断出原始错误，应该使用哪种写法？",
+        "options": [
+          {
+            "key": "A",
+            "text": "`fmt.Errorf(\"读取失败: %v\", err)`"
+          },
+          {
+            "key": "B",
+            "text": "`errors.New(\"读取失败: \" + err.Error())`"
+          },
+          {
+            "key": "C",
+            "text": "`fmt.Errorf(\"读取失败: %w\", err)`"
+          },
+          {
+            "key": "D",
+            "text": "`fmt.Errorf(\"读取失败: %s\", err)`"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "只有 %w 会把原错误作为被包装的错误保存下来，errors.Is 和 errors.As 才能沿着错误链匹配到它；%v 和 %s 只是把错误文本拼进字符串，包装链会断裂。",
+        "skill_tags": [
+          "错误包装",
+          "errors.Is"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出的顺序和内容是什么？\n```go\nfunc main() {\n    x := 1\n    defer fmt.Println(\"deferred:\", x)\n    x = 2\n    fmt.Println(\"now:\", x)\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "先输出 `now: 2`，函数返回时输出 `deferred: 1`"
+          },
+          {
+            "key": "B",
+            "text": "先输出 `now: 2`，函数返回时输出 `deferred: 2`"
+          },
+          {
+            "key": "C",
+            "text": "先输出 `deferred: 2`，再输出 `now: 2`"
+          },
+          {
+            "key": "D",
+            "text": "只输出 `deferred: 1`，后面的语句不再执行"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "defer 语句的参数在注册时就求值，所以 fmt.Println 捕获的是当时的 x 值 1；被推迟的调用在函数返回时才执行，因此先打印 now: 2，再打印 deferred: 1。",
+        "skill_tags": [
+          "defer",
+          "参数求值时机"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面这个函数返回什么？\n```go\nfunc f() (n int) {\n    defer func() { n++ }()\n    return 5\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "5"
+          },
+          {
+            "key": "B",
+            "text": "编译错误，defer 中不能修改返回值"
+          },
+          {
+            "key": "C",
+            "text": "0"
+          },
+          {
+            "key": "D",
+            "text": "6"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "函数使用了命名返回值 n。return 5 先把 n 赋为 5，随后被推迟的闭包执行 n++，把命名返回值改成 6，最终返回 6。",
+        "skill_tags": [
+          "defer",
+          "命名返回值"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出是什么？\n```go\ntype Counter struct{ n int }\n\nfunc (c Counter) Inc() { c.n++ }\n\nfunc main() {\n    c := Counter{}\n    c.Inc()\n    fmt.Println(c.n)\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "1"
+          },
+          {
+            "key": "B",
+            "text": "panic: nil pointer dereference"
+          },
+          {
+            "key": "C",
+            "text": "0"
+          },
+          {
+            "key": "D",
+            "text": "编译错误，Inc 没有使用指针接收者"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "Inc 使用值接收者，方法内部操作的是 Counter 的副本，c.n++ 只修改副本。调用方 c 的字段 n 仍为 0，想真正修改需要改成指针接收者 func (c *Counter) Inc()。",
+        "skill_tags": [
+          "方法",
+          "值接收者与指针接收者"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "已知下面的接口和类型：\n```go\ntype Shape interface {\n    Area() float64\n}\n\ntype Rect struct{ w, h float64 }\n\nfunc (r *Rect) Area() float64 { return r.w * r.h }\n```\n下列关于把 Rect 赋给 Shape 的说法，正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "`var s Shape = &Rect{2, 3}` 可以编译，而 `var s Shape = Rect{2, 3}` 不可以"
+          },
+          {
+            "key": "B",
+            "text": "`Rect{2, 3}` 和 `&Rect{2, 3}` 都能直接赋给 Shape"
+          },
+          {
+            "key": "C",
+            "text": "两者都不能赋给 Shape，因为 Rect 没有实现 Area"
+          },
+          {
+            "key": "D",
+            "text": "只有把 Area 改成值接收者，Rect 和 *Rect 才能赋给 Shape"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "Area 使用指针接收者，所以只有 *Rect 的方法集包含 Area，能赋给 Shape；值类型 Rect 的方法集不包含指针接收者方法，不能赋给 Shape。",
+        "skill_tags": [
+          "接口",
+          "方法集"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出是什么？\n```go\ntype MyErr struct{}\n\nfunc (e *MyErr) Error() string { return \"my\" }\n\nfunc bad() error {\n    var p *MyErr\n    return p\n}\n\nfunc main() {\n    err := bad()\n    fmt.Println(err == nil)\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "true"
+          },
+          {
+            "key": "B",
+            "text": "false"
+          },
+          {
+            "key": "C",
+            "text": "编译错误，*MyErr 没有实现 error"
+          },
+          {
+            "key": "D",
+            "text": "panic: nil pointer dereference"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "把类型为 *MyErr 的 nil 指针赋给 error 接口后，接口保存了具体类型 *MyErr 和值 nil，因此接口本身不为 nil，输出 false。这是典型的“typed nil”陷阱。",
+        "skill_tags": [
+          "接口",
+          "nil 判断"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出是什么？\n```go\nwords := []string{\"go\", \"go\", \"rust\"}\ncounts := map[string]int{}\nfor _, w := range words {\n    counts[w]++\n}\nfmt.Println(len(counts), counts[\"go\"])\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "3 2"
+          },
+          {
+            "key": "B",
+            "text": "2 1"
+          },
+          {
+            "key": "C",
+            "text": "1 2"
+          },
+          {
+            "key": "D",
+            "text": "2 2"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "map 的键唯一，\"go\" 出现两次计数为 2，\"rust\" 一次计数为 1，因此 len(counts) 为 2，counts[\"go\"] 为 2，输出 2 2。",
+        "skill_tags": [
+          "map",
+          "数据汇总"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "需要把 map[string]int 中的键按字典序输出，下列做法正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "对 map 直接 for range，迭代顺序天然就是键的字典序"
+          },
+          {
+            "key": "B",
+            "text": "使用 sort.Ints 对 map 的键排序后再遍历"
+          },
+          {
+            "key": "C",
+            "text": "先把所有键收集到 slice，再用 sort.Strings 排序，然后按序遍历 map"
+          },
+          {
+            "key": "D",
+            "text": "调用 map 自带的 Sort 方法对键排序"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "Go 的 map 迭代顺序是随机的，也不提供排序方法。要得到稳定的字典序输出，必须先把键复制到 slice，排序 slice，再按排序后的键去取值。",
+        "skill_tags": [
+          "map",
+          "排序",
+          "确定性输出"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "有一个自定义错误类型：\n```go\ntype ParseError struct {\n    Line int\n}\n\nfunc (e *ParseError) Error() string {\n    return fmt.Sprintf(\"第 %d 行解析失败\", e.Line)\n}\n```\n上层拿到一个可能被包装过的 error，想取出其中的 *ParseError 并读取 Line，应该使用哪种方式？",
+        "options": [
+          {
+            "key": "A",
+            "text": "用 `if err == someParseErr` 与一个已知错误直接比较"
+          },
+          {
+            "key": "B",
+            "text": "用 `var pe *ParseError; if errors.As(err, &pe) { ... }` 提取"
+          },
+          {
+            "key": "C",
+            "text": "用 `strings.Contains(err.Error(), \"解析失败\")` 判断文本"
+          },
+          {
+            "key": "D",
+            "text": "用 `pe := err.(*ParseError)` 做无检查的类型断言"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "errors.As 会沿着包装链查找并提取指定类型的错误，即使中间被 %w 包装过也能找到。直接比较、匹配错误文本以及无检查断言都无法可靠地处理被包装的错误。",
+        "skill_tags": [
+          "自定义错误",
+          "errors.As"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "有下面这个转换函数：\n```go\nfunc toInt(s string) (int, error) {\n    n, err := strconv.Atoi(s)\n    if err != nil {\n        return 0, fmt.Errorf(\"非法数字 %q: %w\", s, err)\n    }\n    return n, nil\n}\n```\n调用 `toInt(\"abc\")` 后，下列说法正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "返回的 error 非 nil，errors.Is 能沿着包装链匹配到底层的转换错误"
+          },
+          {
+            "key": "B",
+            "text": "会 panic，调用方必须用 recover 处理"
+          },
+          {
+            "key": "C",
+            "text": "返回 0 和 nil，无法转换的字符串被当作 0 处理"
+          },
+          {
+            "key": "D",
+            "text": "返回的 error 为 nil，只是结果 n 为 0"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "strconv.Atoi 对 \"abc\" 返回非 nil 错误，这里用 %w 包装后返回，所以调用方拿到非 nil error，并且 errors.Is 可以沿包装链匹配到 strconv 的转换错误。",
+        "skill_tags": [
+          "输入校验",
+          "错误包装"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出是什么？\n```go\ntype Item struct {\n    Name string\n    Qty  int\n}\n\nitems := []Item{{\"a\", 1}, {\"b\", 2}}\nfor _, it := range items {\n    it.Qty *= 10\n}\nfmt.Println(items[0].Qty, items[1].Qty)\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "10 20"
+          },
+          {
+            "key": "B",
+            "text": "10 2"
+          },
+          {
+            "key": "C",
+            "text": "1 20"
+          },
+          {
+            "key": "D",
+            "text": "1 2"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "for range 中的 it 是元素的副本，修改 it.Qty 只会改到副本，不会影响切片中的原始元素。要修改原元素需要写成 `for i := range items { items[i].Qty *= 10 }`。",
+        "skill_tags": [
+          "切片",
+          "range 遍历",
+          "值语义"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "一个函数需要依次完成读取文件、解析内容、汇总结果，每一步都可能返回 error。下列哪种结构最符合 Go 的错误处理惯例？",
+        "options": [
+          {
+            "key": "A",
+            "text": "用 try / catch 把所有步骤包起来统一捕获"
+          },
+          {
+            "key": "B",
+            "text": "每一步后立刻 `if err != nil { return ..., err }`，把错误向上传递"
+          },
+          {
+            "key": "C",
+            "text": "把所有步骤放进匿名函数，用 recover 统一处理失败"
+          },
+          {
+            "key": "D",
+            "text": "把错误写入一个全局变量，函数结束时再统一检查"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "Go 没有异常机制，惯例是每步检查 err 并立即返回、逐层向上传递，让上层决定如何处理。全局变量记录错误会破坏并发安全，recover 只针对真正的 panic。",
+        "skill_tags": [
+          "错误处理",
+          "错误传递"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码：\n```go\nf, err := os.Open(\"data.txt\")\nif err != nil {\n    return err\n}\ndefer f.Close()\n```\n关于这段代码，下列说法正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "`defer f.Close()` 在 os.Open 成功返回后立即执行"
+          },
+          {
+            "key": "B",
+            "text": "`defer f.Close()` 只能用在带命名返回值的函数里"
+          },
+          {
+            "key": "C",
+            "text": "`defer f.Close()` 在函数返回前执行，若忽略它返回的错误，可能漏掉关闭时的问题"
+          },
+          {
+            "key": "D",
+            "text": "`defer` 无法用于关闭 `*os.File`，必须手工调用 close"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "defer 注册的调用在函数返回前执行，能保证资源被释放，因此是打开文件后的标准写法。缺点是无法直接看到 Close 的返回值，在写入场景可能漏掉刷新或关闭错误。",
+        "skill_tags": [
+          "defer",
+          "资源释放"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的函数按 `名称:数值` 的格式汇总记录：\n```go\nfunc summarize(records []string) (map[string][]int, error) {\n    result := make(map[string][]int)\n    for i, r := range records {\n        parts := strings.Split(r, \":\")\n        if len(parts) != 2 {\n            return nil, fmt.Errorf(\"第 %d 条记录格式错误: %q\", i, r)\n        }\n        n, err := strconv.Atoi(parts[1])\n        if err != nil {\n            return nil, fmt.Errorf(\"第 %d 条记录数值非法: %w\", i, err)\n        }\n        result[parts[0]] = append(result[parts[0]], n)\n    }\n    return result, nil\n}\n```\n调用 `summarize([]string{\"a:1\", \"b:x\"})`，下列说法正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "返回的 map 为 nil，error 非 nil，且 errors.Is 能匹配到底层的 strconv 转换错误"
+          },
+          {
+            "key": "B",
+            "text": "返回的 map 为 map[a:[1]]，error 为 nil"
+          },
+          {
+            "key": "C",
+            "text": "返回的 map 为 map[a:[1]]，error 非 nil"
+          },
+          {
+            "key": "D",
+            "text": "返回 nil 和 nil，解析失败的记录会被静默跳过"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "遇到 \"b:x\" 时 Atoi 失败，函数执行 `return nil, fmt.Errorf(... %w, err)`，因此返回的 map 是 nil 而不是已累积的部分结果，error 非 nil 且可通过 errors.Is 沿包装链匹配到 strconv 的转换错误。",
+        "skill_tags": [
+          "数据汇总",
+          "错误包装",
+          "提前返回"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，`sumAll([]int{1, 2, -3, 4})` 返回什么？\n```go\nvar ErrNegative = errors.New(\"负数\")\n\ntype Accumulator struct {\n    total int\n}\n\nfunc (a *Accumulator) Add(n int) error {\n    if n < 0 {\n        return fmt.Errorf(\"负数 %d: %w\", n, ErrNegative)\n    }\n    a.total += n\n    return nil\n}\n\nfunc sumAll(nums []int) (acc Accumulator, err error) {\n    defer func() {\n        if err != nil {\n            acc = Accumulator{}\n        }\n    }()\n    for _, n := range nums {\n        if e := acc.Add(n); e != nil {\n            return acc, e\n        }\n    }\n    return acc, nil\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "返回 total 为 3 的 Accumulator 和一个非 nil 的 error"
+          },
+          {
+            "key": "B",
+            "text": "返回 total 为 4 的 Accumulator 和 nil"
+          },
+          {
+            "key": "C",
+            "text": "返回 total 为 7 的 Accumulator 和一个非 nil 的 error"
+          },
+          {
+            "key": "D",
+            "text": "返回 total 为 0 的 Accumulator 和一个非 nil 的 error，且 errors.Is(err, ErrNegative) 为 true"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "累加到 -3 时 Add 返回包装了 ErrNegative 的错误，函数带着部分结果返回；随后被推迟的闭包发现 err 非 nil，把命名返回值 acc 重置为零值，因此最终返回 total 为 0 的 Accumulator 和可通过 errors.Is 匹配 ErrNegative 的错误。",
+        "skill_tags": [
+          "defer",
+          "命名返回值",
+          "自定义错误",
+          "错误链"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "topic": "Go 数据处理与错误处理",
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "search_extract": "not_used",
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "所有题目的答案与解析均符合 Go 语义，未发现事实或代码错误。",
+      "evidence": [
+        "questions[0].answer_key：B 与 make([]int,3,5) 后 append 使 len=4、cap 仍为 5 的语义一致",
+        "questions[7].answer_key：D 正确反映命名返回值被 defer 闭包 n++ 后返回 6",
+        "questions[10].answer_key：B 正确反映 typed nil 赋给 error 接口后 err==nil 为 false",
+        "questions[19].answer_key：D 正确反映 defer 在 err 非 nil 时将命名返回值 acc 重置为 0，且 errors.Is 可匹配 ErrNegative"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "恰好 20 道单选题，每题字段齐全，覆盖了切片/map、多返回值与错误处理、结构体/接口、defer 资源释放等目标主要方面。",
+      "evidence": [
+        "questions：共 20 题，每题均含 prompt、options、answer_key、explanation、skill_tags、max_score"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "全部题目围绕 Go 数据处理与显式错误处理，遵守描述边界，未引入 goroutine、channel 或框架。",
+      "evidence": [
+        "questions[*].skill_tags：仅涉及切片、map、error、defer、接口、结构体等主题相关标签"
+      ]
+    },
+    "readability": {
+      "score": 4,
+      "reason": "题干与解析总体清晰，但多道题的正确答案恰为最长、最详尽的选项，存在轻微的长度泄露倾向。",
+      "evidence": [
+        "questions[16].options：B 明显长于其它选项且正是 answer_key",
+        "questions[19].options：A 为最长选项且正是 answer_key"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 4,
+      "reason": "整体难度贴合 intermediate，提高题控制得当，但正确选项呈每 4 题各含 A/B/C/D 一次的循环排列，存在可被察觉的可预测规律。",
+      "evidence": [
+        "questions[0..19].answer_key：按 B A C D / B C A D / C A B D / C B A D / B C A D 分块排列，每个连续 4 题块恰好包含 A、B、C、D 各一次"
+      ]
+    }
+  },
+  "weighted_score": 4.7,
+  "percentage_score": 94,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:01:30.451Z",
+  "finished_at": "2026-10-10T09:35:31.258Z"
+}

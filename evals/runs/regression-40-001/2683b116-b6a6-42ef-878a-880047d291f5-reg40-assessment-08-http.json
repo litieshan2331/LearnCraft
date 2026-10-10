@@ -1,0 +1,371 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "2683b116-b6a6-42ef-878a-880047d291f5",
+  "case_id": "reg40-assessment-08-http",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "assessment_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "diagnostic",
+    "question_count": 12,
+    "difficulty": "normal",
+    "plan_id": null,
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "HTTP 响应状态码 404 通常表示什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "请求已经成功完成"
+          },
+          {
+            "key": "B",
+            "text": "服务器内部发生了错误"
+          },
+          {
+            "key": "C",
+            "text": "请求的资源在服务器上不存在"
+          },
+          {
+            "key": "D",
+            "text": "客户端没有提供身份认证信息"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "404 属于 4xx 客户端错误，表示服务器找不到请求的资源；服务器内部错误通常是 500，未认证通常是 401。",
+        "skill_tags": [
+          "HTTP 状态码"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在浏览器中执行下面的代码，变量 result 的值是什么？\n```javascript\nconst result = fetch('/api/items');\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "服务器返回的 JSON 数据对象"
+          },
+          {
+            "key": "B",
+            "text": "一个 Promise 对象"
+          },
+          {
+            "key": "C",
+            "text": "服务器返回的响应文本"
+          },
+          {
+            "key": "D",
+            "text": "HTTP 状态码，例如 200"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "fetch 会立即返回一个 Promise；要拿到 Response 对象，还需要 await 或使用 .then()。",
+        "skill_tags": [
+          "fetch",
+          "异步"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "已经拿到 Response 对象 res，它的响应体是 JSON 格式。要把响应体转换成 JavaScript 对象，应该使用下面哪个表达式？",
+        "options": [
+          {
+            "key": "A",
+            "text": "await res.json()"
+          },
+          {
+            "key": "B",
+            "text": "await res.text()"
+          },
+          {
+            "key": "C",
+            "text": "JSON.parse(res)"
+          },
+          {
+            "key": "D",
+            "text": "res.body"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "res.json() 会读取响应体并解析为 JavaScript 对象，返回 Promise 所以要 await；text() 只得到字符串，Response 对象本身也不能直接交给 JSON.parse。",
+        "skill_tags": [
+          "响应解析"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "需要向服务器提交一份新数据并创建一条记录，最合适使用的 HTTP 方法是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "GET"
+          },
+          {
+            "key": "B",
+            "text": "HEAD"
+          },
+          {
+            "key": "C",
+            "text": "DELETE"
+          },
+          {
+            "key": "D",
+            "text": "POST"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "POST 用于提交数据，通常用来创建新资源；GET 一般只读取数据，DELETE 用于删除，HEAD 只获取响应头。",
+        "skill_tags": [
+          "HTTP 方法"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "使用 fetch 发送 JSON 格式的请求体时，为了告诉服务器请求体的格式，通常需要在请求头中设置哪一项？",
+        "options": [
+          {
+            "key": "A",
+            "text": "Accept: text/html"
+          },
+          {
+            "key": "B",
+            "text": "Content-Type: application/json"
+          },
+          {
+            "key": "C",
+            "text": "Authorization: application/json"
+          },
+          {
+            "key": "D",
+            "text": "Cache-Control: no-cache"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "Content-Type 描述请求体（或响应体）的媒体类型，发送 JSON 时应设为 application/json；Accept 表示客户端希望接收的类型，Authorization 用于身份凭证。",
+        "skill_tags": [
+          "请求头"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，它的问题是什么？\n```javascript\nasync function load() {\n  const res = fetch('/api/user');\n  const data = res.json();\n  console.log(data);\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "fetch 不能写在 async 函数里"
+          },
+          {
+            "key": "B",
+            "text": "应该调用 res.text() 而不是 res.json()"
+          },
+          {
+            "key": "C",
+            "text": "缺少 await，res 还是 Promise，data 也不是解析后的数据"
+          },
+          {
+            "key": "D",
+            "text": "console.log 无法打印对象"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "fetch 返回 Promise，res.json() 也返回 Promise；不加 await 时 res 不是 Response，data 也不是解析后的数据对象。",
+        "skill_tags": [
+          "异步",
+          "常见错误"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下列哪一段文本是合法的 JSON？",
+        "options": [
+          {
+            "key": "A",
+            "text": "{ name: \"Ann\", age: 20 }"
+          },
+          {
+            "key": "B",
+            "text": "{ 'name': 'Ann', 'age': 20 }"
+          },
+          {
+            "key": "C",
+            "text": "{ \"name\": \"Ann\", \"age\": 20, }"
+          },
+          {
+            "key": "D",
+            "text": "{ \"name\": \"Ann\", \"age\": 20 }"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "JSON 的键必须使用双引号，字符串也只能用双引号，最后一个成员后不能有多余逗号；A 的键没有引号，B 用了单引号，C 有多余逗号。",
+        "skill_tags": [
+          "JSON 语法"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "要把 JavaScript 对象 `{ name: 'Ann' }` 作为请求体发送，通常先用哪个方法把它转�� JSON 字符串？",
+        "options": [
+          {
+            "key": "A",
+            "text": "JSON.stringify({ name: 'Ann' })"
+          },
+          {
+            "key": "B",
+            "text": "JSON.parse({ name: 'Ann' })"
+          },
+          {
+            "key": "C",
+            "text": "String({ name: 'Ann' })"
+          },
+          {
+            "key": "D",
+            "text": "{ name: 'Ann' }.json()"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "JSON.stringify 把 JavaScript 值序列化成 JSON 字符串；JSON.parse 方向相反，是把字符串解析成对象。",
+        "skill_tags": [
+          "JSON 序列化"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "服务器返回状态码 500，这通常说明什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "客户端请求的 URL 写错了"
+          },
+          {
+            "key": "B",
+            "text": "客户端没有权限访问该资源"
+          },
+          {
+            "key": "C",
+            "text": "服务器在处理请求时发生了内部错误"
+          },
+          {
+            "key": "D",
+            "text": "请求的资源已被永久移动"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "500 属于 5xx，表示服务器端错误；URL 写错通常得到 404，无权限通常是 403，资源永久移动是 301。",
+        "skill_tags": [
+          "HTTP 状态码"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的代码想先确认请求是否成功，再读取 JSON 数据，横线处填什么最合适？\n```javascript\nconst res = await fetch('/api/user');\nif (____) {\n  const data = await res.json();\n  console.log(data);\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "res.status = 200"
+          },
+          {
+            "key": "B",
+            "text": "res.ok"
+          },
+          {
+            "key": "C",
+            "text": "res.json"
+          },
+          {
+            "key": "D",
+            "text": "res.body"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "res.ok 为 true 表示状态码在 200 到 299 之间，适合判断请求是否成功；res.status = 200 是赋值写法，res.json 是方法，res.body 是可读流。",
+        "skill_tags": [
+          "响应处理"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "调用接口时，下面哪种情况会让 fetch 返回的 Promise 进入 rejected 状态（即被 catch 捕获）？",
+        "options": [
+          {
+            "key": "A",
+            "text": "服务器返回 404 状态码"
+          },
+          {
+            "key": "B",
+            "text": "服务器返回 500 状态码"
+          },
+          {
+            "key": "C",
+            "text": "响应体是空字符串"
+          },
+          {
+            "key": "D",
+            "text": "域名解析失败或网络断开，请求根本没有完成"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "fetch 只在请求无法完成（如网络错误）时才 reject；即使返回 404 或 500，Promise 也是 fulfilled，需要用 res.ok 或 res.status 自行判断。",
+        "skill_tags": [
+          "错误分类"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "某个接口成功时返回 JSON；删除成功时返回状态码 204 且没有响应体；网络中断时请求无法完成。下面的代码应该怎样补充最稳妥？\n```javascript\nasync function loadData(url) {\n  const res = await fetch(url);\n  // 待补充\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "先判断 res.ok 并排除 204，再 await res.json()，同时用 try/catch 捕获网络错误"
+          },
+          {
+            "key": "B",
+            "text": "直接 return await res.json()，解析失败时浏览器会自动重试请求"
+          },
+          {
+            "key": "C",
+            "text": "先 await res.json() 解析数据，解析失败后再回头检查 res.status"
+          },
+          {
+            "key": "D",
+            "text": "只要 res.status === 200 就解析 JSON，其它状态码一律当作网络失败"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "应先用 res.ok 或状态码判断请求是否成功；204 表示没有响应体，不能调用 json()；网络错误必须用 try/catch 处理。先解析再判断、或把 HTTP 错误状态码当成网络错误，都会误判。",
+        "skill_tags": [
+          "错误处理",
+          "边界条件",
+          "异步"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "topic": "HTTP 与 JSON 接口调用",
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "search_extract": "not_used",
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "efe5a874-66bd-469b-b581-573c5e074cec",
+    "status": "ready",
+    "question_count": 12,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:03:29.748Z",
+  "finished_at": "2026-10-10T08:03:57.477Z"
+}

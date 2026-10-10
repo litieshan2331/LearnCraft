@@ -1,0 +1,326 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "4c3da6e3-c323-4cfc-be6e-e2aaa20221da",
+  "case_id": "reg40-assessment-02-python",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "assessment_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "diagnostic",
+    "question_count": 10,
+    "difficulty": "normal",
+    "plan_id": null,
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```python\nscores = [88, 92, 79]\nprint(scores[1])\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "88"
+          },
+          {
+            "key": "B",
+            "text": "79"
+          },
+          {
+            "key": "C",
+            "text": "92"
+          },
+          {
+            "key": "D",
+            "text": "报错（IndexError）"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "列表下标从 0 开始，scores[0] 是 88，scores[1] 是 92，所以输出 92。下标 1 在范围内，不会报 IndexError。",
+        "skill_tags": [
+          "列表索引"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```python\nstudent = {\"name\": \"Tom\", \"score\": 85}\nprint(student.get(\"age\", 0))\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "0"
+          },
+          {
+            "key": "B",
+            "text": "None"
+          },
+          {
+            "key": "C",
+            "text": "85"
+          },
+          {
+            "key": "D",
+            "text": "报错（KeyError）"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "字典的 get 方法在键不存在时返回给定的默认值，这里的默认值是 0，所以输出 0。如果写成 student[\"age\"]，才会抛出 KeyError。",
+        "skill_tags": [
+          "字典操作",
+          "get 方法"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，会发生什么？\n```python\ntext = \"3.5\"\nprint(int(text))\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "输出 3"
+          },
+          {
+            "key": "B",
+            "text": "输出 3.5"
+          },
+          {
+            "key": "C",
+            "text": "输出 4"
+          },
+          {
+            "key": "D",
+            "text": "报错（ValueError）"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "int() 只能解析表示整数的字符串，\"3.5\" 含有小数点，转换时会抛出 ValueError。要得到 3.5 应该用 float(text)。",
+        "skill_tags": [
+          "类型转换",
+          "常见错误"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```python\ndata = []\nif not data:\n    print(\"空数据\")\nelse:\n    print(\"有数据\")\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "有数据"
+          },
+          {
+            "key": "B",
+            "text": "空数据"
+          },
+          {
+            "key": "C",
+            "text": "什么都不输出"
+          },
+          {
+            "key": "D",
+            "text": "报错（TypeError）"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "空列表在布尔上下文中被视为假，not data 为 True，所以执行 if 分支，输出“空数据”，这也是判断数据是否为空的常用写法。",
+        "skill_tags": [
+          "条件分支",
+          "空数据处理"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```python\nscores = [10, 20, 30]\ntotal = 0\nfor s in scores:\n    total += s\nprint(total)\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "60"
+          },
+          {
+            "key": "B",
+            "text": "30"
+          },
+          {
+            "key": "C",
+            "text": "0"
+          },
+          {
+            "key": "D",
+            "text": "报错"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "total 初始为 0，循环把列表中的每个元素依次累加：0+10+20+30=60，所以输出 60。",
+        "skill_tags": [
+          "循环",
+          "累加求和"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```python\ndef double(x):\n    return x * 2\n\nresult = double(5)\nprint(result + 1)\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "10"
+          },
+          {
+            "key": "B",
+            "text": "None"
+          },
+          {
+            "key": "C",
+            "text": "报错（TypeError）"
+          },
+          {
+            "key": "D",
+            "text": "11"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "double 用 return 返回 5*2=10，result 得到 10，因此 result + 1 输出 11。如果函数里写的是 print(x*2) 而不是 return，result 就会是 None。",
+        "skill_tags": [
+          "函数返回值",
+          "return 与 print"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```python\nscores = [55, 80, 90, 40]\npassed = []\nfor s in scores:\n    if s >= 60:\n        passed.append(s)\nprint(passed)\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "[55, 40]"
+          },
+          {
+            "key": "B",
+            "text": "[80, 90]"
+          },
+          {
+            "key": "C",
+            "text": "[55, 80, 90, 40]"
+          },
+          {
+            "key": "D",
+            "text": "[90]"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "只有 80 和 90 满足 s >= 60，会被 append 到 passed 中，55 和 40 被跳过，因此输出 [80, 90]。",
+        "skill_tags": [
+          "循环",
+          "条件筛选",
+          "列表操作"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```python\nwords = [\"a\", \"b\", \"a\", \"a\"]\ncounts = {}\nfor w in words:\n    counts[w] = counts.get(w, 0) + 1\nprint(counts[\"a\"])\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "3"
+          },
+          {
+            "key": "B",
+            "text": "1"
+          },
+          {
+            "key": "C",
+            "text": "2"
+          },
+          {
+            "key": "D",
+            "text": "报错（KeyError）"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "\"a\" 在列表中出现了 3 次。每轮循环用 get(w, 0) 取出当前计数再累加 1，最终 counts[\"a\"] 为 3；counts[\"b\"] 为 1，所以不会抛 KeyError。",
+        "skill_tags": [
+          "字典计数",
+          "循环",
+          "get 方法"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出结果是什么？\n```python\ndef average(numbers):\n    if not numbers:\n        return 0\n    return sum(numbers) / len(numbers)\n\nprint(average([]))\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "None"
+          },
+          {
+            "key": "B",
+            "text": "0.0"
+          },
+          {
+            "key": "C",
+            "text": "0"
+          },
+          {
+            "key": "D",
+            "text": "报错（ZeroDivisionError）"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "传入空列表时 numbers 在布尔上下文中为假，函数提前返回整数 0，不会执行 len(numbers) 的除法，因此既不是 0.0 也不会抛 ZeroDivisionError。",
+        "skill_tags": [
+          "函数",
+          "空输入处理"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面有一组原始分数，其中可能混有无法转成整数的内容，需要只收集能转成整数的项并计算它们的平均值，并且当所有输入都无效时不能抛出异常。下列哪段代码能正确完成这一任务？",
+        "options": [
+          {
+            "key": "A",
+            "text": "```python\ndef clean(raw):\n    valid = [int(x) for x in raw]\n    return sum(valid) / len(valid)\n```"
+          },
+          {
+            "key": "B",
+            "text": "```python\ndef clean(raw):\n    valid = [int(x) for x in raw if x.isdigit()]\n    return sum(valid) / len(valid)\n```"
+          },
+          {
+            "key": "C",
+            "text": "```python\ndef clean(raw):\n    for x in raw:\n        try:\n            valid.append(int(x))\n        except ValueError:\n            return None\n    return sum(valid) / len(valid)\n```"
+          },
+          {
+            "key": "D",
+            "text": "```python\ndef clean(raw):\n    valid = []\n    for x in raw:\n        try:\n            valid.append(int(x))\n        except ValueError:\n            pass\n    if not valid:\n        return 0\n    return sum(valid) / len(valid)\n```"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "A 直接把每个元素交给 int()，遇到无效内容会抛 ValueError；B 用 isdigit 过滤虽然能跳过字母，但所有输入都无效时 valid 为空列表，sum(valid) / len(valid) 会抛 ZeroDivisionError；C 没有先创建 valid 列表，会抛 NameError，而且一遇到无效内容就返回，无法收集后面的有效项；D 先用 try/except 跳过无效项只保留有效整数，再做空列表判断，全部无效时返回 0，符合要求。",
+        "skill_tags": [
+          "数据清洗",
+          "异常处理",
+          "函数",
+          "空输入处理"
+        ],
+        "max_score": 2
+      }
+    ],
+    "generation_metadata": {
+      "topic": "Python 数据处理入门",
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "search_extract": "not_used",
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "ec1e50fa-a008-457e-a92a-4b0a849f8d75",
+    "status": "ready",
+    "question_count": 10,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T07:59:44.346Z",
+  "finished_at": "2026-10-10T08:00:07.850Z"
+}

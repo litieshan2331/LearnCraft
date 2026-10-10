@@ -1,0 +1,214 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "b2a2144a-c737-4888-b977-72815cafd32c",
+  "case_id": "reg40-plan-06-c",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "plan_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "schema_version": "learning_plan.v1",
+    "title": "C 语言数组与内存基础学习路线",
+    "summary": "面向刚掌握整数、条件与循环的初学者，从函数参数与返回值出发，依次覆盖整数数组的索引与边界、地址与指针、数组长度传递、字符串终止符与栈内存生命周期，最终能写出不越界、明确传入长度的整数数组处理函数。",
+    "nodes": [
+      {
+        "node_key": "c_functions_basics",
+        "ordinal": 1,
+        "title": "函数定义、参数传递与返回值",
+        "node_brief": "函数的定义与调用、形参与实参的对应关系、return 返回值的类型与用途。",
+        "learning_objective": "能独立定义并调用带多个参数的函数，正确说出实参如何对应形参、返回值如何传给调用处。",
+        "rationale": "前测显示函数参数与返回值只掌握了一部分，而数组、指针和长度传递都要写在函数里，先补齐这一层最基础的组织代码能力。",
+        "difficulty": 1,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能写出包含两个以上参数的函数并在 main 中调用",
+          "能解释实参与形参是按位置一一对应的",
+          "能写出有返回值的函数并用返回值参与后续运算",
+          "能指出把函数返回值类型写错时编译器给出的提示"
+        ]
+      },
+      {
+        "node_key": "array_definition_index",
+        "ordinal": 2,
+        "title": "整数数组的定义、索引与遍历",
+        "node_brief": "声明固定长度的整数数组、初始化、通过下标读写元素，以及用循环遍历元素。",
+        "learning_objective": "能声明并初始化一个整数数组，用循环按顺序读写下标范围内的所有元素。",
+        "rationale": "数组是本条路线所有后续内容的数据载体，前测中数组索引与长度只掌握了一部分，需要先把下标与长度的对应关系打牢。",
+        "difficulty": 2,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [
+          "c_functions_basics"
+        ],
+        "completion_criteria": [
+          "能声明长度为 5 的整数数组并写出初始化列表",
+          "能用一个 for 循环打印数组的全部元素",
+          "能说明长度为 N 的数组，合法下标范围是什么",
+          "能指出长度为 N 的数组里第一个与最后一个元素分别位于哪个下标"
+        ]
+      },
+      {
+        "node_key": "array_bounds",
+        "ordinal": 3,
+        "title": "数组边界与越界排查",
+        "node_brief": "下标越界的表现形式、常见的差一错误，以及通过循环条件和打印调试定位越界。",
+        "learning_objective": "能判断一段数组访问代码是否越界，并把越界代码改成边界正确的版本。",
+        "rationale": "越界排查是前测中明显薄弱的一项，也是后面讲指针有效范围与栈内存时的核心前提。",
+        "difficulty": 2,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [
+          "array_definition_index"
+        ],
+        "completion_criteria": [
+          "能指出循环条件写成 i <= 长度 时发生的越界",
+          "能给出至少两种数组越界的典型写法",
+          "能把一段越界代码修改为只访问合法下标",
+          "能通过打印下标与长度定位一次越界发生的位置"
+        ]
+      },
+      {
+        "node_key": "address_pointer_basics",
+        "ordinal": 4,
+        "title": "地址与指针基础",
+        "node_brief": "变量的地址、取地址运算符、指针变量的声明与解引用，以及指针指向有效内存的含义。",
+        "learning_objective": "能声明指向整数的指针，让它指向一个已存在的整数变量，并通过解引用读写该变量。",
+        "rationale": "前测中指针与有效内存属于需要练习的部分，而数组名、字符串和函数参数都涉及地址，必须先建立地址与指针的基本概念。",
+        "difficulty": 2,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "array_definition_index"
+        ],
+        "completion_criteria": [
+          "能用取地址运算符取得一个整数变量的地址并打印它",
+          "能声明 int 指针并让它指向一个已声明的整数变量",
+          "能通过解引用修改所指向变量的值并验证结果",
+          "能说明未指向任何有效变量的指针不能解引用"
+        ]
+      },
+      {
+        "node_key": "array_pointer_param",
+        "ordinal": 5,
+        "title": "数组与指针作为函数参数",
+        "node_brief": "数组名传给函数时发生什么、形参写成数组形式与指针形式的等价关系，以及为什么函数内无法自行得知数组长度。",
+        "learning_objective": "能解释数组作为函数参数时实际传递的信息是什么，并说清数组形式与指针形式的形参为何等价。",
+        "rationale": "这是前测里数组长度传递薄弱的直接根源：只有先理解传参时长度信息丢失，才能理解为什么要额外传长度。",
+        "difficulty": 3,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "address_pointer_basics",
+          "c_functions_basics"
+        ],
+        "completion_criteria": [
+          "能写出形参为数组形式和指针形式的同一个函数并说明二者等价",
+          "能解释为什么在函数内用 sizeof 得不到原数组的元素个数",
+          "能在函数内通过指针形式访问调用方数组的元素",
+          "能说明函数内修改数组元素会影响调用方的数组"
+        ]
+      },
+      {
+        "node_key": "pass_array_length",
+        "ordinal": 6,
+        "title": "向函数传递数组长度",
+        "node_brief": "把元素个数作为独立参数传入、在函数内用该长度控制循环边界，以及长度与指针的搭配约定。",
+        "learning_objective": "能编写接收数组指针与长度两个参数的处理函数，并保证循环不越过合法下标。",
+        "rationale": "前测中数组长度传递需要练习，这一章把上一章暴露的信息丢失问题落实为可执行的写法，是实现最终目标的关键一步。",
+        "difficulty": 3,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [
+          "array_pointer_param"
+        ],
+        "completion_criteria": [
+          "能写出接收指针与长度并求和的函数",
+          "能在函数内用一个长度参数控制循环的结束条件",
+          "能在调用处正确传入数组与它的元素个数",
+          "能说明长度参数类型与下标比较时需要注意的地方"
+        ]
+      },
+      {
+        "node_key": "char_array_string",
+        "ordinal": 7,
+        "title": "字符数组与字符串终止符",
+        "node_brief": "字符数组与字符串的区别、终止符在内存中的位置，以及靠终止符而非长度遍历字符串的写法。",
+        "learning_objective": "能说明字符串为什么需要一个终止符，并写出依赖终止符结束循环的字符串处理代码。",
+        "rationale": "前测中字符串与终止符需要练习，终止符是不依赖长度而靠约定边界的一种典型场景，能加深对有效内存范围的理解。",
+        "difficulty": 3,
+        "estimated_minutes": 90,
+        "prerequisite_node_keys": [
+          "array_definition_index"
+        ],
+        "completion_criteria": [
+          "能声明并初始化一个字符数组存放短字符串",
+          "能说出终止符在字符数组中的值以及它占用一个元素的事实",
+          "能写出以终止符为结束条件的遍历循环",
+          "能指出忘记给终止符预留位置时会出现的问题"
+        ]
+      },
+      {
+        "node_key": "stack_lifetime",
+        "ordinal": 8,
+        "title": "局部变量的生命周期与栈内存",
+        "node_brief": "函数内局部变量的产生与消失、函数返回后其局部数组不再有效，以及返回局部数组地址为何危险。",
+        "learning_objective": "能判断一段代码中某个数组或变量的内存在其被访问时是否仍然有效。",
+        "rationale": "前测中局部变量生命周期与越界排查都需要练习，有效内存的时间维度与越界的空间维度一起构成对内存正确性的完整判断。",
+        "difficulty": 3,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "address_pointer_basics"
+        ],
+        "completion_criteria": [
+          "能说明函数返回后其局部变量的内存不再有效",
+          "能指出返回局部数组地址的函数写法存在的问题",
+          "能判断一段代码中的指针在解引用时是否仍指向有效内存",
+          "能给出把数据留在调用方（如由调用方提供数组）的一种改写方式"
+        ]
+      },
+      {
+        "node_key": "safe_array_functions",
+        "ordinal": 9,
+        "title": "综合：编写不越界的整数数组处理函数",
+        "node_brief": "把函数参数、数组下标、指针传参、长度传递与生命周期检查合起来，完成一组带长度参数的整数数组处理函数。",
+        "learning_objective": "能独立编写一组接收数组指针与长度的整数数组处理函数，并逐条自查边界与内存有效性。",
+        "rationale": "这一章把前八章的知识收敛到期望结果上：写出明确传入长度、不越界、能解释数组与指针参数区别的代码。",
+        "difficulty": 3,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "pass_array_length",
+          "char_array_string",
+          "stack_lifetime"
+        ],
+        "completion_criteria": [
+          "能写出带长度的求最大值与求平均值两个整数数组函数",
+          "能对长度为 0 的输入给出安全的处理而不越界访问",
+          "能逐条说明每个函数的合法下标范围",
+          "能用一句话解释数组与指针在函数参数中的区别",
+          "能对其中一个函数指出它访问的内存何时仍然有效"
+        ]
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "repair_attempts": 0,
+      "generation_path": "model_knowledge",
+      "fallback_used": false
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "learning_plan_id": "8cee118d-878e-418d-94a4-a8b2fcfc1cb0",
+    "node_count": 9,
+    "tool_call_count": 0,
+    "repair_attempts": 0,
+    "generation_path": "model_knowledge",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:08:13.076Z",
+  "finished_at": "2026-10-10T08:08:25.856Z"
+}

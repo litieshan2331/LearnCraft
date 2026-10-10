@@ -14,6 +14,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import * as schema from "../../src/lib/db/schema";
+import { LearningAssistantService } from "../../src/modules/learning-assistant/application/learning-assistant-service";
 import type { CreateQueuedRunInput, FinishRunInput, RecordLearningMemoryInput } from "../../src/modules/learning-assistant/domain/learning-assistant";
 import { DrizzleLearningAssistantRepository } from "../../src/modules/learning-assistant/infrastructure/drizzle-learning-assistant-repository";
 
@@ -262,4 +263,39 @@ describe.skipIf(!databaseUrl)("学习助手 PostgreSQL Repository", () => {
     await expect(repository.updateRunningRun(ownerId, run.id, { inputTokens: -1 })).rejects.toMatchObject({ code: "INVALID_INPUT" });
     await expect(repository.updateRunningRun(ownerId, run.id, { outputSummaryJson: { missing: undefined } })).rejects.toMatchObject({ code: "INVALID_INPUT" });
   });
+
+  it("应用服务与真实数据库贯通发送、幂等、状态恢复和 30 轮完整历史分页", async () => {
+    const service = new LearningAssistantService(repository);
+    await expect(service.createConversation({ ownerId, sourceAssessmentAnswerId: answerIds[1] }))
+      .rejects.toMatchObject({ name: "LearningAssistantApplicationError", code: "RELATED_RESOURCE_NOT_FOUND" });
+    let firstRunId = "";
+    for (let turn = 1; turn <= 30; turn++) {
+      const input = { ownerId, conversationId, content: `  第 ${turn} 轮代码\n`, idempotencyKey: randomUUID() };
+      const sent = await service.sendMessage(input);
+      if (turn === 1) {
+        firstRunId = sent.run.id;
+        expect(await service.sendMessage(input)).toMatchObject({ created: false, run: { id: firstRunId } });
+        expect(await service.getConversation(ownerId, conversationId)).toMatchObject({ activeRun: { id: firstRunId } });
+        await expect(service.sendMessage({ ...input, idempotencyKey: randomUUID() })).rejects.toMatchObject({ code: "CONVERSATION_BUSY" });
+      }
+      await repository.startOwnedRun(ownerId, sent.run.id);
+      await repository.finishOwnedRun({ ownerId, runId: sent.run.id, status: "succeeded", messages: [
+        { id: randomUUID(), role: "assistant", content: `第 ${turn} 轮回复` },
+      ] });
+    }
+    const firstPage = await service.listMessages(ownerId, conversationId, { limit: 25 });
+    const secondPage = await service.listMessages(ownerId, conversationId, { limit: 25, afterSequenceNo: firstPage.nextAfterSequenceNo! });
+    const thirdPage = await service.listMessages(ownerId, conversationId, { limit: 25, afterSequenceNo: secondPage.nextAfterSequenceNo! });
+    const history = [...firstPage.items, ...secondPage.items, ...thirdPage.items];
+    expect(history.map((item) => item.sequenceNo)).toEqual(Array.from({ length: 60 }, (_, index) => index + 1));
+    expect(new Set(history.map((item) => item.turnNo)).size).toBe(30);
+    expect(thirdPage.nextAfterSequenceNo).toBeNull();
+    expect((await service.listMessages(ownerId, conversationId, { limit: 100 })).items).toHaveLength(60);
+    expect(new Set((await repository.getRecentContext(ownerId, conversationId)).map((item) => item.turnNo)))
+      .toEqual(new Set(Array.from({ length: 20 }, (_, index) => index + 11)));
+    expect(await service.getRun(ownerId, firstRunId)).toMatchObject({ status: "succeeded" });
+    expect((await service.getConversation(ownerId, conversationId)).activeRun).toBeNull();
+    await expect(service.listMessages(otherOwnerId, conversationId)).rejects.toMatchObject({ code: "CONVERSATION_NOT_FOUND" });
+    await expect(service.getRun(otherOwnerId, firstRunId)).rejects.toMatchObject({ code: "RUN_NOT_FOUND" });
+  }, 30_000);
 });

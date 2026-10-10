@@ -1,0 +1,442 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "48798e9c-6059-4618-a112-05b63151535a",
+  "case_id": "reg40-assessment-09-testing",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "assessment_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "diagnostic",
+    "question_count": 14,
+    "difficulty": "hard",
+    "plan_id": null,
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "下面的函数把分数限制在 0 到 100 之间：\n\n```js\nfunction clampScore(n) {\n  return Math.min(100, Math.max(0, n));\n}\n```\n\n仅从等价类划分和边界分析的角度看，哪一组输入最能覆盖这个函数的边界？",
+        "options": [
+          {
+            "key": "A",
+            "text": "`[-1, 0, 1, 99, 100, 101]`"
+          },
+          {
+            "key": "B",
+            "text": "`[0, 50, 100, 200]`"
+          },
+          {
+            "key": "C",
+            "text": "`[-200, -1, -0.5, -0.01]`"
+          },
+          {
+            "key": "D",
+            "text": "`[1, 50, 99, 99.9]`"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "有效区间是 0..100，边界点是 0 和 100。边界分析要求同时取边界值本身、以及紧邻边界的区间外与区间内取值：-1 和 101 是区间外的相邻点，0 和 100 是边界本身，1 和 99 是区间内的相邻点。B 只取边界和远端值，缺少相邻点；C 全部落在区间外，只覆盖一个等价类；D 全部落在区间内，完全没有触及边界。",
+        "skill_tags": [
+          "等价类划分",
+          "边界分析"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "某模块的行覆盖率和分支覆盖率都达到 100%，但变异测试只杀死了 40% 的变异体。下列哪项最能解释这种差距？",
+        "options": [
+          {
+            "key": "A",
+            "text": "覆盖率工具统计有误，覆盖率 100% 时变异分数不可能明显低于 100%"
+          },
+          {
+            "key": "B",
+            "text": "测试确实执行了所有代码路径，但断言太弱，行为被改变后测试依然通过"
+          },
+          {
+            "key": "C",
+            "text": "代码中存在大量重复逻辑，重复代码会同时拉低覆盖率和变异分数"
+          },
+          {
+            "key": "D",
+            "text": "变异测试工具对语法支持有限，未杀死的变异体其实都是无效变异体"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "覆盖率只说明代码被执行过，不说明执行结果被校验过。如果断言只检查返回值存在或只检查函数被调用，那么运算符、条件、边界被改变后测试仍然通过，变异体就会存活。A、C、D 都把差距归因于工具或代码结构，而没有考虑断言强度这个真正的原因。",
+        "skill_tags": [
+          "覆盖率",
+          "变异测试",
+          "断言强度"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的函数在服务端返回 500 时应该抛出异常：\n\n```js\nasync function fetchUser(id, http) {\n  const res = await http.get(`/users/${id}`);\n  if (res.status === 404) return null;\n  if (!res.ok) throw new Error(`HTTP ${res.status}`);\n  return res.body;\n}\n```\n\n使用 Node 内置的 assert 模块，下面哪种写法能可靠地断言“服务端返回 500 时会抛出包含 HTTP 500 的错误”？",
+        "options": [
+          {
+            "key": "A",
+            "text": "`assert.throws(() => fetchUser(1, http), /HTTP 500/)`"
+          },
+          {
+            "key": "B",
+            "text": "`fetchUser(1, http).catch(err => { assert.match(err.message, /HTTP 500/); })`"
+          },
+          {
+            "key": "C",
+            "text": "`await assert.rejects(() => fetchUser(1, http), /HTTP 500/)`"
+          },
+          {
+            "key": "D",
+            "text": "`await fetchUser(1, http).then(() => { assert.fail('不应成功'); })`"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "fetchUser 返回的是 Promise，异常只能通过 await 或回调捕获。C 等待 Promise 被拒绝并匹配错误消息，既验证了失败路径又验证了错误内容。A 使用同步的 assert.throws，函数不会同步抛出，因此断言直接失败。B 没有 await，断言可能在测试结束后才执行，甚至变成未处理的拒绝，测试可能误判为通过。D 只处理成功分支，Promise 被拒绝时测试以未捕获的错误失败，无法验证错误内容。",
+        "skill_tags": [
+          "异步失败路径",
+          "Promise 断言"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "团队为支付网关写了一个内存版替身（fake），日常测试都使用它，线上则使用真实 HTTP 实现。一段时间后，替身开始接受真实网关会拒绝的请求，导致测试全绿而线上报错。下列哪种做法最直接地防止这种漂移？",
+        "options": [
+          {
+            "key": "A",
+            "text": "在替身里增加更多断言，保证每次调用的参数都符合预期"
+          },
+          {
+            "key": "B",
+            "text": "把所有使用替身的测试都改成直接请求真实网关，彻底取消替身"
+          },
+          {
+            "key": "C",
+            "text": "提高替身的测试覆盖率，让它与真实实现的覆盖率保持一致"
+          },
+          {
+            "key": "D",
+            "text": "把网关行为写成一份共享的契约测试，让同一套契约同时跑在替身和真实实现上，真实实现按需（如集成环境）运行"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "漂移的根因是替身和真实实现各自维护、没有共同的行为规范。契约测试把双方都必须满足的行为固定下来，并在两套实现上运行，替身一旦偏离就会立刻失败。A 只约束调用方式，不检查返回行为；B 让日常测试依赖网络，代价高且不稳定；C 覆盖率与行为一致性无关。",
+        "skill_tags": [
+          "测试替身",
+          "契约测试"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "模块中有一份跨调用共享的缓存：\n\n```js\nconst cache = new Map();\n\nexport function priceOf(id, load) {\n  if (!cache.has(id)) cache.set(id, load(id));\n  return cache.get(id);\n}\n```\n\n每个测试单独运行都通过，但放在同一个测试文件里一起运行时，后面的测试开始失败。最可能的原因和修复方式是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "load 是回调，测试里必须用 await 调用 priceOf，否则会读到尚未完成的缓存写入"
+          },
+          {
+            "key": "B",
+            "text": "模块级 Map 在同一个模块实例内被所有测试共享，前一个测试写入的值残留；应在每个测试前重置模块状态，例如清空缓存或重新加载模块"
+          },
+          {
+            "key": "C",
+            "text": "Map 在并发测试下会互相覆盖，应改用普通对象保存缓存"
+          },
+          {
+            "key": "D",
+            "text": "priceOf 返回的是缓存中的同一个对象引用，应改为返回深拷贝，避免测试之间互相污染"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "模块顶层的 cache 在模块实例的生命周期内一直存在，同一个测试文件内多次导入拿到的是同一个 Map，因此测试之间产生了顺序依赖。修复方式是让每个测试从干净状态开始，例如在 beforeEach 中清空缓存，或使用模块重置 API 重新加载模块。C 与并发无关，JS 的 Map 操作是同步的；D 只能避免返回值被修改，无法消除缓存命中带来的状态残留。",
+        "skill_tags": [
+          "测试隔离",
+          "模块级状态"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "属性测试用随机生成的数据运行，某次 CI 构建失败，但本地反复重跑都无法复现同样的问题。下列哪种实践最能保证失败用例可复现？",
+        "options": [
+          {
+            "key": "A",
+            "text": "在失败时输出本次运行使用的随机种子（seed），并支持用同一个种子重放整轮用例"
+          },
+          {
+            "key": "B",
+            "text": "缩小生成器的取值范围，降低随机性带来的不确定性"
+          },
+          {
+            "key": "C",
+            "text": "取消随机生成，把所有用例改写成手写的固定输入"
+          },
+          {
+            "key": "D",
+            "text": "给测试加上自动重试，重试通过后就不再报告失败"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "属性测试的失败依赖具体的随机序列，只要记录种子并支持按种子重放，一次随机失败就能变成确定的可复现用例。B、C 只是降低或去掉了随机性，问题一旦出现依然无法回放当时的输入；D 会掩盖真实缺陷。",
+        "skill_tags": [
+          "随机数据可复现",
+          "属性测试"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "为 `sortByScore(users)` 设计性质测试（property-based testing）。下面哪条性质最强，并且对该函数一定成立？",
+        "options": [
+          {
+            "key": "A",
+            "text": "返回值长度等于输入长度，并且第一个元素的分数不低于其他元素"
+          },
+          {
+            "key": "B",
+            "text": "返回值是输入元素的一个排列，并且相邻元素的分数非递减"
+          },
+          {
+            "key": "C",
+            "text": "返回值与输入数组不是同一个引用"
+          },
+          {
+            "key": "D",
+            "text": "返回值的第一个元素就是输入中分数最高的元素"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "排序函数最核心的不变量是：输出是输入的排列，即不新增、不丢元素、不替换元素，并且输出有序。B 同时覆盖这两点，是最强的性质。A 只说明长度和首元素，无法发现元素被替换或尾部乱序；C 只检查引用不同，几乎不约束行为；D 比 B 弱，无法发现元素丢失或非首元素的乱序。",
+        "skill_tags": [
+          "性质测试",
+          "不变量"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "有一个计算中位数的函数 `median(list)`，团队没有可信的参考实现，只能靠变形测试（metamorphic testing）验证。下面哪条变形关系是正确的？",
+        "options": [
+          {
+            "key": "A",
+            "text": "`median(list.map(x => x * 2))` 等于 `median(list) * 2`"
+          },
+          {
+            "key": "B",
+            "text": "`median(list.map(x => -x))` 等于 `median(list)`"
+          },
+          {
+            "key": "C",
+            "text": "`median(list.concat([0]))` 等于 `median(list)`"
+          },
+          {
+            "key": "D",
+            "text": "`median(list.concat(list))` 等于 `median(list) * 2`"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "把所有元素乘以同一个常数不改变它们之间的大小顺序，中位数也按同样比例缩放，所以乘以 2 时中位数恰好翻倍。B 中取相反数会让顺序反转，结果应为 `-median(list)`；C 往样本里塞入了一个新值，中位数一般会变；D 把整个列表复制一份并不改变中位数，更不会变成两倍。",
+        "skill_tags": [
+          "变形测试",
+          "无参考实现验证"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面函数用于判断是否成年：\n\n```js\nfunction isAdult(age) {\n  return age >= 18 && age >= 0;\n}\n```\n\n下列哪个变异体最可能是等价变异体，即对任何输入都与原函数行为相同、无法被任何测试杀死？",
+        "options": [
+          {
+            "key": "A",
+            "text": "把 `age >= 18` 改成 `age > 18`"
+          },
+          {
+            "key": "B",
+            "text": "把 `age >= 18 && age >= 0` 改成 `age >= 18 || age >= 0`"
+          },
+          {
+            "key": "C",
+            "text": "把 `age >= 18` 改成 `age >= 17`"
+          },
+          {
+            "key": "D",
+            "text": "删除 `&& age >= 0`，改成 `return age >= 18;`"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "对任意数值，只要 `age >= 18` 成立，`age >= 0` 必然成立，所以 `age >= 18 && age >= 0` 与 `age >= 18` 完全等价（NaN 时两者也都是 false），这个变异体无法被任何测试杀死。A 在 age 等于 18 时结果不同，C 在 age 为 17 时结果不同，B 在 age 为 0 到 17 时会从 false 变成 true，都能被普通用例杀死。",
+        "skill_tags": [
+          "变异测试",
+          "等价变异体"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "某个报告模块在内部直接调用 `new Date()` 和 `Math.random()` 生成时间戳和取样结果，相关测试在本地稳定通过，但在 CI 上偶发失败。下列哪种改法最符合可控性与可复现原则？",
+        "options": [
+          {
+            "key": "A",
+            "text": "给这些测试加上重试，只要有一次通过就认为通过"
+          },
+          {
+            "key": "B",
+            "text": "把断言放宽，只检查返回值的类型，不检查具体数值"
+          },
+          {
+            "key": "C",
+            "text": "把时间和随机源改为可注入的依赖（参数传入或模块级替换），测试中传入固定时间与固定伪随机序列"
+          },
+          {
+            "key": "D",
+            "text": "在 CI 里固定 TZ 环境变量，时间与随机相关的问题都会彻底消失"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "偶发失败的根源是测试依赖了不可控的非确定性来源。把时间与随机源变成可注入的依赖后，测试可以在完全确定的环境下运行，同时不改变生产代码的默认行为。A 会掩盖真实缺陷，B 让断言失去意义，D 只能消除时区相关差异，无法解决随机取样。",
+        "skill_tags": [
+          "可控替身",
+          "测试隔离",
+          "确定性"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面是一个带重试的调用工具，sleep 被设计为可注入：\n\n```js\nasync function retry(fn, attempts, delayMs, sleep) {\n  let lastError;\n  for (let i = 0; i < attempts; i++) {\n    try {\n      return await fn();\n    } catch (err) {\n      lastError = err;\n      if (i < attempts - 1) await sleep(delayMs);\n    }\n  }\n  throw lastError;\n}\n```\n\n测试 `retry(fn, 3, 100, fakeSleep)` 时，如果 fn 每次都失败，哪组断言能同时验证调用次数、等待行为和错误传播？",
+        "options": [
+          {
+            "key": "A",
+            "text": "断言 fn 被调用了 3 次，fakeSleep 被调用了 2 次且参数为 100，并断言最终抛出的错误就是最后一次失败的错误"
+          },
+          {
+            "key": "B",
+            "text": "断言 fn 被调用了 3 次，fakeSleep 被调用了 3 次，并断言函数返回 undefined"
+          },
+          {
+            "key": "C",
+            "text": "断言最终抛出错误，并断言 fakeSleep 至少被调用了 1 次"
+          },
+          {
+            "key": "D",
+            "text": "断言 fn 被调用了 3 次，并断言测试真实等待了约 300 毫秒"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "循环执行 attempts 次调用，只有失败且不是最后一次时才等待，因此 3 次调用对应 2 次 sleep。A 同时覆盖调用次数、等待次数、传入的延时常量和错误传播。B 的 sleep 次数错误且忽略了异常；C 没有验证调用次数，无法发现少重试的缺陷；D 依赖真实时间会让测试变慢且不稳定，而且总等待应约为 200 毫秒而不是 300 毫秒。",
+        "skill_tags": [
+          "异步失败路径",
+          "重试逻辑",
+          "可控时钟"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面四种测试写法都在验证同一个 `applyDiscount(cart, promo)` 函数。哪种写法在内部实现重构之后最不容易误报失败？",
+        "options": [
+          {
+            "key": "A",
+            "text": "断言内部调用了 `cart.items.filter` 恰好一次，并且 `promo.apply` 被调用了两次"
+          },
+          {
+            "key": "B",
+            "text": "把 `cart.items` 换成 spy，断言 `reduce` 收到的参数与当前实现完全一致"
+          },
+          {
+            "key": "C",
+            "text": "断言函数返回的对象与实现中构造的中间对象深度相等"
+          },
+          {
+            "key": "D",
+            "text": "用普通输入调用 `applyDiscount`，断言返回的最终金额等于预期的折扣后金额"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "可靠的测试断言可观察行为，也就是给定输入对应的最终输出，而不是实现细节，例如内部调用了哪些方法、调用几次、内部构造了什么中间对象。A、B 把内部实现方式写死，任何等价重构都会让测试失败；C 容易和实现中的中间结构耦合；D 只约束对外契约，重构后依然有效。",
+        "skill_tags": [
+          "测试脆弱性",
+          "可观察行为",
+          "重构"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "一个测试文件里有 20 个测试，它们都真实调用被测模块，覆盖率报告显示 100%，但其中 15 个测试没有任何断言，只是调用函数后结束。关于这套测试，下列判断哪项最准确？",
+        "options": [
+          {
+            "key": "A",
+            "text": "这套测试足以防止回归，因为 100% 覆盖率说明所有分支都被执行过"
+          },
+          {
+            "key": "B",
+            "text": "覆盖率只能说明代码被执行，无断言的测试无法发现行为改变，这个模块仍可能带着缺陷通过"
+          },
+          {
+            "key": "C",
+            "text": "只要把无断言的测试删掉并重跑，覆盖率仍为 100%，就说明剩下的测试是充分的"
+          },
+          {
+            "key": "D",
+            "text": "无断言的测试会让覆盖率统计偏高，应该把它们改成只断言函数被调用过"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "覆盖率的定义是被执行到的代码比例，与结果是否被校验无关。没有断言的测试即使在逻辑被改坏时也会通过，所以高覆盖率不能推出高缺陷检出能力，这也是高覆盖率仍然漏掉缺陷的典型原因。A、C 都从覆盖率反推测试有效性，属于同一类误判；D 提到了覆盖率虚高，但只断言被调用仍然不校验结果，同样无法发现行为变化。",
+        "skill_tags": [
+          "覆盖率局限",
+          "无断言测试",
+          "缺陷检出"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面是一个分块函数和针对它的属性测试：\n\n```js\nexport function chunk(items, size) {\n  const out = [];\n  for (let i = 0; i < items.length; i += size) {\n    out.push(items.slice(i, i + size));\n  }\n  return out;\n}\n```\n\n```js\n// 属性测试：size 由生成器随机产生，范围为 0..10\nproperty('chunk 不丢元素', () => {\n  const items = fc.array(fc.integer());\n  const size = fc.integer({ min: 0, max: 10 });\n  fc.assert(fc.property(items, size, (list, n) => {\n    return chunk(list, n).flat().length === list.length;\n  }));\n});\n```\n\n这套属性测试在 CI 上偶发卡死，而团队手写的示例测试（size 分别为 1、2、3、10）全部通过。下列分析哪项最准确？",
+        "options": [
+          {
+            "key": "A",
+            "text": "`fc.array` 生成的数组太长导致超时，应限制数组长度并保留现有的 size 生成器"
+          },
+          {
+            "key": "B",
+            "text": "实现本身没问题，是属性写错了，应改成断言分块结果的长度等于 `Math.ceil(list.length / n)` 再重跑"
+          },
+          {
+            "key": "C",
+            "text": "当 size 随机生成到 0 时，循环步长为 0 造成死循环；应先在契约上明确 size 必须大于等于 1（越界输入抛错或返回空数组），再让生成器只产生合法值，并用示例测试显式覆盖 0 和负数这两条非法输入"
+          },
+          {
+            "key": "D",
+            "text": "卡死来自属性测试框架，改用固定种子的手写用例即可，size 为 0 不属于函数的输入约定，不必处理"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "步长 `i += size` 在 size 为 0 时不会推进下标，循环永不结束（size 为负数同理），所以生成器一旦取到 0 就会卡死；手写示例只用了 1、2、3、10，恰好绕开了这个边界。正确做法是先明确前置条件，即 size 必须是大于等于 1 的整数，越界输入抛错或返回空数组，再让生成器只在合法范围内取值，同时用示例测试显式覆盖非法输入。A 把原因归到数组长度上，B 只改断言却没有处理死循环并且会继续生成非法值，D 把未定义的边界当成不必处理，都会掩盖真实缺陷。",
+        "skill_tags": [
+          "属性测试",
+          "边界条件",
+          "随机数据可复现",
+          "契约设计"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "topic": "JavaScript 测试设计与可靠性",
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "search_extract": "not_used",
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "932aceb3-8c64-4f7a-8281-65e3acc9ef9b",
+    "status": "ready",
+    "question_count": 14,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:03:57.486Z",
+  "finished_at": "2026-10-10T08:05:07.342Z"
+}

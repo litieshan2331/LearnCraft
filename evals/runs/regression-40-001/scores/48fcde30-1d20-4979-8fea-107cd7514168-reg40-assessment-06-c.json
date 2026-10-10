@@ -1,0 +1,364 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "48fcde30-1d20-4979-8fea-107cd7514168",
+  "case_id": "reg40-assessment-06-c",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "assessment_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "kind": "diagnostic",
+    "question_count": 10,
+    "difficulty": "hard",
+    "plan_id": null,
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "阅读下面的代码，关于其中 `a[5] = 10;` 这一行的说法，哪一个是正确的？\n```c\nint a[5];\na[5] = 10;\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "合法，a[5] 表示数组的最后一个元素"
+          },
+          {
+            "key": "B",
+            "text": "越界，a[5] 已超出数组范围，写入它是未定义行为"
+          },
+          {
+            "key": "C",
+            "text": "编译错误，因为编译器会检查下标常量是否超出数组声明的大小"
+          },
+          {
+            "key": "D",
+            "text": "合法，a[5] 会自动把数组扩展为 6 个元素"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "int a[5] 声明了 5 个元素，有效下标是 0 到 4。a[5] 指向数组之外的内存，写入它不会扩展数组，而是产生越界的未定义行为。",
+        "skill_tags": [
+          "数组下标",
+          "边界有效性"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的程序：\n```c\n#include <stdio.h>\n\nvoid f(int arr[]) {\n    printf(\"%zu\\n\", sizeof(arr));\n}\n\nint main(void) {\n    int a[10];\n    printf(\"%zu\\n\", sizeof(a));\n    f(a);\n    return 0;\n}\n```\n关于两处 `sizeof` 的结果，哪一个说法正确？",
+        "options": [
+          {
+            "key": "A",
+            "text": "两处输出相同，都等于整个数组的字节数"
+          },
+          {
+            "key": "B",
+            "text": "两处输出相同，都等于元素的个数 10"
+          },
+          {
+            "key": "C",
+            "text": "main 中的 sizeof(a) 是整个数组的字节数，f 中的 sizeof(arr) 是指针的字节数"
+          },
+          {
+            "key": "D",
+            "text": "main 中的 sizeof(a) 是指针的字节数，f 中的 sizeof(arr) 是整个数组的字节数"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "在 main 中 a 是真正的数组对象，sizeof(a) 得到整个数组的字节数（10 个 int）。数组作为函数参数时会退化为指向首元素的指针，所以 f 中 sizeof(arr) 得到的是指针的大小，与数组元素个数无关。",
+        "skill_tags": [
+          "数组参数",
+          "指针退化",
+          "sizeof"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，关于它的说法哪一个是正确的？\n```c\nchar s[5] = {'h', 'e', 'l', 'l', 'o'};\nprintf(\"%s\\n\", s);\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "缺少 '\\0' 终止符，printf 会越过数组继续读取内存，属于未定义行为"
+          },
+          {
+            "key": "B",
+            "text": "编译错误，字符数组只能用字符串字面量初始化"
+          },
+          {
+            "key": "C",
+            "text": "没有问题，printf 会正常输出 hello 后自动停止"
+          },
+          {
+            "key": "D",
+            "text": "只会打印前 4 个字符 hell，因为第 5 个位置留给终止符"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "这时 s 里只有 5 个普通字符，没有字符串结束标记 '\\0'。printf 的 \"%s\" 依赖 '\\0' 判断结束位置，因此会继续读取数组之后的内存，行为未定义。",
+        "skill_tags": [
+          "字符数组",
+          "字符串终止符"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "函数原型为 `int sum(int arr[], int n)`，调用时把一个元素个数为 5 的整数数组和数值 5 一起传入。这里的参数 n 主要作用是什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "用来在函数内为 arr 分配相应大小的新数组"
+          },
+          {
+            "key": "B",
+            "text": "让编译器在调用时把数组元素逐个复制进函数"
+          },
+          {
+            "key": "C",
+            "text": "保证 arr 在函数内部仍然保持数组类型而不是指针"
+          },
+          {
+            "key": "D",
+            "text": "用来告诉函数有效元素个数，因为数组作参数时会退化为指针"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "数组作为函数参数会退化为指向首元素的指针，函数内部无法通过 sizeof 得知原始数组有多少个元素，所以必须由调用者额外把长度传进来，函数才能安全地遍历。",
+        "skill_tags": [
+          "函数参数",
+          "数组长度传递"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的函数，它存在什么问题？\n```c\nint *make(void) {\n    int local[3] = {1, 2, 3};\n    return local;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "编译错误，数组名不能作为函数返回值"
+          },
+          {
+            "key": "B",
+            "text": "local 是局部数组，函数返回后其栈内存已失效，返回的指针悬空"
+          },
+          {
+            "key": "C",
+            "text": "没有问题，C 会自动把 local 复制到堆内存再返回"
+          },
+          {
+            "key": "D",
+            "text": "只在开启编译优化时才有问题，默认情况下是安全的"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "local 是函数内的局部数组，存放在栈上。函数返回时它的生命周期结束，这段内存不再属于该数组，返回的指针指向已失效的内存，使用它属于未定义行为。",
+        "skill_tags": [
+          "栈内存",
+          "局部变量生命周期",
+          "悬空指针"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "有声明 `int a[5] = {1, 2};`，那么 a[2] 的值是多少？",
+        "options": [
+          {
+            "key": "A",
+            "text": "0"
+          },
+          {
+            "key": "B",
+            "text": "未定义，是栈上的随机残留值"
+          },
+          {
+            "key": "C",
+            "text": "2"
+          },
+          {
+            "key": "D",
+            "text": "编译错误，初始化列表的元素个数必须与数组大小一致"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "在数组初始化时，如果提供的初值个数少于数组长度，剩余元素会被自动初始化为 0。因此 a[0]=1、a[1]=2，a[2] 到 a[4] 都是 0。",
+        "skill_tags": [
+          "数组初始化"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的循环，它有什么问题？\n```c\nint a[4] = {0};\nfor (int i = 0; i <= 4; i++) {\n    a[i] = i;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "正确，循环把 0 到 4 依次写入数组"
+          },
+          {
+            "key": "B",
+            "text": "循环少执行一次，应该把条件改成 i < 5"
+          },
+          {
+            "key": "C",
+            "text": "当 i 等于 4 时 a[4] = 4 越界写入，循环条件应为 i < 4"
+          },
+          {
+            "key": "D",
+            "text": "只有 a[0] 会被赋值，其余元素保持为 0"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "a 有 4 个元素，有效下标是 0 到 3。条件 i <= 4 会让 i 取到 4，从而写入 a[4]，超出数组范围，属于越界写入。正确边界是 i < 4。",
+        "skill_tags": [
+          "循环边界",
+          "越界写入",
+          "调试"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的程序，它的输出是什么？\n```c\n#include <stdio.h>\n\nvoid set_first(int arr[], int value) {\n    arr[0] = value;\n}\n\nint main(void) {\n    int a[3] = {1, 2, 3};\n    set_first(a, 9);\n    printf(\"%d\\n\", a[0]);\n    return 0;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "1，因为数组按值传递，函数内的修改不影响调用者"
+          },
+          {
+            "key": "B",
+            "text": "编译错误，数组不能作为参数传递给函数"
+          },
+          {
+            "key": "C",
+            "text": "9，但只有当 arr 被声明为指针时才会影响 a"
+          },
+          {
+            "key": "D",
+            "text": "9，因为 arr 接收的是 a 的首地址，函数内修改的是同一块内存"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "调用 set_first(a, 9) 时，数组名 a 会退化为指向 a[0] 的指针，arr 和 a 指向同一块内存。因此 arr[0] = 9 改动的就是 main 中的 a[0]，输出 9。",
+        "skill_tags": [
+          "数组参数",
+          "指针与内存共享"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的求和函数被调用为 `sum(a, 5)`，其中 a 是元素个数为 5 的整数数组。关于这个函数，哪一个是正确的？\n```c\nint sum(const int arr[], int n) {\n    int total = 0;\n    for (int i = 0; i <= n; i++) {\n        total += arr[i];\n    }\n    return total;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "循环条件应为 i < n，i <= n 时会访问 arr[n]，造成越界读取"
+          },
+          {
+            "key": "B",
+            "text": "函数正确，会把 5 个元素全部相加"
+          },
+          {
+            "key": "C",
+            "text": "因为 arr 用 const 修饰，这个循环无法通过编译"
+          },
+          {
+            "key": "D",
+            "text": "应该把 n 改成 4 才能正确相加 5 个元素"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "n 表示有效元素个数，有效下标是 0 到 n-1。条件 i <= n 会让 i 取到 n，访问 arr[n] 越界。const 只是表示函数不修改元素内容，不影响遍历本身。",
+        "skill_tags": [
+          "函数设计",
+          "边界条件",
+          "数组长度传递"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的程序，关于运行结果和原因的说明哪一个是正确的？\n```c\n#include <stdio.h>\n\nint *find_value(int arr[], int n, int target) {\n    for (int i = 0; i < n; i++) {\n        if (arr[i] == target) {\n            return &arr[i];\n        }\n    }\n    return NULL;\n}\n\nint main(void) {\n    int a[3] = {1, 2, 3};\n    int *p = find_value(a, 3, 2);\n    if (p != NULL) {\n        printf(\"%d\\n\", *p);\n    }\n    return 0;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "输出 2，但返回的是局部数组元素的地址，属于未定义行为"
+          },
+          {
+            "key": "B",
+            "text": "输出 2，因为 arr 指向调用者中的 a，返回的地址在 main 中仍然有效"
+          },
+          {
+            "key": "C",
+            "text": "什么都不输出，因为函数返回的指针总是 NULL"
+          },
+          {
+            "key": "D",
+            "text": "输出 3，因为返回的指针指向数组末尾的那个元素"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "arr 是参数指针，它接收的是 main 中数组 a 的首地址，arr[i] 就是 a[i]。返回的 &arr[i] 实际是 &a[1]，指向调用者仍然存活的内存，因此解引用输出 a[1] 的值 2。这与返回函数内局部数组的地址不同。",
+        "skill_tags": [
+          "指针返回",
+          "内存生命周期",
+          "数组参数"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "topic": "C 语言数组与内存基础",
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "search_extract": "not_used",
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "全部 10 题的代码语义、唯一正确答案与解析均准确，越界、指针退化、终止符、栈生命周期等判断与参考事实一致。",
+      "evidence": [
+        "questions[0].explanation：正确指出 int a[5] 有效下标为 0–4，a[5] 越界属未定义行为",
+        "questions[9].explanation：正确说明返回 &arr[i] 指向调用者仍存活的内存，与返回函数内局部数组地址的行为相区分"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "恰好 10 道单选题，每题 prompt/options/answer_key/explanation/skill_tags 齐全，考点覆盖输入目标的主要方面。",
+      "evidence": [
+        "candidate_output.questions：共 10 题，每题均含题干、选项、答案、解析与 skill_tags",
+        "questions[].skill_tags：覆盖数组下标边界、指针退化、字符串终止符、数组长度传递、栈内存生命周期等目标考点"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "所有题目围绕「C 语言数组与内存基础」和输入学习目标，未超出描述范围。",
+      "evidence": [
+        "questions[*].prompt：均使用小型整数/字符数组示例，讨论边界有效性、长度传递与内存有效范围",
+        "questions[*].prompt：未涉及操作系统专属接口或复杂指针技巧"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "题干可独立理解，代码块完整，选项与解析表述清楚且未明显泄露正确答案。",
+      "evidence": [
+        "questions[1].prompt：完整给出可编译的运行代码与两处 sizeof 的对比问题",
+        "questions[0].options：四个选项均给出明确判断，长度差异不足以直接指向正确项"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 4,
+      "reason": "答案分布均衡且相邻答案不同，诊断性较好；但整卷难度偏高，指针退化与栈生命周期类题目较多，单道提高题的界限不够清晰，相对『刚学过整数、条件和循环』的基线偏难。",
+      "evidence": [
+        "questions[0..9].answer_key：B,C,A,D,B,A,C,D,A,B，分布均衡且相邻题答案均不相同",
+        "questions[4].prompt：需判定返回局部数组地址导致悬空指针，依赖超出学习者当前基线的栈生命周期推理，题干未提供相应提示"
+      ]
+    }
+  },
+  "weighted_score": 4.9,
+  "percentage_score": 98.00000000000001,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:02:13.099Z",
+  "finished_at": "2026-10-10T09:36:25.915Z"
+}

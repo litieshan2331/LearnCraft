@@ -1,0 +1,272 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "dab9286a-ebce-4bc3-a416-45b18eb1315c",
+  "case_id": "reg40-posttest-03-javascript",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "posttest_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "kind": "post_test",
+    "question_count": 7,
+    "difficulty": "hard",
+    "plan_id": null,
+    "plan_node_id": "50000000-0000-4000-8000-000000000003",
+    "source_card_content_id": "60000000-0000-4000-8000-000000000003",
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "阅读下面的代码，变量 `result` 是什么？\n```js\nasync function getScore() {\n  return 10;\n}\n\nconst result = getScore();\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "数字 10"
+          },
+          {
+            "key": "B",
+            "text": "undefined，因为 async 函数没有把结果交给调用者"
+          },
+          {
+            "key": "C",
+            "text": "一个 Promise，其兑现值为 10"
+          },
+          {
+            "key": "D",
+            "text": "一个 Promise，其兑现值为 undefined"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "async 函数总是返回 Promise，函数体内 return 10 会让调用者收到一个兑现值为 10 的 Promise。要拿到 10，需要在另一个 async 函数中 await 它，或用 then 注册回调。",
+        "skill_tags": [
+          "async 返回值"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，关于 `console.log(result + 1)` 的输出，下列说法正确的是？\n```js\nconst result = getTotal();\nconsole.log(result + 1);\n\nasync function getTotal() {\n  return 10;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "输出 \"[object Promise]1\"，因为 result 是 Promise，与数字相加时被转成字符串"
+          },
+          {
+            "key": "B",
+            "text": "输出 11，因为 getTotal 里 return 了 10"
+          },
+          {
+            "key": "C",
+            "text": "输出 NaN，因为 Promise 无法参与算术运算"
+          },
+          {
+            "key": "D",
+            "text": "程序抛出 TypeError 并终止，后面的日志不会打印"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "这是「把 async 的返回值直接当数字」的典型错误。getTotal() 返回的是 Promise，不是 10，所以 result + 1 不会得到 11；必须用 await 或 then 取出兑现值后再参与计算。",
+        "skill_tags": [
+          "async 返回值",
+          "常见错误"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于 `await` 的作用，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "它会暂停整个 JavaScript 线程，直到等待的 Promise 兑现或拒绝"
+          },
+          {
+            "key": "B",
+            "text": "它把等待的 Promise 直接转成对应的兑现值，因此 await 的结果一定不是对象"
+          },
+          {
+            "key": "C",
+            "text": "它只能在 async 函数之外使用，否则会抛出错误"
+          },
+          {
+            "key": "D",
+            "text": "它暂停当前 async 函数后续的执行，但不阻塞整个 JavaScript 线程"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "await 暂停的是当前 async 函数中后续语句的执行，等等待的 Promise 兑现时返回该值、拒绝时在 await 位置抛出原因；它不会阻塞整个 JavaScript 线程，其他代码仍可继续运行。",
+        "skill_tags": [
+          "await 语义"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，控制台输出的顺序是什么？\n```js\nasync function main() {\n  console.log('A');\n  const value = await Promise.resolve('B');\n  console.log(value);\n}\n\nmain();\nconsole.log('C');\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "A、B、C"
+          },
+          {
+            "key": "B",
+            "text": "A、C、B"
+          },
+          {
+            "key": "C",
+            "text": "C、A、B"
+          },
+          {
+            "key": "D",
+            "text": "B、A、C"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "main() 先同步执行到 console.log('A')，遇到 await 时只暂停 main 内部后续的执行，并不阻塞线程，所以外层的 console.log('C') 先执行；等待的 Promise 兑现后 value 为 'B'，再打印 'B'。",
+        "skill_tags": [
+          "await 语义",
+          "执行顺序"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，控制台输出什么？\n```js\nasync function loadTotal(loadScores) {\n  const scores = await loadScores();\n  return scores.reduce((total, score) => total + score, 0);\n}\n\nasync function main() {\n  const total = await loadTotal(async () => [2, 3, 5]);\n  console.log(total);\n}\n\nmain();\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "10"
+          },
+          {
+            "key": "B",
+            "text": "[2, 3, 5]"
+          },
+          {
+            "key": "C",
+            "text": "一个兑现值为 10 的 Promise"
+          },
+          {
+            "key": "D",
+            "text": "undefined"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "读取函数产生 [2, 3, 5]，loadTotal 中的 await 拿到这个数组后 reduce 求和得到 10；loadTotal 是 async 函数，main 用 await 取得兑现值 10 再打印，因此输出数字 10。",
+        "skill_tags": [
+          "await 获取兑现值",
+          "loadTotal 示例"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，控制台输出什么？\n```js\nasync function loadTotal(loadScores) {\n  const scores = await loadScores();\n  return scores.reduce((total, score) => total + score, 0);\n}\n\nasync function main() {\n  try {\n    await loadTotal(async () => { throw new Error('load failed'); });\n    console.log('done');\n  } catch (error) {\n    console.log(error.message);\n  }\n}\n\nmain();\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "done"
+          },
+          {
+            "key": "B",
+            "text": "undefined"
+          },
+          {
+            "key": "C",
+            "text": "load failed"
+          },
+          {
+            "key": "D",
+            "text": "一条未处理拒绝的警告，因为 catch 不会执行"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "读取函数抛出 Error('load failed')，使 loadTotal 中的 await 抛出该拒绝原因，错误向外传播到 main；因为 await 在 try 块中，catch 捕获到它并打印消息 load failed，'done' 不会打印。",
+        "skill_tags": [
+          "错误处理",
+          "拒绝进入 catch"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，关于它的输出，下列说法正确的是？\n```js\nasync function loadTotal(loadScores) {\n  const scores = await loadScores();\n  return scores.reduce((total, score) => total + score, 0);\n}\n\nasync function main() {\n  try {\n    loadTotal(async () => { throw new Error('load failed'); });\n    console.log('no error');\n  } catch (error) {\n    console.log('caught: ' + error.message);\n  }\n}\n\nmain();\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "打印 \"caught: load failed\"，因为抛出的 Error 会被 catch 捕获"
+          },
+          {
+            "key": "B",
+            "text": "打印 \"no error\"，因为 try 块里没有 await 这个 Promise，拒绝不会被这个 catch 捕获"
+          },
+          {
+            "key": "C",
+            "text": "什么都不打印，main 会同步抛出 Error"
+          },
+          {
+            "key": "D",
+            "text": "打印 \"no error\"，紧接着打印 \"caught: load failed\""
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "这是「没有 await 却期待 try/catch 捕获拒绝」的典型错误。loadTotal(...) 返回 Promise 但没有被 await，拒绝不会在同步 try 块中抛出，catch 不会执行，所以只打印 'no error'，该 Promise 的拒绝无人处理。要在 try 块中 await，或为该 Promise 显式添加 catch。",
+        "skill_tags": [
+          "错误处理",
+          "常见错误"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "source_card_content_id": "60000000-0000-4000-8000-000000000003",
+      "tool_call_count": 0,
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "七道题的答案、代码行为推导和解析均与固定教材事实一致：async 返回 Promise、await 取值、拒绝经 await 进入 catch、不阻塞线程，示例数值 10 与 'load failed' 均正确。",
+      "evidence": [
+        "questions[5].answer_key：C（load failed）与 reference_facts『loadScores 拒绝时 loadTotal 也拒绝』一致",
+        "questions[0].explanation：async 返回兑现值为 10 的 Promise，与 card_content_context.foundation 表述一致"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "题量恰为 7 道，required_knowledge_points 四个考点与两个 pitfalls_debug 误区均有对应题目，且包含代码理解与调试型应用，解析说明了原因。",
+      "evidence": [
+        "questions 数组长度 7，且 questions[2] 覆盖『await 不阻塞整个线程』、questions[6] 覆盖『没有 await 却期待 try/catch 捕获拒绝』",
+        "questions[4].explanation：完整说明 [2,3,5] 求和为 10 的推导过程"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "所有题目都只围绕本节点的 async/await 与错误处理内容，迁移题仅更换数据与名称，未引入框架、版本或真实服务等章节外前提。",
+      "evidence": [
+        "questions[3].prompt：仅使用 Promise.resolve 与 console 输出顺序，属于已学 Promise 兑现语义范围内的执行顺序推理"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "题干与代码块分离清楚，选项简短互斥，解析能定位到具体语句或概念，便于初学者对照阅读。",
+      "evidence": [
+        "questions[4].explanation：明确指出 await 取到数组、reduce 求和、main 再 await 取值三步"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 5,
+      "reason": "难度以已学内容的组合、陷阱识别和边界推理提高，不超出章节知识，选项设计能有效区分典型误区，适合刚学完本章的初学者。",
+      "evidence": [
+        "questions[1] 与 questions[6]：以『把 Promise 当数字』『漏写 await』两个已授误区设置迷惑项并要求解释原因"
+      ]
+    }
+  },
+  "weighted_score": 5,
+  "percentage_score": 100,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:15:53.479Z",
+  "finished_at": "2026-10-10T09:53:12.010Z"
+}

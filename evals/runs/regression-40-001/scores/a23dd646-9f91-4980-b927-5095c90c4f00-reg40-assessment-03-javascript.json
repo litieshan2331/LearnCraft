@@ -1,0 +1,469 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "a23dd646-9f91-4980-b927-5095c90c4f00",
+  "case_id": "reg40-assessment-03-javascript",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "assessment_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "kind": "diagnostic",
+    "question_count": 14,
+    "difficulty": "hard",
+    "plan_id": null,
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "关于 Promise 的状态变化，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "状态一旦从 pending 变为 fulfilled 或 rejected 就不会再改变，随后的 resolve/reject 调用会被忽略"
+          },
+          {
+            "key": "B",
+            "text": "Promise 得到结果后还可以被再次 reject，从 fulfilled 变成 rejected"
+          },
+          {
+            "key": "C",
+            "text": "先调用 resolve 再调用 reject，Promise 最终会停在 rejected 状态"
+          },
+          {
+            "key": "D",
+            "text": "Promise 创建后处于 fulfilled 状态，直到 then 被调用才变为 pending"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "Promise 的状态只能由 pending 单向变为 fulfilled 或 rejected，也就是 settled；一旦确定，后续的 resolve/reject 调用都不会再改变状态。",
+        "skill_tags": [
+          "Promise 状态"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，最后一个 then 会打印出什么？\n```js\nPromise.resolve(1)\n  .then(v => v + 1)\n  .then(v => {\n    return v * 2;\n  })\n  .then(v => console.log(v));\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "2"
+          },
+          {
+            "key": "B",
+            "text": "1"
+          },
+          {
+            "key": "C",
+            "text": "undefined"
+          },
+          {
+            "key": "D",
+            "text": "4"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "第一个 then 的回调返回 2，第二个 then 的回调把它乘以 2 后返回 4，最后一个 then 收到 4 并打印。回调的普通返回值会作为下一个 then 的输入。",
+        "skill_tags": [
+          "Promise 链式调用"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，这个 Promise 链最终以什么值 settled？\n```js\nPromise.resolve('a')\n  .then(v => {\n    throw new Error('fail');\n  })\n  .then(v => v + 'b')\n  .catch(e => e.message);\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "'ab'"
+          },
+          {
+            "key": "B",
+            "text": "'fail'"
+          },
+          {
+            "key": "C",
+            "text": "'a'"
+          },
+          {
+            "key": "D",
+            "text": "undefined"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "第一个 then 中抛出异常，链进入 rejected，中间的 then 被跳过，catch 捕获到 Error 并返回 e.message，因此链最终以 'fail' 变为 fulfilled。",
+        "skill_tags": [
+          "异常传播",
+          "Promise 链式调用"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，控制台会打印出什么？\n```js\nPromise.reject(new Error('x'))\n  .catch(e => 'recovered')\n  .then(v => v + '!')\n  .then(v => console.log(v));\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "'recovered!'"
+          },
+          {
+            "key": "B",
+            "text": "'x!'"
+          },
+          {
+            "key": "C",
+            "text": "undefined"
+          },
+          {
+            "key": "D",
+            "text": "抛出未处理的异常"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "catch 捕获拒绝并返回字符串 'recovered'，链恢复为 fulfilled，后面的 then 依次拿到这个值，最终打印 'recovered!'。",
+        "skill_tags": [
+          "错误恢复",
+          "Promise 链式调用"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，控制台输出的顺序是？\n```js\nconsole.log('1');\nasync function main() {\n  console.log('2');\n  await null;\n  console.log('3');\n}\nmain();\nconsole.log('4');\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "1 2 3 4"
+          },
+          {
+            "key": "B",
+            "text": "1 2 4 3"
+          },
+          {
+            "key": "C",
+            "text": "1 4 2 3"
+          },
+          {
+            "key": "D",
+            "text": "2 1 3 4"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "async 函数被调用时同步执行到第一个 await，所以先打印 1、2；main() 返回后同步代码继续打印 4；await 之后的语句作为微任务在同步代码执行完后才打印 3。",
+        "skill_tags": [
+          "async/await",
+          "事件循环"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，控制台输出的顺序是？\n```js\nPromise.resolve()\n  .then(() => console.log('A'))\n  .then(() => console.log('B'));\nPromise.resolve()\n  .then(() => console.log('C'))\n  .then(() => console.log('D'));\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "A B C D"
+          },
+          {
+            "key": "B",
+            "text": "A C D B"
+          },
+          {
+            "key": "C",
+            "text": "A C B D"
+          },
+          {
+            "key": "D",
+            "text": "C A B D"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "两个链的注册顺序决定了第一轮微任务先输出 A、C；每个回调返回后产生的下一个 then 回调排到队列末尾，因此第二轮才输出 B、D。",
+        "skill_tags": [
+          "微任务",
+          "事件循环"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，调用 f() 得到的返回值是什么？\n```js\nasync function f() {\n  return 42;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "数值 42 本身"
+          },
+          {
+            "key": "B",
+            "text": "undefined"
+          },
+          {
+            "key": "C",
+            "text": "一个一直处于 pending 状态的 Promise"
+          },
+          {
+            "key": "D",
+            "text": "一个 fulfilled 的 Promise，其值为 42"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "async 函数的返回值总会被包装成 Promise；return 42 等价于返回 Promise.resolve(42)，状态立即为 fulfilled，值为 42。",
+        "skill_tags": [
+          "async/await"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，load() 返回的 Promise 最终的结果是什么？\n```js\nasync function load() {\n  try {\n    await Promise.reject(new Error('boom'));\n    return 'ok';\n  } catch (e) {\n    return 'caught: ' + e.message;\n  }\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "'ok'"
+          },
+          {
+            "key": "B",
+            "text": "抛出同步异常，无法得到 Promise"
+          },
+          {
+            "key": "C",
+            "text": "'caught: boom'"
+          },
+          {
+            "key": "D",
+            "text": "undefined"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "await 一个 rejected 的 Promise 会在该处抛出异常，被同一个 try 的 catch 捕获；catch 返回字符串，load() 返回的 Promise 最终 fulfilled 为 'caught: boom'。",
+        "skill_tags": [
+          "异步错误处理",
+          "try/catch"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，关于它的说法正确的是？\n```js\nfunction getData() {\n  return Promise.reject(new Error('network'));\n}\ngetData().then(data => console.log('success', data));\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "没有为 rejection 注册处理函数，成功回调不会执行，运行时会报告 unhandled rejection"
+          },
+          {
+            "key": "B",
+            "text": "then 的成功回调会收到 undefined，打印 success undefined"
+          },
+          {
+            "key": "C",
+            "text": "代码会同步抛出异常，后面的语句都不再执行"
+          },
+          {
+            "key": "D",
+            "text": "then 会自动把 rejection 转成 fulfilled，成功回调照常执行"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "then 只提供了成功回调，没有第二个参数也没有 catch，请求的拒绝无人处理，成功回调不会执行，运行时会报告 unhandled rejection。",
+        "skill_tags": [
+          "异步错误处理",
+          "未处理的 rejection"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，开发者期望打印 2，实际却打印了 undefined。原因是？\n```js\nPromise.resolve(1)\n  .then(v => {\n    Promise.resolve(v + 1);\n  })\n  .then(v => console.log(v));\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "Promise.resolve 不能接收数值参数，所以第一个回调里出错"
+          },
+          {
+            "key": "B",
+            "text": "第一个 then 的回调抛出了异常，链被中断"
+          },
+          {
+            "key": "C",
+            "text": "第一个 then 的回调没有 return，向后传递的是 undefined"
+          },
+          {
+            "key": "D",
+            "text": "第二个 then 在第一个 then 的回调之前执行"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "回调没有 return，内部新建的 Promise 与链无关；回调实际返回 undefined，所以下一个 then 收到 undefined。",
+        "skill_tags": [
+          "Promise 链式调用",
+          "调试"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于 Promise.all，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "它按数组顺序依次执行每个 Promise，前一个完成后才开始下一个"
+          },
+          {
+            "key": "B",
+            "text": "它并发地等待数组中的 Promise，全部 fulfilled 后按输入顺序给出结果数组"
+          },
+          {
+            "key": "C",
+            "text": "只要有一个 Promise rejected，其余 Promise 会被立即取消"
+          },
+          {
+            "key": "D",
+            "text": "它要等所有 Promise settled（无论成功或失败）后才 fulfilled"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "Promise.all 对已创建的 Promise 并发等待，全部成功时按输入顺序返回结果数组；任一 rejected 时它立即 rejected，但不会取消其它 Promise。选项 D 描述的是 Promise.allSettled。",
+        "skill_tags": [
+          "Promise.all",
+          "并发聚合"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，关于 run() 的执行，说法正确的是？\n```js\nasync function run() {\n  const items = [1, 2, 3];\n  items.forEach(async (i) => {\n    await something(i);\n  });\n  console.log('完成');\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "console.log('完成') 一定等所有 something 完成后才执行"
+          },
+          {
+            "key": "B",
+            "text": "forEach 会串行等待每个回调，效果等同于 for...of 加 await"
+          },
+          {
+            "key": "C",
+            "text": "forEach 不会等待 async 回调，'完成' 可能在 something 完成之前打印"
+          },
+          {
+            "key": "D",
+            "text": "async 回调会同步执行完毕，因此输出顺序是确定的"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "forEach 只负责调用回调、不使用它的返回值，async 回调返回的 Promise 被忽略；因此循环调用结束后同步代码继续执行，'完成' 可能先于 something 打印。",
+        "skill_tags": [
+          "async/await",
+          "并发控制"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的函数串行读取每个 id 的数据：\n```js\nasync function loadAll(ids) {\n  const results = [];\n  for (const id of ids) {\n    const data = await fetchData(id);\n    results.push(data);\n  }\n  return results;\n}\n```\n各 id 的读取互不依赖，希望尽可能快地完成。下面哪种改法最合适？",
+        "options": [
+          {
+            "key": "A",
+            "text": "改成 const results = await Promise.all(ids.map(id => fetchData(id)))，一次并发聚合"
+          },
+          {
+            "key": "B",
+            "text": "把 for...of 改成 ids.forEach(async id => { await fetchData(id); })"
+          },
+          {
+            "key": "C",
+            "text": "去掉循环里的 await，直接 await fetchData(ids) 读取整个数组"
+          },
+          {
+            "key": "D",
+            "text": "在循环里写成 await Promise.resolve(fetchData(id)) 包一层再 await"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "互不依赖的读取适合先用 map 并发发起、再用 Promise.all 聚合；forEach 加 async 不会等待，去掉 await 拿到的是 Promise 数组而非数据，多包一层 Promise 也不改变串行等待的耗时。",
+        "skill_tags": [
+          "顺序执行",
+          "并发聚合"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，关于执行结果的说法正确的是？\n```js\nasync function run() {\n  const tasks = [1, 2, 3].map(async (id) => {\n    if (id === 2) throw new Error('bad ' + id);\n    return id * 10;\n  });\n  try {\n    const results = await Promise.all(tasks);\n    return results;\n  } catch (e) {\n    return 'error: ' + e.message;\n  }\n}\nrun().then(v => console.log(v));\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "打印 error: bad 2，并且 id 为 1、3 的任务会被立即取消"
+          },
+          {
+            "key": "B",
+            "text": "打印 [10, undefined, 30]，失败的那个任务被直接跳过"
+          },
+          {
+            "key": "C",
+            "text": "因为另外两个任务返回了值，Promise.all 不会 reject，最终打印 [10, 20, 30]"
+          },
+          {
+            "key": "D",
+            "text": "打印 error: bad 2，id 为 1、3 的任务仍会执行完，只是它们的结果被丢弃"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "map 中每个 async 回调被调用时就已经开始执行，三个任务处于并发状态；id 为 2 的任务抛出异常后，Promise.all 立即以该错误 reject 并进入 catch；另外两个任务不会被取消，仍会执行完，只是结果不会出现在最终返回值里。",
+        "skill_tags": [
+          "Promise.all",
+          "并发聚合",
+          "异步错误处理"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "topic": "JavaScript 异步流程",
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "search_extract": "not_used",
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "14 道题的事实、代码语义、唯一正确选项与解析均与参考事实一致，未发现错误。",
+      "evidence": [
+        "candidate_output.questions[4].answer_key：await null 后同步先打印 1、2、4，微任务打印 3，答案 B 与解析一致",
+        "candidate_output.questions[13].explanation：正确说明 Promise.all 立即 reject 但不取消其它任务，与 reference_facts[1] 一致"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "恰好 14 道独立单选题，每题 prompt、options、answer_key、explanation、skill_tags 字段齐全，覆盖了状态、链式返回、错误传播、事件循环与并发聚合等目标要点。",
+      "evidence": [
+        "candidate_output.question_count：14，与 acceptable_answer_points[0] 要求的题量一致",
+        "candidate_output.questions：每题均含 options、answer_key 和 explanation 三类字段"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "所有题目都围绕 JavaScript 异步流程，未涉及描述明确排除的定时器细节或框架 API。",
+      "evidence": [
+        "candidate_output.questions[10].prompt：只考查 Promise.all 语义，未涉及框架或环境特定 API",
+        "candidate_output.questions[5].skill_tags：集中于微任务与事件循环，符合输入主题"
+      ]
+    },
+    "readability": {
+      "score": 4,
+      "reason": "题干与代码可独立理解，解析清楚；但个别题正确选项明显长于其它选项，存在轻微的答案位置/长度泄露风险。",
+      "evidence": [
+        "candidate_output.questions[12].options[0]：正确选项内嵌完整代码表达式，长度明显长于其它三项，易被视觉提示"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 5,
+      "reason": "13 道当前水平题加 1 道组合调试型提高题，符合 intermediate 的配额；hard 通过多考点组合与边界提升复杂度，答案分布均衡且相邻题不重复。",
+      "evidence": [
+        "candidate_output.questions[13]：综合 map 异步并发、Promise.all 拒绝语义与不取消行为，作为唯一提高题，未超出配额",
+        "candidate_output.questions[*].answer_key：A/B/C/D 分布为 4/3/4/3，相邻题答案字母均不同"
+      ]
+    }
+  },
+  "weighted_score": 4.8,
+  "percentage_score": 96,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:00:07.855Z",
+  "finished_at": "2026-10-10T09:34:16.529Z"
+}

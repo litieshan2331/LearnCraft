@@ -1,0 +1,222 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "ef291e59-8417-464d-ba34-53bf75884911",
+  "case_id": "reg40-plan-04-java",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "plan_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "schema_version": "learning_plan.v1",
+    "title": "Java 面向对象基础学习路线",
+    "summary": "面向已能读写变量、条件与循环、但还没用过类与对象的学习者，按依赖顺序拆成 8 个可独立学习的章节：从类与对象起步，依次经过构造方法与实例字段、实例方法与封装、对象状态与引用语义、对象组合与集合、基本继承、接口与多态，最后落到小型商品与购物车建模。按每周 60 分钟估算，每章约需 2 至 4 周，前测暴露的薄弱点均有对应章节覆盖。全程只使用 Java 基础语法，不引入任何框架。",
+    "nodes": [
+      {
+        "node_key": "class_and_object",
+        "ordinal": 1,
+        "title": "类与对象：从变量到自定义类型",
+        "node_brief": "用 class 定义自己的类型，用 new 创建对象，理解对象引用变量与对象本身的关系。",
+        "learning_objective": "能定义一个含若干字段的类，创建多个对象并分别访问和打印它们的字段。",
+        "rationale": "前测中「类与对象」只到 partial，而后续所有章节都建立在「先有类、再有对象」这一认识之上。",
+        "difficulty": 1,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能写出一个包含 2 个以上字段的类定义并编译通过",
+          "能用 new 创建两个对象，分别给字段赋值并打印结果",
+          "能用自己的话说明变量名与它所指向的对象之间的区别"
+        ]
+      },
+      {
+        "node_key": "constructor_and_fields",
+        "ordinal": 2,
+        "title": "构造方法与实例字段初始化",
+        "node_brief": "编写带参数的构造方法，用 this 区分字段与参数，让对象一创建就拥有合法初值。",
+        "learning_objective": "能为类编写带参数的构造方法，并解释每个对象各自持有一份字段副本。",
+        "rationale": "前测「构造方法和实例字段」为 partial；构造方法是封装、组合与继承章节的共同前置。",
+        "difficulty": 2,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "class_and_object"
+        ],
+        "completion_criteria": [
+          "能写出带参数的构造方法并用它创建对象",
+          "能在构造方法中用 this 给与参数同名的字段赋值",
+          "能创建多个对象并验证修改其中一个的字段不影响另一个"
+        ]
+      },
+      {
+        "node_key": "instance_methods_encapsulation",
+        "ordinal": 3,
+        "title": "实例方法与封装",
+        "node_brief": "用实例方法描述对象能做的事，把字段设为 private，通过公开方法读写并校验数据。",
+        "learning_objective": "能把类的字段设为 private，只通过公开的实例方法读写，并在方法中拒绝非法取值。",
+        "rationale": "前测「实例方法与封装」为 needs_practice，这是设计对象职责的基本功，也是后续建模实战的前提。",
+        "difficulty": 2,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "constructor_and_fields"
+        ],
+        "completion_criteria": [
+          "能把所有字段声明为 private，使外部代码只能通过方法访问",
+          "能写出带返回值的实例方法并在另一个类中调用它",
+          "能在修改数据的方法中拒绝一个非法取值并说明判断依据"
+        ]
+      },
+      {
+        "node_key": "object_state_reference",
+        "ordinal": 4,
+        "title": "对象状态与引用语义",
+        "node_brief": "通过多对象对比、把对象传给方法、两个变量指向同一对象这三种场景，看清实例状态与引用指向。",
+        "learning_objective": "能对比两个同类对象的字段值，并解释为什么修改一个对象不会影响另一个对象。",
+        "rationale": "期望结果明确要求「解释每个实例的独立状态」，这一章把前面的字段与方法串成对对象状态的完整认识。",
+        "difficulty": 3,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "instance_methods_encapsulation"
+        ],
+        "completion_criteria": [
+          "能列出两个同类对象各自的全部字段值并说明差异来源",
+          "能把对象作为参数传给方法，并观察与说明字段是否发生变化",
+          "能解释把同一个对象赋给两个变量后，通过任一变量修改都互相可见"
+        ]
+      },
+      {
+        "node_key": "object_composition",
+        "ordinal": 5,
+        "title": "对象组合与集合存放",
+        "node_brief": "让一个类的字段是另一个类的对象，并用 ArrayList 管理多个对象。",
+        "learning_objective": "能设计一个持有若干商品对象的类，并实现添加、遍历和按条件查找。",
+        "rationale": "前测「对象组合」为 needs_practice，购物车建模直接依赖「一个对象持有另一批对象」的能力。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "object_state_reference"
+        ],
+        "completion_criteria": [
+          "能让一个类以字段的形式持有另一个类的对象并正确初始化",
+          "能用 ArrayList 保存多个对象并遍历打印它们的信息",
+          "能写出添加对象和按条件查找对象的方法，并验证结果"
+        ]
+      },
+      {
+        "node_key": "inheritance_basics",
+        "ordinal": 6,
+        "title": "基本继承：extends 与 super",
+        "node_brief": "用 extends 复用父类的字段与方法，用 super 调用父类构造方法，并在子类中重写方法。",
+        "learning_objective": "能写出一个父类及其子类，在子类构造方法中调用 super，并重写父类的一个方法。",
+        "rationale": "前测「基本继承与接口」为 needs_practice，继承是理解接口与多态之前必须先过关的一步。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "object_state_reference"
+        ],
+        "completion_criteria": [
+          "能写出一个父类和一个用 extends 声明的子类并编译通过",
+          "能在子类构造方法中用 super 调用父类构造方法",
+          "能重写父类的某个方法，并说明调用时执行的是哪个版本"
+        ]
+      },
+      {
+        "node_key": "interface_polymorphism",
+        "ordinal": 7,
+        "title": "接口与多态调用",
+        "node_brief": "用 interface 声明行为契约，让不同类实现同一接口，再用接口类型的变量统一调用它们。",
+        "learning_objective": "能定义一个接口并让两个类实现它，通过接口类型的变量调用不同的实现。",
+        "rationale": "前测「基本继承与接口」为 needs_practice；接口是购物车中「统一处理不同商品」的关键工具。",
+        "difficulty": 4,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "inheritance_basics"
+        ],
+        "completion_criteria": [
+          "能定义一个含至少一个方法的接口，并让两个不同的类实现它",
+          "能用接口类型的变量指向不同实现的对象并调用同一方法",
+          "能说明接口实现与类继承在复用代码上的差别"
+        ]
+      },
+      {
+        "node_key": "shopping_cart_modeling",
+        "ordinal": 8,
+        "title": "小型购物车建模实战",
+        "node_brief": "综合商品类、购物车类与接口，把需求拆成职责单一的若干类，完成商品信息管理与总价计算。",
+        "learning_objective": "能把一个小需求拆成职责明确的类，实现商品信息管理、清单输出与总价计算。",
+        "rationale": "前测「小型购物车建模」为 needs_practice，这一章同时是期望结果中「设计职责明确的简单类」的最终检验。",
+        "difficulty": 4,
+        "estimated_minutes": 240,
+        "prerequisite_node_keys": [
+          "object_composition",
+          "interface_polymorphism"
+        ],
+        "completion_criteria": [
+          "能列出每个类的名字、职责、字段与方法签名",
+          "能实现商品类与购物车类，并通过接口扩展至少一种商品",
+          "能输出购物车清单与总价，且总价计算结果正确",
+          "能逐个说明购物车中每个对象的状态，以及该状态由哪个类负责维护"
+        ]
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "repair_attempts": 0,
+      "generation_path": "model_knowledge",
+      "fallback_used": false
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "面向对象概念表述与参考事实一致，构造方法、实例字段独立性等关键点没有错误，章节依赖顺序（类→构造方法→方法/封装→状态/组合→继承→接口→综合建模）无环且符合学习依赖。",
+      "evidence": [
+        "nodes[1].completion_criteria：能创建多个对象并验证修改其中一个的字段不影响另一个，与 reference_facts 中「不同对象各自拥有实例字段」一致",
+        "nodes[5].prerequisite_node_keys/ nodes[6].prerequisite_node_keys：继承在接口之前，依赖链条无循环"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "6 个 required_knowledge_points 与全部 needs_practice 薄弱点均有对应章节，且每章都含学习目标、安排理由、预计时长和可验证完成标准，末尾有小型购物车综合任务。",
+      "evidence": [
+        "nodes：8 个节点覆盖 类与对象、构造方法和实例字段、实例方法与封装、对象组合、基本继承、接口与多态、小型购物车建模",
+        "nodes[7].completion_criteria：能输出购物车清单与总价并逐个说明对象状态，验证 desired_outcome"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "全篇围绕 Java 面向对象基础与商品/购物车示例展开，仅使用基础语法（class、new、ArrayList 等），未引入框架或偏离目标的内容。",
+      "evidence": [
+        "summary：全程只使用 Java 基础语法，不引入任何框架",
+        "nodes[4].node_brief：用 ArrayList 管理多个对象，属于基础语法范围内的建模"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "标题、章节摘要、依赖关系与完成标准表述清楚，完成标准使用可观察的行为描述，读者可据此逐章执行。",
+      "evidence": [
+        "nodes[2].completion_criteria：能把字段声明为 private、能写带返回值的方法、能拒绝非法取值，均为可验证行为",
+        "nodes[3].node_brief：用三种场景说明实例状态与引用指向，表述具体"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 5,
+      "reason": "难度从 1 递增到 4，章节时长 120–240 分钟对应每周 60 分钟的 2–4 周节奏，未把整条路线压缩到一周，符合 beginner 与前测 30 分的水平。",
+      "evidence": [
+        "nodes[0].difficulty=1 至 nodes[7].difficulty=4：难度梯度平缓递进",
+        "nodes[*].estimated_minutes（120/180/240）与 learner_profile.weekly_minutes=60：章节按可分段节奏安排"
+      ]
+    }
+  },
+  "weighted_score": 5,
+  "percentage_score": 100,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:07:31.595Z",
+  "finished_at": "2026-10-10T09:44:48.122Z"
+}

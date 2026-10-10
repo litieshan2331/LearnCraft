@@ -1,0 +1,263 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "7b9ad014-5c46-4763-8543-9479fe739afe",
+  "case_id": "reg40-plan-03-javascript",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "plan_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "schema_version": "learning_plan.v1",
+    "title": "JavaScript 异步流程学习路线",
+    "summary": "围绕 Promise 状态与链式返回、async/await、异步错误传播、同步代码与微任务顺序、以及顺序执行与并发聚合的选择，拆成 10 个可独立学习的章节。前测暴露的薄弱点（错误传播、微任务顺序、顺序与并发选择）在路线中都有专门章节覆盖，最后一章把前面能力合成一次完整的异步数据读取编排。",
+    "nodes": [
+      {
+        "node_key": "async_callbacks_baseline",
+        "ordinal": 1,
+        "title": "从回调看异步：为什么需要 Promise",
+        "node_brief": "异步任务的回调写法、error-first 回调的约定，以及多层回调嵌套带来的控制流问题。",
+        "learning_objective": "能读懂用回调实现的异步读取，并说清回调嵌套在错误处理和结果汇总上的困难。",
+        "rationale": "Promise 是对回调控制流问题的直接回应，先看清问题才能理解后续每个设计的动机。",
+        "difficulty": 2,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能写出一个接收 error-first 回调的异步函数并正确区分成功与失败分支",
+          "能把三层嵌套的回调代码结构画成执行流程说明",
+          "能列出回调写法在错误处理与结果汇总上的至少两个具体困难"
+        ]
+      },
+      {
+        "node_key": "promise_states_and_settling",
+        "ordinal": 2,
+        "title": "Promise 的三种状态与落定",
+        "node_brief": "pending、fulfilled、rejected 三种状态，resolve 与 reject 的作用，以及状态一旦落定不再改变的含义。",
+        "learning_objective": "能判断一段 Promise 代码在任意时刻处于哪种状态，并解释重复 resolve 或 reject 为什么不生效。",
+        "rationale": "状态不可逆是后面链式返回、错误传播和微任务顺序推理的共同前提。",
+        "difficulty": 2,
+        "estimated_minutes": 150,
+        "prerequisite_node_keys": [
+          "async_callbacks_baseline"
+        ],
+        "completion_criteria": [
+          "能写出一个返回 Promise 的函数并让它在成功与失败两种情况下分别落定",
+          "能对给定代码预测回调最终收到的是兑现值还是拒绝原因",
+          "能解释在 executor 中多次调用 resolve 后为什么只保留第一次的结果"
+        ]
+      },
+      {
+        "node_key": "promise_chaining",
+        "ordinal": 3,
+        "title": "链式返回：then 的返回值如何决定下一步",
+        "node_brief": "then 每次返回一个新的 Promise，回调返回普通值与返回 Promise 时的不同展开方式，以及值穿透。",
+        "learning_objective": "能把一段嵌套的 then 改写为扁平的链，并预测每一环拿到的值。",
+        "rationale": "链式返回是 async/await 展开后的等价形式，读懂链才能在出错时定位到具体环节。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "promise_states_and_settling"
+        ],
+        "completion_criteria": [
+          "能把三层嵌套的 then 改写成一条扁平链且行为不变",
+          "能说明回调返回普通值与返回 Promise 时后续 then 分别收到什么",
+          "能解释没有返回值的回调为何让链上的值原样穿透到下一环"
+        ]
+      },
+      {
+        "node_key": "async_await_semantics",
+        "ordinal": 4,
+        "title": "async 函数与 await 的语义",
+        "node_brief": "async 函数总是返回 Promise、await 的暂停与恢复、await 一个非 Promise 值时的行为，以及链与 async/await 的相互改写。",
+        "learning_objective": "能把 Promise 链与 async/await 两种写法互相改写，并说明改写后返回值与暂停点是否一致。",
+        "rationale": "async/await 只是更易读的链式写法，掌握这层等价关系后，错误传播与调度顺序才有统一的心智模型。",
+        "difficulty": 3,
+        "estimated_minutes": 150,
+        "prerequisite_node_keys": [
+          "promise_chaining"
+        ],
+        "completion_criteria": [
+          "能把一条 Promise 链改写成 async/await 且返回结果一致",
+          "能把一个 async 函数改写为等价的 then 链",
+          "能说明 async 函数的返回值为什么总能被调用方用 then 或 await 接住"
+        ]
+      },
+      {
+        "node_key": "async_error_propagation",
+        "ordinal": 5,
+        "title": "异步错误的产生与传播",
+        "node_brief": "throw 与 reject 的等价关系、错误在链上跳过成功回调的规则、catch 的位置对捕获范围的影响，以及 try/catch 在 async 函数中的用法。",
+        "learning_objective": "能在一段异步流程中定位错误会被哪一层接住，并把吞掉错误的写法改成能正确上报的写法。",
+        "rationale": "前测显示错误与拒绝传播是明显薄弱点，而所有异步编排都必须先保证失败路径可预期。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "async_await_semantics"
+        ],
+        "completion_criteria": [
+          "能解释在 executor、then 回调、async 函数中抛错分别会变成什么",
+          "能把一个 catch 写错位置导致错误被吞掉的链修正到正确捕获",
+          "能用 try/catch 包住 await 并在失败时返回可识别的错误信息",
+          "能在 catch 中重新抛出错误让调用方继续感知失败"
+        ]
+      },
+      {
+        "node_key": "event_loop_microtask_order",
+        "ordinal": 6,
+        "title": "同步代码与微任务的执行顺序",
+        "node_brief": "调用栈、微任务队列与任务队列的分工，同步代码先跑完、微任务在本轮同步代码之后清空的规则，以及 await 之后的代码何时执行。",
+        "learning_objective": "能对包含同步输出、then 回调和 await 续段的代码片段写出准确的输出顺序。",
+        "rationale": "顺序判断依赖对微任务队列的理解，前测中这一项为 needs_practice，需要在编排章节之前补齐。",
+        "difficulty": 4,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "async_await_semantics"
+        ],
+        "completion_criteria": [
+          "能对给定代码片段正确写出同步输出与 then 回调输出的先后顺序",
+          "能说明 await 之后的代码为什么排在当前同步代码之后执行",
+          "能区分离散的两条 Promise 链中回调的交错顺序并给出理由"
+        ]
+      },
+      {
+        "node_key": "sequential_async_execution",
+        "ordinal": 7,
+        "title": "顺序执行：有依赖的异步任务逐个串行",
+        "node_brief": "用 for...of 配合 await 逐个处理、用累积方式串起前后依赖的任务，以及异步回调在遍历方法中不被等待的问题。",
+        "learning_objective": "能在任务之间存在前后依赖时，写出真正逐个等待的异步处理流程。",
+        "rationale": "判断该串行还是并发，先要能可靠地写出串行版本，这是后一章对比的基准。",
+        "difficulty": 3,
+        "estimated_minutes": 150,
+        "prerequisite_node_keys": [
+          "async_error_propagation",
+          "event_loop_microtask_order"
+        ],
+        "completion_criteria": [
+          "能写出一个按顺序依次等待每个异步读取的函数",
+          "能指认在遍历方法中使用 async 回调时流程未被等待的问题并给出修正写法",
+          "能在串行流程中保留每一步的结果供后续步骤使用"
+        ]
+      },
+      {
+        "node_key": "promise_all_concurrency",
+        "ordinal": 8,
+        "title": "并发聚合：Promise.all 与结果顺序",
+        "node_brief": "同时发起互不依赖的异步任务、Promise.all 的结果与输入顺序如何对应、任一失败带来的整体结果，以及全量结算的对照写法。",
+        "learning_objective": "能把一组互不依赖的异步读取改写成并发发起，并把聚合结果与输入正确对应起来。",
+        "rationale": "并发聚合与串行执行构成决策的两端，掌握后才能按依赖关系做选择。",
+        "difficulty": 3,
+        "estimated_minutes": 150,
+        "prerequisite_node_keys": [
+          "async_error_propagation",
+          "event_loop_microtask_order"
+        ],
+        "completion_criteria": [
+          "能把一组独立读取改写为一次并发发起并取回聚合结果",
+          "能说明聚合结果的顺序由输入顺序而非完成快慢决定",
+          "能说明其中一项失败时整体结果如何变化，并写出全量结算的对照写法"
+        ]
+      },
+      {
+        "node_key": "async_orchestration_choice",
+        "ordinal": 9,
+        "title": "编排决策：什么时候串行、什么时候并发",
+        "node_brief": "按数据依赖与失败影响给任务分组，把无依赖的放并发、有依赖的放串行，并处理两者混合嵌套的情况。",
+        "learning_objective": "能对一组异步读取任务先画出依赖关系，再给出串行与并发混合的编排方案并说明理由。",
+        "rationale": "这是路线中从语法能力转向设计能力的转折章，直接对应期望结果里的选择判断。",
+        "difficulty": 4,
+        "estimated_minutes": 120,
+        "prerequisite_node_keys": [
+          "sequential_async_execution",
+          "promise_all_concurrency"
+        ],
+        "completion_criteria": [
+          "能对给定任务清单标出哪些可并发、哪些必须串行并给出依据",
+          "能写出并发批次与串行步骤混合的编排代码",
+          "能说明所选方案比全串行或全并发在什么方面更合适"
+        ]
+      },
+      {
+        "node_key": "async_data_pipeline",
+        "ordinal": 10,
+        "title": "综合编排：多个异步数据读取任务的成功与失败路径",
+        "node_brief": "把多个异步读取组织成一条可读的流程，明确成功路径的返回结构与失败路径的上报方式，并覆盖部分失败与整体中断两种情形。",
+        "learning_objective": "能独立完成一次多任务异步数据读取的编排，并同时说明其成功路径与失败路径的行为。",
+        "rationale": "把前面各章的状态、传播、顺序与聚合能力合成一次完整交付，检验是否达到期望结果。",
+        "difficulty": 4,
+        "estimated_minutes": 240,
+        "prerequisite_node_keys": [
+          "async_orchestration_choice"
+        ],
+        "completion_criteria": [
+          "能写出包含至少三个异步读取任务的编排代码并说明哪些步骤并发、哪些串行",
+          "能逐条说明成功时返回的数据结构与失败时调用方收到的错误信息",
+          "能演示部分任务失败时的处理结果，并说明是整体中断还是部分返回",
+          "能对自己写出的编排指出至少一处可能的错误被吞掉的位置并修正"
+        ]
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "repair_attempts": 0,
+      "generation_path": "model_knowledge",
+      "fallback_used": false
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "概念表述与参考事实一致：async 函数返回 Promise、await 的等待与拒绝传播、Promise.all 按输入顺序成数组且任一拒绝则整体拒绝、同步代码先于微任务，均未被写错；知识依赖无环且方向合理。",
+      "evidence": [
+        "candidate_output.nodes[5].node_brief：同步代码先跑完、微任务在本轮同步代码之后清空的规则与 reference_facts[2] 一致",
+        "candidate_output.nodes[7].completion_criteria：说明聚合结果顺序由输入顺序而非完成快慢决定，与 reference_facts[1] 一致",
+        "candidate_output.nodes[3].learning_objective：async 函数返回 Promise、await 语义与 reference_facts[0] 一致"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "10 个章节完整覆盖 required_knowledge_points 全部六项及前测 needs_practice 项，每章均含学习目标、安排理由、预计时长和可观察的完成标准，末章为可验证 desired_outcome 的综合任务。",
+      "evidence": [
+        "candidate_output.nodes：覆盖 Promise 状态、链式返回、async/await、错误传播、微任务顺序、顺序执行、Promise.all 与综合编排",
+        "candidate_output.nodes[9].completion_criteria：要求写出至少三个异步读取任务的编排并说明成功与失败路径，对应 acceptable_answer_points 的综合任务要求",
+        "candidate_output.nodes[4].rationale：明确指出错误与拒绝传播是前测薄弱点并为其单设章节"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "全部章节围绕 JavaScript 异步流程展开，涉及的事件循环与任务队列说明仍属于目标描述中的执行顺序主题，未引入定时器细节或框架 API 等被排除内容。",
+      "evidence": [
+        "candidate_output.summary：只描述 Promise、async/await、错误传播、微任务顺序与串行/并发选择",
+        "candidate_output.nodes[5].node_brief：讨论调用栈、微任务队列与任务队列分工，未涉及定时器或框架 API"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "标题、章节摘要、先决条件与完成标准表述清晰，依赖关系以 prerequisite_node_keys 显式给出，读者可据此逐章执行。",
+      "evidence": [
+        "candidate_output.nodes[6].prerequisite_node_keys：显式列出 async_error_propagation 与 event_loop_microtask_order 两个前置章节",
+        "candidate_output.nodes[2].completion_criteria：完成标准用可执行动作描述（改写嵌套 then、预测每环取值）"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 5,
+      "reason": "难度从 2 分基线逐步升到 4 分综合任务，薄弱项均有专门章节和动手标准，总时长约 1620 分钟按每周 180 分钟可分段推进，未把整条路线机械压进一周。",
+      "evidence": [
+        "candidate_output.nodes：difficulty 呈 2→3→4 梯度，薄弱项（错误传播、微任务顺序、串行/并发选择）安排在未练项对应章节",
+        "candidate_output.nodes[9].estimated_minutes：综合章 240 分钟，配合各章 120-180 分钟适配每周 180 分钟的学习节奏"
+      ]
+    }
+  },
+  "weighted_score": 5,
+  "percentage_score": 100,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:07:12.908Z",
+  "finished_at": "2026-10-10T09:44:23.232Z"
+}

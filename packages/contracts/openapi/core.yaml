@@ -27,6 +27,8 @@ tags:
     description: 前测与路线后测的异步题集生成请求接口。
   - name: AgentRun
     description: 长任务的安全状态快照与协作式取消接口
+  - name: 学习助手
+    description: 学习助手会话、消息历史和对话运行状态接口
   - name: 内部接口
     description: 仅限私有网络服务间调用的接口
 paths:
@@ -894,6 +896,191 @@ paths:
           $ref: '#/components/responses/AgentRunNotCancellable'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /api/v1/learning-assistant/conversations:
+    get:
+      tags: [学习助手]
+      summary: 读取当前用户的会话列表
+      operationId: list_learning_assistant_conversations
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: 按更新时间倒序返回会话，不返回内部状态和学习经历记忆。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LearningAssistantConversation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [学习助手]
+      summary: 创建学习助手会话
+      description: 目标和来源测评作答可为空；非空引用须属于当前用户，两者同时指定时必须关联同一目标。写请求必须携带允许的 Origin。
+      operationId: create_learning_assistant_conversation
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearningAssistantConversationCreateRequest'
+      responses:
+        '201':
+          description: 会话创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningAssistantConversation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/learning-assistant/conversations/{conversation_id}:
+    get:
+      tags: [学习助手]
+      summary: 读取当前用户拥有的会话详情
+      description: active_run_id 返回当前 queued/running 运行，刷新页面可据此继续查询处理状态。
+      operationId: get_learning_assistant_conversation
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/LearningAssistantConversationId'
+      responses:
+        '200':
+          description: 会话详情，包含 active_run_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningAssistantConversation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/learning-assistant/conversations/{conversation_id}/messages:
+    get:
+      tags: [学习助手]
+      summary: 按序号分页读取完整对话历史
+      description: 历史不受模型最近 20 轮上下文限制；按 sequence_no 升序返回。工具消息仅返回定位字段，内部载荷保存在服务端。页末游标为 null 表示当前没有下一页，新消息可用最后一个 sequence_no 继续轮询。
+      operationId: list_learning_assistant_messages
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/LearningAssistantConversationId'
+        - name: after_sequence_no
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 2147483647
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+      responses:
+        '200':
+          description: 消息页与下一页游标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningAssistantMessagePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [学习助手]
+      summary: 保存用户消息并创建对话运行
+      description: 消息与 queued 运行在同一事务落库。当前阶段尚未投递队列或调用模型，运行会保持 queued，直到后续 Worker 接入。相同会话和幂等键的同内容重试返回既有消息与运行；不同内容、关闭会话或已有其他在途运行返回 409。写请求必须携带允许的 Origin。
+      operationId: send_learning_assistant_message
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/LearningAssistantConversationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearningAssistantMessageSendRequest'
+      responses:
+        '202':
+          description: 用户消息与 queued 运行已保存
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningAssistantMessageSendResponse'
+        '200':
+          description: 返回幂等重试的既有消息与运行，created 为 false
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningAssistantMessageSendResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: CONVERSATION_BUSY、CONVERSATION_NOT_ACTIVE 或 IDEMPOTENCY_CONFLICT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/learning-assistant/runs/{run_id}:
+    get:
+      tags: [学习助手]
+      summary: 查询当前用户拥有的对话运行状态
+      description: 返回模型调用计数和安全错误文案，助手回复通过会话消息接口读取；不返回子 Agent、Skill、Tavily 内部摘要、长期记忆或原始错误。
+      operationId: get_learning_assistant_run
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/LearningAssistantRunId'
+      responses:
+        '200':
+          description: 对话运行安全状态快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningAssistantRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /internal/v1/agent-runs/{agent_run_id}/card-content-context:
     get:
       tags: [内部接口]
@@ -1069,6 +1256,22 @@ components:
       schema:
         type: string
   parameters:
+    LearningAssistantConversationId:
+      name: conversation_id
+      in: path
+      required: true
+      description: 学习助手会话 ID。
+      schema:
+        type: string
+        format: uuid
+    LearningAssistantRunId:
+      name: run_id
+      in: path
+      required: true
+      description: 学习助手对话运行 ID，与已有 AgentRun 分开记录。
+      schema:
+        type: string
+        format: uuid
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -1233,6 +1436,162 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    LearningAssistantConversationCreateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        goal_id:
+          type: [string, 'null']
+          format: uuid
+          default: null
+        source_assessment_answer_id:
+          type: [string, 'null']
+          format: uuid
+          default: null
+    LearningAssistantConversation:
+      type: object
+      additionalProperties: false
+      required: [id, goal_id, source_assessment_answer_id, status, stage, last_message_at, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        goal_id:
+          type: [string, 'null']
+          format: uuid
+        source_assessment_answer_id:
+          type: [string, 'null']
+          format: uuid
+        status:
+          type: string
+          enum: [active, completed, archived]
+        stage:
+          type: string
+          enum: [new, context_loaded, diagnosing, waiting_for_user, hinting, checking_repair, mastered, needs_more_practice, unresolved]
+        active_run_id:
+          type: [string, 'null']
+          format: uuid
+          description: 仅会话详情返回，在途运行不存在时为 null。
+        last_message_at:
+          type: [string, 'null']
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    LearningAssistantMessageSendRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 20000
+          pattern: '\S'
+          description: 只支持文本，不支持图片或客户端注入工具消息；保留代码缩进和换行，纯空白内容无效。
+    LearningAssistantMessage:
+      type: object
+      additionalProperties: false
+      required: [id, conversation_id, sequence_no, turn_no, role, content, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        sequence_no:
+          type: integer
+          minimum: 1
+        turn_no:
+          type: integer
+          minimum: 1
+        role:
+          type: string
+          enum: [user, assistant, tool]
+        content:
+          type: [string, 'null']
+          description: 工具消息不公开内容、工具名、参数、结果和元数据，content 为 null。
+        created_at:
+          type: string
+          format: date-time
+    LearningAssistantMessagePage:
+      type: object
+      additionalProperties: false
+      required: [items, next_after_sequence_no]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/LearningAssistantMessage'
+        next_after_sequence_no:
+          type: [integer, 'null']
+          minimum: 1
+    LearningAssistantRun:
+      type: object
+      additionalProperties: false
+      required: [id, conversation_id, trigger_message_id, status, orchestration_version, model_id, input_tokens, output_tokens, model_call_count, tool_call_count, error_code, error_summary, started_at, finished_at, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        trigger_message_id:
+          type: [string, 'null']
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, cancelled]
+        orchestration_version:
+          type: string
+        model_id:
+          type: [string, 'null']
+        input_tokens:
+          type: integer
+          minimum: 0
+        output_tokens:
+          type: integer
+          minimum: 0
+        model_call_count:
+          type: integer
+          minimum: 0
+        tool_call_count:
+          type: integer
+          minimum: 0
+        error_code:
+          type: [string, 'null']
+        error_summary:
+          type: [string, 'null']
+          description: 失败时返回固定的可公开文案，不返回原始错误摘要。
+        started_at:
+          type: [string, 'null']
+          format: date-time
+        finished_at:
+          type: [string, 'null']
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    LearningAssistantMessageSendResponse:
+      type: object
+      additionalProperties: false
+      required: [message, run, created]
+      properties:
+        message:
+          $ref: '#/components/schemas/LearningAssistantMessage'
+        run:
+          $ref: '#/components/schemas/LearningAssistantRun'
+        created:
+          type: boolean
     ServiceStatusResponse:
       type: object
       additionalProperties: false

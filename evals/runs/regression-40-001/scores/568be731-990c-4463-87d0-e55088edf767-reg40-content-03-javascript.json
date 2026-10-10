@@ -1,0 +1,188 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "568be731-990c-4463-87d0-e55088edf767",
+  "case_id": "reg40-content-03-javascript",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "card_content_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "schema_version": "card_content.v2",
+    "foundation": "## 本章要解决的问题\n**async/await 让「等一个异步结果」写起来像顺序代码，但并没有改变底层仍是 Promise 这一事实。**\n\n- **async 函数**：一个总是返回 Promise 的函数。\n- **await**：把 Promise 里的结果取出来，用在表达式里。\n- **成功路径 / 失败路径**：Promise 兑现（fulfilled，成功拿到值）就继续往下走，被拒绝（rejected，表示失败）就跳到 catch。\n\n这三样合起来，回答的就是本章目标：异步函数吃什么输入、返回什么、失败时谁来接住。\n\n## async 函数：输入照旧，输出一定是 Promise\n**传给 async 函数的参数和普通函数完全一样，但它的返回值会被自动包成一个 Promise。**\n\n比如一个 async 函数里写 `return 10`，调用者拿到的不是数字 10，而是一个「将来会变成 10」的 Promise 对象。\n\n- 函数正常返回某个值 → 返回的 Promise 兑现，兑现值就是那个值。\n- 函数内部抛出错误，或内部 await 的 Promise 被拒绝 → 返回的 Promise 被拒绝，拒绝原因就是那个错误。\n\n所以「async 函数为什么返回 Promise」，本质是语言替调用者做了一个包装：调用异步函数时，结果还没算出来，只能先给一个占位对象。\n\n## await：读取兑现值，暂停的是当前函数，不是整个线程\n**await 把它右边那个 Promise 展开成兑现值；如果这个 Promise 被拒绝，await 就会在这一行「抛出」错误。**\n\n- await 只能写在 async 函数体内。\n- 右边 Promise 还没结束时，当前这个 async 函数会在这个位置**暂停**，并立刻返回一个 pending（进行中）的 Promise 给调用者。\n- 暂停不等于阻塞：其他代码、已经排队的定时器、事件回调照常运行，只是**这个函数**后面的语句先不执行。\n\n这就是「等待当前函数」与「阻塞线程」的区别：await 像在函数内部按了暂停键，而不是把整个程序卡住。\n\n## 成功与失败两条路径：由 try/catch 分流\n**一次 await 只有两种结局：拿到兑现值继续往下走，或者抛出错误直接跳到最近的 catch。**\n\n- 成功：await 得到一个真实的值，赋值给变量，try 里后面的语句继续执行。\n- 失败：await 那一行抛错，try 里它后面的语句**全部被跳过**，控制权交给同一个 try 的 catch，catch 的参数就是拒绝原因（通常是一个 Error）。\n- 如果这个 async 函数里没有 catch，拒绝会顺着调用链继续往外传，最终变成「未处理的 Promise 拒绝」。\n\n## 拿到代码后先问的三个问题\n**判断一段异步流程对不对，先看它的输入、返回值和失败落点。**\n\n- 输入是什么？返回值是什么形状的 Promise（最终会兑现成什么）？\n- 兑现值是从哪一步来的？哪一步可能被拒绝？\n- 调用方在哪里 await 它？失败时会被哪个 catch 接住？",
+    "worked_example": {
+      "explanation": "示例由三个文件组成：records.js 用固定数据模拟一次「耗时读取」，并用 Promise 明确区分成功与失败；loadTotal.js 是一个 async 函数，await 读取结果后求和返回；main.js 是入口，先调用 loadTotal 拿到 Promise 并立刻打印一行，再分别 await 成功路径和失败路径。\n\n读代码时注意两点：一是 loadTotal 内部写的是 `return total`，但调用者拿到的其实是「将来兑现为 10 的 Promise」；二是把 await 放在 try 里面，拒绝才会被 catch 接住。",
+      "files": [
+        {
+          "path": "src/data/records.js",
+          "language": "js",
+          "role": "module",
+          "content": "// 固定数据，模拟一次耗时读取，不涉及真实网络\nconst records = [\n  { id: 1, amount: 4 },\n  { id: 2, amount: 6 },\n];\n\n// shouldFail 为 true 时走失败路径，否则走成功路径\nexport function readRecords(options = {}) {\n  const shouldFail = options.shouldFail === true;\n\n  return new Promise((resolve, reject) => {\n    setTimeout(() => {\n      if (shouldFail) {\n        reject(new Error('记录读取失败'));\n        return;\n      }\n      resolve(records);\n    }, 0);\n  });\n}\n"
+        },
+        {
+          "path": "src/loadTotal.js",
+          "language": "js",
+          "role": "module",
+          "content": "import { readRecords } from './data/records.js';\n\n// async 函数：无论里面写 return 什么，调用者拿到的都是 Promise\nexport async function loadTotal(options) {\n  const rows = await readRecords(options);\n  const total = rows.reduce((sum, row) => sum + row.amount, 0);\n  return total;\n}\n"
+        },
+        {
+          "path": "src/main.js",
+          "language": "js",
+          "role": "entry",
+          "content": "import { loadTotal } from './loadTotal.js';\n\nfunction report(label, value) {\n  console.log(label, value);\n}\n\nasync function run() {\n  // 只调用、不 await：函数开始执行，但立刻把 Promise 还回来\n  const pending = loadTotal();\n  report('1. 拿到 Promise 后立刻执行这一行：', pending instanceof Promise);\n\n  try {\n    const total = await pending;\n    report('2. await 得到兑现值：', total);\n  } catch (error) {\n    report('2. 失败路径：', error.message);\n  }\n\n  try {\n    const total = await loadTotal({ shouldFail: true });\n    report('3. await 得到兑现值：', total);\n  } catch (error) {\n    report('3. 失败路径：', error.message);\n  }\n}\n\nrun();\n"
+        }
+      ],
+      "entry_file": "src/main.js",
+      "call_sequence": [
+        {
+          "step": 1,
+          "file": "src/data/records.js",
+          "function": "readRecords",
+          "note": "先看固定数据怎么被包成 Promise：成功时 resolve 记录数组，shouldFail 时 reject 一个 Error"
+        },
+        {
+          "step": 2,
+          "file": "src/loadTotal.js",
+          "function": "loadTotal",
+          "note": "再看 async 函数如何 await 读取结果并求和，return 的 10 会被包装成兑现值为 10 的 Promise"
+        },
+        {
+          "step": 3,
+          "file": "src/main.js",
+          "function": "run",
+          "note": "调用 loadTotal 拿到 pending Promise 后继续执行同步代码，证明调用异步函数不会卡住后面的语句"
+        },
+        {
+          "step": 4,
+          "file": "src/main.js",
+          "function": "report",
+          "note": "在 try/catch 中分别打印成功得到的兑现值与失败路径的 Error 信息"
+        }
+      ],
+      "expected_output": "src/main.js › run：先打印「1. 拿到 Promise 后立刻执行这一行： true」，说明调用 loadTotal 不会卡住后面的同步代码；第一次 await 走成功路径，打印「2. await 得到兑现值： 10」；第二次 await 的 Promise 被拒绝，该 try 中后面的语句被跳过并进入 catch，打印「3. 失败路径： 记录读取失败」。"
+    },
+    "pitfalls_debug": [
+      {
+        "title": "把 async 函数的返回值当普通值直接用",
+        "cause": "async 函数总是返回 Promise，`const total = loadTotal()` 拿到的是 Promise 对象而不是数字 10，参与加法会得到字符串拼接或 NaN。",
+        "fix": "在调用前加 await 取出兑现值，并确认所在函数本身是 async；不在 async 函数里时改用 .then 接收结果。"
+      },
+      {
+        "title": "忘了 await，只调用了一次",
+        "cause": "只写 `loadTotal()` 会启动执行，但返回值没人接住，打印出来是 Promise { <pending> } 这种占位对象，看起来像没生效。",
+        "fix": "检查每一次需要结果的调用都写了 await，或者把 Promise 赋给变量后在需要结果的位置 await 它。"
+      },
+      {
+        "title": "await 写在 try 外面，catch 接不到拒绝",
+        "cause": "catch 只能接住同一个 try 代码块里 await 抛出的错误；把 await 移到 try 之前、或者只调用不 await，拒绝都会漏出去。",
+        "fix": "把可能失败的 await 放进 try，catch 写在同一个 async 函数内，并读取 error.message 判断原因。"
+      },
+      {
+        "title": "以为 await 会阻塞整个线程或页面",
+        "cause": "看到「等结果」就想象成程序停在原地，于是不敢在 await 前后写其它逻辑，或者用 await 解释页面卡顿。",
+        "fix": "记住 await 只是暂停当前 async 函数：把同步代码放在 await 前后各打一行日志，观察调用 loadTotal 之后那一行仍会立刻执行。"
+      },
+      {
+        "title": "catch 里不读错误对象，只写一句「出错了」",
+        "cause": "拒绝原因（这里是被 reject 的 Error）承载了失败信息，丢掉它之后无法区分是数据缺失还是别的问题。",
+        "fix": "在 catch 中接收参数并打印或使用 error.message，必要时把错误重新抛出交给上层处理。"
+      }
+    ],
+    "source_refs": [
+      {
+        "title": "MDN：async function 声明",
+        "url": "https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Statements/async_function"
+      },
+      {
+        "title": "MDN：await 运算符",
+        "url": "https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Operators/await"
+      },
+      {
+        "title": "MDN：Promise",
+        "url": "https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Promise"
+      },
+      {
+        "title": "MDN：try...catch",
+        "url": "https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Statements/try...catch"
+      }
+    ],
+    "teaching_memory": {
+      "key_concepts": [
+        "async 函数总是返回 Promise，return 的值成为兑现值",
+        "await 读取兑现值，遇到被拒绝的 Promise 会在该行抛出错误",
+        "try/catch 把一次 await 分成成功与失败两条路径",
+        "await 暂停的是当前 async 函数，不是整个线程"
+      ],
+      "common_mistakes": [
+        "忘记 await，把 Promise 对象当成结果值使用",
+        "把 await 放在 try 之外，导致 catch 接不到拒绝",
+        "把 await 误解为阻塞线程或让页面卡住",
+        "catch 中不读取 Error 信息，无法定位失败原因"
+      ],
+      "assessment_targets": [
+        "能解释 loadTotal 成功时调用者拿到的是兑现值为 10 的 Promise",
+        "能说明 shouldFail 为 true 时为什么跳过 try 剩余语句并进入 catch",
+        "能区分「await 暂停当前函数」与「阻塞线程」这两种说法"
+      ]
+    },
+    "plan_node_id": "50000000-0000-4000-8000-000000000003",
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "logical_session_key": "reg40-session-javascript"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "概念与代码行为均准确：async 包装返回值、await 取兑现值、拒绝经 await 转入 catch、await 只暂停当前函数不阻塞线程都与参考事实一致，示例兑现值为 10。",
+      "evidence": [
+        "candidate_output.worked_example.expected_output：成功路径打印「2. await 得到兑现值： 10」，失败路径打印「3. 失败路径： 记录读取失败」，与 reference_facts 中 loadTotal 兑现值为 10 一致",
+        "candidate_output.foundation：明确说明 await 暂停的是当前 async 函数而非阻塞整个线程"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "覆盖全部 required_knowledge_points 与三条完成标准，且包含基础解释、多文件完整示例、误区修复和教学记忆，结构完整。",
+      "evidence": [
+        "candidate_output.teaching_memory.key_concepts：涵盖 async 返回 Promise、await 取兑现值、try/catch 分流、await 不阻塞线程四个知识点",
+        "candidate_output.pitfalls_debug：每条均给出 title、cause、fix，满足误区与修复要求"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "内容始终聚焦「async/await 与错误处理」当前节点，使用 JavaScript 与固定数据，未扩展到无关路线内容。",
+      "evidence": [
+        "candidate_output.worked_example.files[0].content：注释写明「固定数据，模拟一次耗时读取，不涉及真实网络」，符合 node_brief 范围"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "段落分节清楚，关键术语（兑现、拒绝、pending）均给出中文解释，示例按文件职责与调用顺序组织，阅读顺序明确。",
+      "evidence": [
+        "candidate_output.foundation：分节标题配合「成功路径 / 失败路径：Promise 兑现（fulfilled，成功拿到值）……」的括号释义",
+        "candidate_output.worked_example.call_sequence：step 1-4 标注先看哪个文件、哪个函数"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 4,
+      "reason": "面向初学者解释充分、边界说明清楚，但示例中使用了未加解释的数组 reduce，与学习者仅掌握基本变量、函数和控制流的背景略有脱节。",
+      "evidence": [
+        "candidate_output.worked_example.files[1].content：`rows.reduce((sum, row) => sum + row.amount, 0)` 未作说明",
+        "learner_profile.background_summary：仅声明已学习基本变量、函数和控制流"
+      ]
+    }
+  },
+  "weighted_score": 4.9,
+  "percentage_score": 98.00000000000001,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:10:41.439Z",
+  "finished_at": "2026-10-10T09:48:23.406Z"
+}

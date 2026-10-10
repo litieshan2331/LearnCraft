@@ -1,0 +1,232 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "d11e2763-b36d-4ccf-8576-1801ce597c62",
+  "case_id": "reg40-plan-05-go",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "plan_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "schema_version": "learning_plan.v1",
+    "title": "Go 数据处理与错误处理学习路线",
+    "summary": "面向有其他语言经验、能读懂 Go 基础语法的学习者，按依赖顺序拆成 10 个可独立学习的章节：先打通切片与 map 的数据语义，再建立函数多返回值、error 值与自定义错误、结构体方法与接口的抽象能力，最后补上 defer 资源释放、输入校验与一个不带并发的数据汇总模块。全程围绕数据读取与汇总组织代码，不涉及 goroutine、channel 或框架。",
+    "nodes": [
+      {
+        "node_key": "slice_internals",
+        "ordinal": 1,
+        "title": "切片底层数组与共享语义",
+        "node_brief": "切片的 len 与 cap、底层数组共享、append 扩容与别名、copy 与三索引切片的用途。",
+        "learning_objective": "能画出切片操作后底层数组的共享关系，并预测 append 与切片截取对原数据的影响。",
+        "rationale": "切片是 Go 里承载数据的主要容器，共享语义不清会直接导致后续汇总结果被意外修改。",
+        "difficulty": 2,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能解释两个指向同一底层数组的切片如何互相影响",
+          "能说明 append 在容量足够与容量不足时的不同行为",
+          "能用 copy 或三索引切片切断两个切片之间的共享",
+          "能写出一个因切片共享导致汇总结果出错的例子并修复它"
+        ]
+      },
+      {
+        "node_key": "map_semantics",
+        "ordinal": 2,
+        "title": "map 的语义与分组汇总用法",
+        "node_brief": "map 的创建与零值、逗号 ok 查找、删除元素、遍历顺序不确定，以及用 map 做分组统计。",
+        "learning_objective": "能用 map 完成分组统计，并正确区分「键不存在」和「值为零值」两种情况。",
+        "rationale": "按字段分组汇总是数据处理的核心动作，map 语义不清会产出静默错误的统计结果。",
+        "difficulty": 2,
+        "estimated_minutes": 150,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能用 v, ok := m[k] 判断键是否存在而不是靠零值猜测",
+          "能解释对 nil map 写入和读取分别会发生什么",
+          "能用 map 完成按某一字段的分组计数或求和",
+          "能说明遍历顺序不确定对输出的影响，并写出固定顺序的输出"
+        ]
+      },
+      {
+        "node_key": "functions_multi_return",
+        "ordinal": 3,
+        "title": "函数签名与多返回值约定",
+        "node_brief": "函数参数与返回值、多返回值、命名返回值、可变参数，以及把 error 放在最后一个返回值的约定。",
+        "learning_objective": "能设计出返回（结果, error）的函数签名，让调用方必须面对错误分支。",
+        "rationale": "后面的错误处理、结构体构造和输入解析都建立在函数签名约定之上。",
+        "difficulty": 2,
+        "estimated_minutes": 150,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能写出至少两个多返回值函数并在调用处正确解构结果",
+          "能说明命名返回值与普通返回值的差异及适用场景",
+          "能用可变参数接收不定数量的输入并遍历处理",
+          "能解释为什么 error 习惯放在返回值的最后一位"
+        ]
+      },
+      {
+        "node_key": "error_values_and_wrapping",
+        "ordinal": 4,
+        "title": "error 是值：创建、返回与包裹",
+        "node_brief": "error 接口、errors.New 与 fmt.Errorf、用 %w 包裹、errors.Is 与 errors.As 的判断方式、哨兵错误。",
+        "learning_objective": "能沿着调用链逐层返回错误，并让上层用 errors.Is/errors.As 判断出具体原因。",
+        "rationale": "显式错误返回是本路线的核心能力，也是前测中需要最多练习的薄弱点。",
+        "difficulty": 3,
+        "estimated_minutes": 210,
+        "prerequisite_node_keys": [
+          "functions_multi_return"
+        ],
+        "completion_criteria": [
+          "能用 %w 包裹底层错误并在上层用 errors.Is 命中它",
+          "能说明用 == 比较错误与用 errors.Is 比较的差别",
+          "能定义哨兵错误并在调用方做出分支处理",
+          "能在补充上下文信息的同时不丢失原始错误",
+          "能找出代码中一处被忽略的 error 并说明后果"
+        ]
+      },
+      {
+        "node_key": "custom_error_types",
+        "ordinal": 5,
+        "title": "自定义错误类型与结构化错误信息",
+        "node_brief": "实现 error 接口的类型、携带字段的错误、Unwrap 方法，以及按错误类型分类处理。",
+        "learning_objective": "能定义带字段的错误类型，并让调用方用 errors.As 取出结构化信息做判断。",
+        "rationale": "汇总模块需要区分「哪一行、哪个字段、哪种原因」出错，仅靠字符串错误无法稳定处理。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "error_values_and_wrapping"
+        ],
+        "completion_criteria": [
+          "能定义实现 Error() string 的结构体错误类型",
+          "能用 errors.As 从包裹链中取出该类型并读取其字段",
+          "能为错误实现 Unwrap 以支持链式判断",
+          "能说明用值接收者与指针接收者实现 Error() 时 errors.As 的匹配差异"
+        ]
+      },
+      {
+        "node_key": "structs_and_receivers",
+        "ordinal": 6,
+        "title": "结构体、方法与接收者选择",
+        "node_brief": "结构体定义与构造函数、值接收者与指针接收者、方法集差异、字段可变性与校验。",
+        "learning_objective": "能判断一个方法该用值接收者还是指针接收者，并解释该选择对调用方的影响。",
+        "rationale": "数据汇总中的记录、配置和结果都需要结构体承载，接收者选错会造成修改不生效的隐蔽 bug。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能写出带构造函数的结构体，并在构造时校验字段并返回 error",
+          "能举例说明指针接收者方法修改字段后对调用方可见的原因",
+          "能解释值接收者方法为什么不会修改原值",
+          "能为同一结构体分别写出两类接收者方法并说明选择理由"
+        ]
+      },
+      {
+        "node_key": "interfaces_and_substitution",
+        "ordinal": 7,
+        "title": "接口、隐式实现与依赖替换",
+        "node_brief": "接口定义与隐式满足、小接口原则、在消费方定义接口、nil 接口陷阱，以及用接口替换数据来源。",
+        "learning_objective": "能定义小接口让汇总逻辑与具体数据来源解耦，并在测试中用替身替换真实来源。",
+        "rationale": "接口是让数据处理逻辑可测试、可替换的关键，也是前测中尚未掌握的抽象能力。",
+        "difficulty": 4,
+        "estimated_minutes": 210,
+        "prerequisite_node_keys": [
+          "structs_and_receivers",
+          "error_values_and_wrapping"
+        ],
+        "completion_criteria": [
+          "能定义只含 1 到 2 个方法的接口，并让至少两个类型满足它",
+          "能在使用方而不是实现方定义接口，并说明理由",
+          "能在测试中用假实现替换真实数据来源并验证汇总逻辑",
+          "能解释接口值不为 nil 但内部指针为 nil 时的判空陷阱"
+        ]
+      },
+      {
+        "node_key": "defer_and_resource_release",
+        "ordinal": 8,
+        "title": "defer、资源释放与 panic/recover",
+        "node_brief": "defer 的执行时机与参数求值时刻、循环中 defer 的堆积问题、defer 与命名返回值、panic 的传播与 recover 的适用层级。",
+        "learning_objective": "能用 defer 保证打开的资源一定被释放，并识别循环中 defer 造成的资源堆积。",
+        "rationale": "数据读取会反复打开文件与 Reader，资源释放写错会在长流程中持续泄漏句柄。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "functions_multi_return"
+        ],
+        "completion_criteria": [
+          "能说明 defer 语句的参数在什么时刻求值",
+          "能在函数内用 defer 关闭打开的文件或 Reader，并保证错误路径上也执行",
+          "能识别并改写循环内直接 defer 导致资源堆积的代码",
+          "能说明 panic 沿调用栈传播的过程与 recover 只在 defer 中生效的约束"
+        ]
+      },
+      {
+        "node_key": "input_validation_and_parsing",
+        "ordinal": 9,
+        "title": "输入读取、字段校验与错误返回",
+        "node_brief": "用 io.Reader 与 bufio.Scanner 逐行读取、把文本解析成结构体记录、对缺失字段与非法数值返回可定位的错误。",
+        "learning_objective": "能把原始文本输入解析成结构体记录，并对非法输入返回可定位到行或字段的错误。",
+        "rationale": "真实数据总有脏行，解析与校验是汇总模块能否稳定运行的分界线。",
+        "difficulty": 3,
+        "estimated_minutes": 180,
+        "prerequisite_node_keys": [
+          "error_values_and_wrapping",
+          "defer_and_resource_release"
+        ],
+        "completion_criteria": [
+          "能打开文件并用 bufio.Scanner 逐行读取，同时用 defer 关闭文件",
+          "能把一行文本解析成结构体并对解析失败返回错误",
+          "能对缺失字段、非法数值返回带行号或字段名的自定义错误",
+          "能说明遇到非法行时选择跳过还是中止的理由，并在代码中一致地实现"
+        ]
+      },
+      {
+        "node_key": "aggregation_module_capstone",
+        "ordinal": 10,
+        "title": "数据汇总模块综合实现",
+        "node_brief": "把读取、校验、分组汇总、错误返回与接口替换组合成一个不带并发、可测试的汇总模块。",
+        "learning_objective": "能独立实现一个接收 io.Reader、输出稳定结果、非法输入可判断的数据汇总模块。",
+        "rationale": "前面各章的能力在这里被串成一条完整链路，形成期望结果中的可交付物。",
+        "difficulty": 4,
+        "estimated_minutes": 240,
+        "prerequisite_node_keys": [
+          "slice_internals",
+          "map_semantics",
+          "custom_error_types",
+          "structs_and_receivers",
+          "interfaces_and_substitution",
+          "input_validation_and_parsing"
+        ],
+        "completion_criteria": [
+          "模块对外暴露接收 io.Reader 的入口，数据来源可以被替换",
+          "非法输入返回的错误能用 errors.Is 或 errors.As 稳定判断",
+          "分组汇总结果按固定顺序输出，多次运行结果一致",
+          "至少写出两个测试，分别覆盖正常输入与含非法行的输入",
+          "能说明这条链路上切片共享与资源释放各自的风险点及对应写法"
+        ]
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "repair_attempts": 0,
+      "generation_path": "model_knowledge",
+      "fallback_used": false
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "learning_plan_id": "74665104-13ec-4330-bd46-c375006bce58",
+    "node_count": 10,
+    "tool_call_count": 0,
+    "repair_attempts": 0,
+    "generation_path": "model_knowledge",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:07:47.915Z",
+  "finished_at": "2026-10-10T08:08:13.069Z"
+}

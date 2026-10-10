@@ -1,0 +1,172 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "22b54e99-46f7-40d0-9824-f180237bf085",
+  "case_id": "reg40-content-08-http",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "card_content_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "schema_version": "card_content.v2",
+    "foundation": "本章的核心结论是：一次请求的「失败」至少分成三层，必须用不同手段分别识别。第一层是**网络失败**，请求根本没拿到响应，fetch 会直接抛出异常；第二层是**HTTP 状态错误**，响应拿到了，但状态码不是 2xx，fetch 默认不会因此抛错，需要自己检查 response.ok；第三层是**JSON 解析失败**，状态码正常，但响应体不是合法 JSON，调用 response.json() 时会抛错。只有先把这三层分开，才能知道该给用户看「网络不通」「请求被拒绝」还是「返回内容无法识别」。\n\n## 三层的区别\n- **网络失败**：断网、域名解析不了、请求被中断，此时连 Response 对象都没有，只能在 catch 里处理。\n- **HTTP 错误**：404、500 这类响应是完整拿到了的，只是状态码表示这次请求不被接受，Response 对象里仍有 status 和 headers。\n- **JSON 解析失败**：状态码是 200，但响应体是 HTML 错误页或空字符串，问题出在把文本转成对象这一步。\n\n关键术语里，**Response** 表示服务器返回的那一份响应，**response.ok** 是一个布尔值，只在状态码落在 200 到 299 之间时为 true，**response.status** 是具体状态码，**response.json()** 是把响应体文本解析成 JavaScript 对象的异步方法。理解了这几个词，就能读懂本章代码里的每个分支在防什么。\n\n## 为什么 204 不能调用 json\n204 的含义是 **No Content**，即请求成功了但服务器明确表示没有内容可返回，响应体是空的。而 response.json() 的工作是读取响应体文本再解析成对象，面对空响应体它没有可解析的内容，会抛出解析错误。所以 204 属于「成功但没有数据」这一类，正确做法是直接返回 null，用一个明确的值表达「请求成功、结果为空」，而不是让解析器去猜。\n\n## 需要形成的判断方式\n写出处理响应的代码时，按固定顺序自问三句：\n- 这一步可能拿到网络异常吗？拿到就要 try/catch。\n- 状态码是否 2xx？不是就按 HTTP 错误处理，不要继续解析。\n- 是 204 吗？是就返回 null，不要再调用 json()。\n\n剩下的情况才是真正需要读取 JSON 的场景。用固定构造的 Response 对象（分别模拟 200、204、404）去验证这三个分支，是本章推荐的练习方式，因为不依赖真实服务器，结果为可重复的确定性结果。",
+    "worked_example": {
+      "explanation": "示例只做一件事：把「检查状态 → 处理 204 → 读取 JSON」这条顺序写成两个函数，再用三个固定构造的 Response 对象分别走一遍三个分支。先读模块文件里的 readJsonOrNull，它依次做三次判断：ok 为 false 时抛出 HttpError；status 为 204 时返回 null；其余情况才调用 response.json()。注意 204 的判断放在 ok 判断之后，因为 204 本身属于 2xx，会被 ok 放行，必须单独拦下。再读入口文件 run：它用 new Response 手工造出 200、204、404 三个响应，不需要真实服务器，因此每个分支都能稳定复现。404 那一次用 try/catch 接住抛出的 HttpError，并读取 error.status，从而把「HTTP 错误」和其他两种失败区分开展示。",
+      "files": [
+        {
+          "path": "src/api/readResponse.ts",
+          "language": "ts",
+          "role": "module",
+          "content": "export class HttpError extends Error {\n  readonly status: number;\n\n  constructor(status: number) {\n    super('HTTP error: ' + status);\n    this.name = 'HttpError';\n    this.status = status;\n  }\n}\n\nexport async function readJsonOrNull(response: Response): Promise<unknown> {\n  // 第一层：HTTP 状态检查，非 2xx 直接抛出，不进入解析\n  if (!response.ok) {\n    throw new HttpError(response.status);\n  }\n\n  // 第二层：成功但没有内容，明确返回 null\n  if (response.status === 204) {\n    return null;\n  }\n\n  // 第三层：读取并解析 JSON，解析失败会抛错\n  return response.json();\n}\n"
+        },
+        {
+          "path": "src/main.ts",
+          "language": "ts",
+          "role": "entry",
+          "content": "import { HttpError, readJsonOrNull } from './api/readResponse';\n\nasync function run(): Promise<void> {\n  const okResponse = new Response('{\"id\":1}', {\n    status: 200,\n    headers: { 'content-type': 'application/json' },\n  });\n  const emptyResponse = new Response(null, { status: 204 });\n  const missingResponse = new Response('Not Found', { status: 404 });\n\n  const data = await readJsonOrNull(okResponse);\n  console.log('200 ->', data);\n\n  const empty = await readJsonOrNull(emptyResponse);\n  console.log('204 ->', empty);\n\n  try {\n    await readJsonOrNull(missingResponse);\n  } catch (error) {\n    if (error instanceof HttpError) {\n      console.log('404 -> HttpError', error.status);\n    } else {\n      console.log('404 -> 其它失败', error);\n    }\n  }\n}\n\nrun();\n"
+        }
+      ],
+      "entry_file": "src/main.ts",
+      "call_sequence": [
+        {
+          "step": 1,
+          "file": "src/api/readResponse.ts",
+          "function": "readJsonOrNull",
+          "note": "先看三个分支的顺序：ok 为 false 抛 HttpError，204 返回 null，其余才调用 response.json()"
+        },
+        {
+          "step": 2,
+          "file": "src/api/readResponse.ts",
+          "function": "HttpError",
+          "note": "再看自定义错误如何保存 status，方便调用方区分 HTTP 错误与解析错误"
+        },
+        {
+          "step": 3,
+          "file": "src/main.ts",
+          "function": "run",
+          "note": "最后看入口用三个固定 Response 分别触发 200、204、404 三条路径"
+        }
+      ],
+      "expected_output": "src/api/readResponse.ts › readJsonOrNull：传入 200 的固定响应时得到对象 { id: 1 }；传入 204 时得到 null 且不调用 response.json()；传入 404 时抛出 HttpError，status 为 404，被 run 里的 catch 接住"
+    },
+    "pitfalls_debug": [
+      {
+        "title": "对 204 响应调用 response.json()",
+        "cause": "204 表示成功但无内容，响应体是空的，response.json() 没有可解析的文本，会抛出解析错误，把一次成功的请求变成失败。",
+        "fix": "在解析之前单独判断 response.status === 204，命中就返回 null，用明确的值表示「成功且无数据」。"
+      },
+      {
+        "title": "以为 fetch 会在 404 或 500 时自动进入 catch",
+        "cause": "fetch 只在网络层失败（如断网、请求被中断）时 reject；只要服务器返回了响应，无论状态码是多少都会走 then 分支，404 和 500 都不会抛错。",
+        "fix": "拿到响应后主动检查 response.ok，为 false 时自己构造并抛出错误（例如 HttpError），让调用方能够处理。"
+      },
+      {
+        "title": "把所有异常都当成网络失败上报",
+        "cause": "网络失败、HTTP 错误、JSON 解析失败都会表现为 throw 或 reject，若不区分类型，就会对用户显示错误的提示，也无法做重试或降级决策。",
+        "fix": "用错误类型区分：自定义的 HttpError 表示状态码问题，SyntaxError 表示解析问题，其余（如 TypeError）更可能是网络层问题；分支处理时读取 Error 的 name 或 instanceof 判断。"
+      },
+      {
+        "title": "先调用 json() 再检查状态码",
+        "cause": "顺序反过来时，服务器返回的 HTML 错误页会被送去解析，抛出的解析错误会掩盖真正的状态码信息，排查时看不到 404 或 500。",
+        "fix": "固定顺序为「先 ok，再 204，最后 json」，把状态检查前移，确保错误信息来自状态码而不是解析器。"
+      }
+    ],
+    "source_refs": [
+      {
+        "title": "MDN：Response.ok",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/API/Response/ok"
+      },
+      {
+        "title": "MDN：Response.json()",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/API/Response/json"
+      },
+      {
+        "title": "MDN：Response（含 204 No Content 说明）",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/API/Response"
+      },
+      {
+        "title": "MDN：使用 Fetch",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch"
+      }
+    ],
+    "teaching_memory": {
+      "key_concepts": [
+        "网络失败、HTTP 状态错误、JSON 解析失败是三层不同的失败",
+        "response.ok 只在状态码 200 到 299 之间为 true",
+        "204 表示成功但无内容，应返回 null 而不是调用 response.json()",
+        "处理响应的固定顺序：先检查 ok，再判断 204，最后读取 JSON"
+      ],
+      "common_mistakes": [
+        "对 204 调用 response.json() 导致解析错误",
+        "认为 fetch 会自动拒绝 404 和 500 响应",
+        "先解析 JSON 再检查状态码，使状态信息被解析错误掩盖",
+        "把三种失败混为一类，给出错误的用户提示"
+      ],
+      "assessment_targets": [
+        "能对非 2xx 响应抛出或报告 HTTP 错误，并保留状态码",
+        "能在 204 分支返回 null 并说明为何不能调用 response.json()",
+        "能对固定 200 JSON 响应读出 id 为 1，并解释 fetch 为什么不自动拒绝所有 HTTP 错误"
+      ]
+    },
+    "plan_node_id": "50000000-0000-4000-8000-000000000008",
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "logical_session_key": "reg40-session-http"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "概念、代码与预期行为均与参考事实一致：ok 只在 200–299 为真、fetch 不因 4xx/5xx 自动拒绝、204 返回 null、非法 JSON 使 json 的 Promise 拒绝，示例中 200 响应读出 id:1、404 抛出带 status 404 的错误。",
+      "evidence": [
+        "candidate_output.worked_example.files[0].content：`if (!response.ok) throw new HttpError(response.status)` 与 `if (response.status === 204) return null` 的分支顺序与 reference_facts 一致",
+        "candidate_output.worked_example.files[1].content：`new Response('{\"id\":1}', { status: 200 })` 对应 reference_facts 中 200 JSON 的 id 为 1"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "四个 required_knowledge_points 全部覆盖，foundation 为三个以上实质段落，含完整分文件示例、误区与教学记忆，并逐条对应节点完成标准（非 2xx 报错、204 返回 null、固定 200 读出 id:1 并解释 fetch 行为）。",
+      "evidence": [
+        "candidate_output.teaching_memory.assessment_targets：三条目标分别对应 plan_node.completion_criteria 的三项要求",
+        "candidate_output.pitfalls_debug：给出四条本章误区、原因与修复方式，符合 acceptable_answer_points 第 3 条"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "内容始终围绕「状态检查与 JSON 响应读取」，未扩张到整个学习路线的其它节点，使用 TypeScript 与 fetch 范围与节点声明一致。",
+      "evidence": [
+        "candidate_output.foundation：仅讨论网络失败、HTTP 状态错误、JSON 解析失败三层及 204 处理",
+        "candidate_output.plan_node_id：与 input_snapshot.plan_node.id 相同，未偏离当前节点"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "术语逐一定义，函数按阅读顺序分模块与入口两层展示，call_sequence 与 expected_output 使分支执行路径清晰可跟读。",
+      "evidence": [
+        "candidate_output.foundation：对 Response、response.ok、response.status、response.json() 逐一给出定义",
+        "candidate_output.call_sequence：三步指明先读 readJsonOrNull、再看 HttpError、最后看入口 run 的阅读顺序"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 4,
+      "reason": "面向初学者用三层失败框架和固定 Response 复现边界，教学方向合适；但代码使用 class extends Error、readonly 修饰符和 Promise<unknown> 泛型，略超出学习者仅掌握基本变量、函数和控制流的前置基础，需额外解释。",
+      "evidence": [
+        "candidate_output.worked_example.files[0].content：出现 `export class HttpError extends Error`、`readonly status: number` 与 `Promise<unknown>`，涉及尚未教授的类型与继承语法",
+        "candidate_output.foundation：用「网络不通/请求被拒绝/返回内容无法识别」三种用户提示对应三层失败，贴合初学者理解水平"
+      ]
+    }
+  },
+  "weighted_score": 4.9,
+  "percentage_score": 98.00000000000001,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:13:40.443Z",
+  "finished_at": "2026-10-10T10:05:31.964Z"
+}

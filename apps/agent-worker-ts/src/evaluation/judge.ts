@@ -230,7 +230,7 @@ export class JudgeClient implements JudgeClientPort {
   /** 初始化 Judge 客户端，并设置请求超时与有限重试上限。 */
   constructor(private readonly options: JudgeClientOptions) {
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.timeoutMs = options.timeoutMs ?? 60_000;
+    this.timeoutMs = options.timeoutMs ?? 180_000;
     this.maxAttempts = Math.max(1, Math.min(3, options.maxAttempts ?? 2));
   }
 

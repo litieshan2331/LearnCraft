@@ -1,0 +1,185 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "d29199fd-7db2-4772-badd-8b872ae0736c",
+  "case_id": "reg40-content-07-sql",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "card_content_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "schema_version": "card_content.v2",
+    "foundation": "## 一条查询里有两个过滤动作\n**WHERE 过滤的是行，HAVING 过滤的是组**，这是本章最重要的一条分界线。可以用执行顺序来理解：先从表里取数据（FROM），再逐行筛选（WHERE），然后把剩下的行按 team 这样的列分成小组（GROUP BY），接着逐组筛选（HAVING），最后才决定输出哪些列（SELECT）。因为 HAVING 在分组之后执行，它才能写 SUM(amount) >= 40 这种「组的性质」；而 WHERE 在分组之前执行，那时还没有任何组，所以它只能写「行的性质」，例如 amount IS NOT NULL。\n\n## NULL 表示「没有记录」，不等于 0\n把 NULL 当成 0 是初学者最常见的偏差，NULL 的含义是「这个值未知或没有填」。因此 amount > 0、amount = 0、amount <> 0 这类比较，遇到 NULL 得到的结果是 UNKNOWN（不确定），而 WHERE 只保留结果为 TRUE 的行，于是这些行会被一起丢掉。本章示例数据里 C 团队的 amount 就是 NULL，它既不会被 WHERE amount > 0 保留，也不会被 WHERE amount = 0 保留。要精确表达「金额确实有值」，写法是 **WHERE amount IS NOT NULL**。\n\n## 聚合函数会忽略 NULL，但要分清「忽略」与「剔除」\nSUM、AVG 这类聚合函数在计算时会跳过 NULL，所以一个组里有 NULL 行并不会把总和算错。但要注意后面这件事：如果某个组所有行的 amount 都是 NULL，SUM 返回的仍然是 **NULL，而不是 0**；此时 HAVING SUM(amount) >= 40 中，NULL >= 40 是 UNKNOWN，这个组同样不会出现在结果里。所以「这一组被 HAVING 去掉了」和「这一组的行被 WHERE 去掉了」是两条不同的路径，前者用 COUNT(*) 还能看到组的存在，后者连组都不会形成。\n\n## 拿到固定数据时，按三步推导结果\n判断查询结果时，不要凭感觉，按固定顺序推：先按 WHERE 删掉不符合的行，再按 GROUP BY 把剩余行分组求和，最后按 HAVING 删掉不达标的组。用本章数据走一遍：A 团队两行 10 和 30，B 团队一行 60，C 团队一行的值为 NULL；WHERE 先剔除 C，留下 A 的两行和 B 的一行；GROUP BY team 得到 A 与 B 两个组，SUM 分别为 40 和 60；HAVING SUM(amount) >= 40 两组都满足，因此最终是 **A:40、B:60 两行**。\n\n## 需要形成的判断方式\n看到一个筛选条件时，先问自己一句话：「它判断的是单独一行，还是一个组？」判断单行的条件（某个字段是否为 NULL、是否大于某个阈值）写进 WHERE；判断整组的条件（总数、平均值、行数是否达标）写进 HAVING。养成这个习惯后，WHERE 与 HAVING 的取舍就不再靠记忆，而是靠推理。",
+    "worked_example": {
+      "explanation": "示例用 Python 标准库 sqlite3 在内存里跑一遍：schema.sql 负责建表并写入固定数据，queries.py 里放了两个查询函数，一个只做行过滤，一个在行过滤之后加分组与组过滤，main.py 是入口，把两步结果依次打印出来对照。读代码时先看数据长什么样，再看第一个函数为什么把 C 团队整行删掉，最后看第二个函数为什么结果里只剩下 A 和 B。",
+      "files": [
+        {
+          "path": "sql/schema.sql",
+          "language": "text",
+          "role": "config",
+          "content": "DROP TABLE IF EXISTS sales;\n\nCREATE TABLE sales (\n  id INTEGER PRIMARY KEY,\n  team TEXT NOT NULL,\n  amount INTEGER\n);\n\n-- C 团队的 amount 故意留空，用来观察 NULL 的行为\nINSERT INTO sales (id, team, amount) VALUES\n  (1, 'A', 10),\n  (2, 'A', 30),\n  (3, 'B', 60),\n  (4, 'C', NULL);\n"
+        },
+        {
+          "path": "src/queries.py",
+          "language": "python",
+          "role": "module",
+          "content": "import sqlite3\nfrom pathlib import Path\n\nSCHEMA_PATH = Path(__file__).resolve().parent.parent / \"sql\" / \"schema.sql\"\n\n# WHERE 先删行，GROUP BY 再分组，HAVING 最后删组，顺序不能调换\nGROUPED_SQL = \"\"\"\nSELECT team, SUM(amount) AS total\nFROM sales\nWHERE amount IS NOT NULL\nGROUP BY team\nHAVING SUM(amount) >= 40\nORDER BY team\n\"\"\"\n\n\ndef load_schema(conn: sqlite3.Connection) -> None:\n    \"\"\"建表并写入固定数据，保证每次推导的结果一致。\"\"\"\n    conn.executescript(SCHEMA_PATH.read_text(encoding=\"utf-8\"))\n\n\ndef fetch_rows_with_amount(conn: sqlite3.Connection) -> list[tuple[str, int]]:\n    \"\"\"只做行过滤：NULL 行在这一步就被剔除，还没有分组。\"\"\"\n    sql = \"SELECT team, amount FROM sales WHERE amount IS NOT NULL ORDER BY id\"\n    return conn.execute(sql).fetchall()\n\n\ndef summarize_by_team(conn: sqlite3.Connection) -> list[tuple[str, int]]:\n    \"\"\"先按行过滤，再按团队求和，最后用 HAVING 过滤团队总额。\"\"\"\n    return conn.execute(GROUPED_SQL).fetchall()\n"
+        },
+        {
+          "path": "src/main.py",
+          "language": "python",
+          "role": "entry",
+          "content": "import sqlite3\n\nfrom queries import fetch_rows_with_amount, load_schema, summarize_by_team\n\n\ndef main() -> None:\n    conn = sqlite3.connect(\":memory:\")\n    load_schema(conn)\n\n    print(\"第 1 步 只看 WHERE（行过滤）：\", fetch_rows_with_amount(conn))\n    print(\"第 2 步 WHERE + GROUP BY + HAVING：\", summarize_by_team(conn))\n\n    conn.close()\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        }
+      ],
+      "entry_file": "src/main.py",
+      "call_sequence": [
+        {
+          "step": 1,
+          "file": "src/main.py",
+          "function": "main",
+          "note": "入口建立内存数据库连接，准备依次调用建表与两个查询函数"
+        },
+        {
+          "step": 2,
+          "file": "src/queries.py",
+          "function": "load_schema",
+          "note": "执行 schema.sql，写入 A 的 10、30，B 的 60，以及 C 的 NULL"
+        },
+        {
+          "step": 3,
+          "file": "src/queries.py",
+          "function": "fetch_rows_with_amount",
+          "note": "只做行过滤，确认 WHERE amount IS NOT NULL 之后 C 的整行被剔除"
+        },
+        {
+          "step": 4,
+          "file": "src/queries.py",
+          "function": "summarize_by_team",
+          "note": "在行过滤基础上加 GROUP BY 与 HAVING，得到 A 与 B 两个组的汇总"
+        }
+      ],
+      "expected_output": "src/main.py › main：第 1 步返回 3 行，分别是 A 的 10、A 的 30 和 B 的 60，amount 为 NULL 的 C 已被 WHERE 整行剔除；第 2 步中 C 不会形成分组，A 的两行求和为 40、B 的一行为 60，两组都满足 HAVING SUM(amount) >= 40，所以最终结果是 A:40 与 B:60 两行。"
+    },
+    "pitfalls_debug": [
+      {
+        "title": "把组级条件写进 WHERE，例如 WHERE SUM(amount) >= 40",
+        "cause": "WHERE 在 GROUP BY 之前执行，那一刻每一行还是独立的，还没有任何汇总值可以用，数据库会因为不允许在这里出现聚合函数而报错。",
+        "fix": "把聚合条件整条搬到 HAVING，写成 HAVING SUM(amount) >= 40，行级条件才继续留在 WHERE 里。"
+      },
+      {
+        "title": "用 WHERE amount >= 40 代替 WHERE amount IS NOT NULL",
+        "cause": "想表达「只要金额有值」，却顺手写成一个数值阈值，结果连带把 A 团队的 10 也删掉了，A 的总和变成 30 而不是 40。",
+        "fix": "明确区分两件事：剔除 NULL 用 amount IS NOT NULL，过滤小额行才用 amount >= 某个数；两者可以同时存在于 WHERE，但不要互相替代。"
+      },
+      {
+        "title": "以为 SUM 会把 NULL 当成 0，所以 HAVING 一定会保留这组",
+        "cause": "SUM 只是跳过 NULL，并不会把 NULL 补成 0；若某组所有行都是 NULL，SUM 返回 NULL，而 NULL >= 40 的结果是 UNKNOWN，这组会被 HAVING 去掉。",
+        "fix": "需要「没有值时按 0 处理」时显式写 COALESCE(SUM(amount), 0)，并在心里确认自己到底要的是「剔除这组」还是「计为 0 保留这组」。"
+      },
+      {
+        "title": "用了 SUM 却漏写 GROUP BY",
+        "cause": "SQLite 允许不带 GROUP BY 直接聚合，此时整张表的剩余行会合成一行，A 与 B 被混在一起，看不到团队维度。",
+        "fix": "只要结果里想按 team 分开展示，就必须带 GROUP BY team，并保证 SELECT 里的 team 与分组键一致。"
+      },
+      {
+        "title": "用 COUNT(*) 代替 COUNT(amount) 判断有效行数",
+        "cause": "COUNT(*) 数的是行的条数，包含 amount 为 NULL 的行；COUNT(amount) 只数非 NULL 的行，两者在本章数据上相差 1。",
+        "fix": "统计「有多少条记录」用 COUNT(*)，统计「有多少条有效金额」用 COUNT(amount)，先想清楚问题的含义再选。"
+      }
+    ],
+    "source_refs": [
+      {
+        "title": "SQLite 官方文档：SELECT 语句（WHERE、GROUP BY、HAVING 的执行与语法）",
+        "url": "https://www.sqlite.org/lang_select.html"
+      },
+      {
+        "title": "SQLite 官方文档：聚合函数 sum、count 及对 NULL 的处理说明",
+        "url": "https://www.sqlite.org/lang_aggfunc.html"
+      },
+      {
+        "title": "Python 官方文档：sqlite3 —— DB-API 2.0 接口",
+        "url": "https://docs.python.org/3/library/sqlite3.html"
+      }
+    ],
+    "teaching_memory": {
+      "key_concepts": [
+        "WHERE 在分组前过滤行，HAVING 在分组后过滤组，二者作用对象不同",
+        "NULL 表示未知值，与普通值比较得到 UNKNOWN，需用 IS NOT NULL 判断",
+        "聚合函数跳过 NULL；整组皆 NULL 时 SUM 返回 NULL，会被 HAVING 剔除",
+        "按 WHERE → GROUP BY → HAVING 的顺序逐步推导固定数据的结果"
+      ],
+      "common_mistakes": [
+        "把 SUM 等聚合条件写进 WHERE 而不是 HAVING",
+        "用 amount >= 数值 代替 amount IS NOT NULL，误删了小额行",
+        "认为 SUM 会把 NULL 当作 0，从而误判该组是否会被 HAVING 保留",
+        "写了聚合函数却漏掉 GROUP BY，导致所有团队被合并成一行"
+      ],
+      "assessment_targets": [
+        "能写出 WHERE amount IS NOT NULL 后再 GROUP BY team 的完整查询",
+        "能在结果里加上 HAVING SUM(amount) >= 40，并说明它过滤的是组而不是行",
+        "能根据 A 的 10、30，B 的 60 和 C 的 NULL 推导出最终结果只有 A:40 与 B:60"
+      ]
+    },
+    "plan_node_id": "50000000-0000-4000-8000-000000000007",
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "logical_session_key": "reg40-session-sql"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "WHERE/HAVING 的作用对象、执行顺序、NULL 比较得到 UNKNOWN、SUM 跳过 NULL 以及全 NULL 组 SUM 为 NULL 等说明均与参考事实一致，固定数据的推导结果 A:40、B:60 也正确。",
+      "evidence": [
+        "candidate_output.foundation：明确写出 WHERE 过滤行、HAVING 过滤组，并以 A 的 10+30=40、B 的 60、C 的 NULL 推导出 A:40、B:60",
+        "candidate_output.worked_example.files[1].content：GROUPED_SQL 使用 WHERE amount IS NOT NULL + GROUP BY team + HAVING SUM(amount) >= 40，与参考事实一致"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "覆盖了 WHERE 行过滤、GROUP BY 分组、SUM 与 NULL、HAVING 分组过滤四个知识点，并提供完整多文件示例、常见误区与教学记忆，节点完成标准均在内容中体现。",
+      "evidence": [
+        "candidate_output.teaching_memory.key_concepts：四项要点对应 required_knowledge_points 与 completion_criteria",
+        "candidate_output.pitfalls_debug：给出误区、原因与修复方式，包含 WHERE 中写聚合、误用数值阈值、误判 SUM 对 NULL 的处理等"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "内容聚焦当前节点「WHERE、GROUP BY 与 HAVING」，示例按 node_brief 要求用 Python 标准库 sqlite3 承载，未扩展到无关主题。",
+      "evidence": [
+        "candidate_output.worked_example.entry_file：src/main.py 使用 sqlite3 内存库，符合 node_brief 声明的语言与承载方式",
+        "candidate_output.foundation：全部段落围绕行过滤与分组过滤展开"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "分段标题清晰，术语有定义，示例文件标明路径、语言与职责，入口与调用顺序说明便于按序阅读。",
+      "evidence": [
+        "candidate_output.worked_example.files：每个文件包含 path、language、role 与说明性注释",
+        "candidate_output.worked_example.call_sequence：按步骤列出入口与各函数调用及其作用"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 5,
+      "reason": "面向初学者用执行顺序和「问一句话」的判断方式讲解释概念，提供完整代码上下文与 NULL 边界说明，未引入未教授的高级依赖。",
+      "evidence": [
+        "candidate_output.foundation：用 FROM→WHERE→GROUP BY→HAVING 的顺序帮助初学者理解两类过滤的差别",
+        "candidate_output.expected_output：明确描述两步预期行为，未伪造执行日志，便于初学者自行验证"
+      ]
+    }
+  },
+  "weighted_score": 5,
+  "percentage_score": 100,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:12:49.399Z",
+  "finished_at": "2026-10-10T09:49:58.621Z"
+}

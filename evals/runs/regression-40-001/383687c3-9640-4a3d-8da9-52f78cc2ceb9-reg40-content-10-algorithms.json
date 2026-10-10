@@ -1,0 +1,142 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "383687c3-9640-4a3d-8da9-52f78cc2ceb9",
+  "case_id": "reg40-content-10-algorithms",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "card_content_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "schema_version": "card_content.v2",
+    "foundation": "## 二分搜索维护的是一段「还没被排除」的闭区间\n**二分搜索的核心不是把列表折半，而是每一轮都维护一段仍然可能包含目标的区间。**\n- low 表示这段区间最左边的下标，high 表示最右边的下标，两端都**包含在区间内**，这就是「左右闭区间」。\n- 初始区间覆盖整张表：low = 0，high = len(nums) - 1。\n- 循环条件 low <= high 的含义是「区间里至少还有一个元素没被检查过」。\n\n## 三种比较结果对应三种收缩方式\n**每轮先算出 mid，再拿 nums[mid] 和 target 比较，比较结果只有三种，每种都决定区间往哪边缩。**\n- nums[mid] == target：命中，直接返回 mid。这里返回的是**索引**，不是元素值。\n- nums[mid] < target：目标只可能在 mid 右边，执行 low = mid + 1。\n- nums[mid] > target：目标只可能在 mid 左边，执行 high = mid - 1。\n- 为什么是 mid + 1 和 mid - 1 而不是 mid：因为 nums[mid] 这一轮已经被检查过了，它不可能是答案，必须从下一轮的区间里排除掉。\n\n## 区间一定会缩小，这是循环能停下来的保证\n**每个分支都让区间长度至少减少 1，所以循环一定会结束，总比较次数是 O(log n) 级别。**\n- 在 low <= high 成立时，(low + high) // 2 算出的 mid 一定落在 [low, high] 内部，不会越界。\n- 走 low = mid + 1 或 high = mid - 1 之后，新区间都不再包含 mid，长度严格变小。\n- 于是「区间在缩小」这件事可以当作检查自己代码是否正确的一把尺子。\n\n## 空列表、缺失目标和重复元素都不需要特判\n**闭区间写法本身就把边界情况处理掉了，额外写的 if 分支往往是 bug 的来源。**\n- 空列表：初始 low = 0、high = -1，low <= high 直接为假，循环一次都不执行，返回 -1。\n- 缺失目标：区间不断收缩，最后 low 会超过 high，说明候选区间空了，返回 -1 表示「这个索引不存在」。\n- 重复元素：本章实现只要 nums[mid] 等于 target 就立刻返回，所以它**不保证返回最左边那个匹配位置**。\n- 前提：传入的列表必须是**升序**的。如果列表没排序，「目标在 mid 左边还是右边」这个判断就不成立，必须先排序或改用逐个比较的线性查找。\n\n## 追踪 low、high、mid 是验证二分搜索最可靠的办法\n**判断一段二分搜索写得对不对，最直接的方式是按轮把 low、high、mid 三个值记下来。**\n- 每一轮问三个问题：现在的区间是什么？mid 落在哪？比较之后区间变成了什么？\n- 把每轮写成一行，检查两件事：区间有没有在缩小、有没有元素被漏掉。\n- 如果某一轮发现 low 和 high 都原地不动，那就说明收缩那一行写错了，程序多半会卡在死循环里。",
+    "worked_example": {
+      "explanation": "先读 src/binary_search.py 里的 binary_search，它是本章主体：注意 low 和 high 的初值、循环条件 low <= high，以及两个未命中分支里 mid + 1 和 mid - 1 的写法。\n\n再读 src/trace_search.py 里的 trace_binary_search，它的循环结构完全一样，只是每轮额外把 low、high、mid 记下来，这样你能亲眼看到区间是怎么收缩的。\n\n最后读 src/main.py 里的 main：它把命中、缺失、空列表三种情况依次交给 binary_search，并打印目标 7 的完整搜索轨迹。",
+      "files": [
+        {
+          "path": "src/binary_search.py",
+          "language": "python",
+          "role": "module",
+          "content": "def binary_search(nums: list[int], target: int) -> int:\n    \"\"\"在升序列表 nums 中查找 target。\n\n    命中时返回某个匹配元素的下标，未命中返回 -1。\n    列表必须事先按升序排列，否则比较结果没有意义。\n    \"\"\"\n    low = 0\n    high = len(nums) - 1\n\n    while low <= high:\n        mid = (low + high) // 2\n        if nums[mid] == target:\n            return mid\n        if nums[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n\n    return -1\n"
+        },
+        {
+          "path": "src/trace_search.py",
+          "language": "python",
+          "role": "module",
+          "content": "def trace_binary_search(nums: list[int], target: int) -> list[str]:\n    \"\"\"和 binary_search 相同的循环，额外记录每一轮的 low、high、mid。\n\n    返回的是每一轮的文字说明，用来观察区间是否在缩小。\n    \"\"\"\n    low = 0\n    high = len(nums) - 1\n    steps: list[str] = []\n\n    while low <= high:\n        mid = (low + high) // 2\n        steps.append(\n            \"本轮 low=\" + str(low)\n            + \" high=\" + str(high)\n            + \" mid=\" + str(mid)\n            + \" nums[mid]=\" + str(nums[mid])\n        )\n        if nums[mid] == target:\n            steps.append(\"命中，返回索引 \" + str(mid))\n            return steps\n        if nums[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n\n    steps.append(\"区间为空 low=\" + str(low) + \" high=\" + str(high) + \"，返回 -1\")\n    return steps\n"
+        },
+        {
+          "path": "src/main.py",
+          "language": "python",
+          "role": "entry",
+          "content": "from binary_search import binary_search\nfrom trace_search import trace_binary_search\n\nDATA = [1, 3, 5, 7, 9, 11]\n\n\ndef describe(nums: list[int], target: int) -> str:\n    index = binary_search(nums, target)\n    return str(nums) + \" 查找 \" + str(target) + \" -> 索引 \" + str(index)\n\n\ndef main() -> None:\n    print(describe(DATA, 7))\n    print(describe(DATA, 2))\n    print(describe([], 5))\n\n    print(\"追踪目标 7 的搜索过程：\")\n    for line in trace_binary_search(DATA, 7):\n        print(line)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        }
+      ],
+      "entry_file": "src/main.py",
+      "call_sequence": [
+        {
+          "step": 1,
+          "file": "src/main.py",
+          "function": "main",
+          "note": "入口依次处理命中、缺失、空列表三种情况，并打印目标 7 的追踪"
+        },
+        {
+          "step": 2,
+          "file": "src/main.py",
+          "function": "describe",
+          "note": "把列表、目标和查到的索引拼成一行可读结果"
+        },
+        {
+          "step": 3,
+          "file": "src/binary_search.py",
+          "function": "binary_search",
+          "note": "主体循环：算 mid、比较 nums[mid] 与 target、按结果用 mid + 1 或 mid - 1 收缩区间"
+        },
+        {
+          "step": 4,
+          "file": "src/trace_search.py",
+          "function": "trace_binary_search",
+          "note": "用同样的循环逐轮记录 low、high、mid，直观验证区间在缩小"
+        }
+      ],
+      "expected_output": "src/main.py › main：[1, 3, 5, 7, 9, 11] 查找 7 得到索引 3，查找 2 得到 -1，空列表查找 5 得到 -1；追踪目标 7 的过程依次出现 low=0 high=5 mid=2、low=3 high=5 mid=4、low=3 high=3 mid=3，第三轮命中并返回索引 3。"
+    },
+    "pitfalls_debug": [
+      {
+        "title": "把 low = mid + 1 写成 low = mid（或把 high = mid - 1 写成 high = mid），导致死循环",
+        "cause": "nums[mid] 这一轮已经比较过，若收缩时没有把它排除，区间可能在几轮之后原地不动，循环条件永远为真。",
+        "fix": "两个未命中分支必须排除 mid：nums[mid] < target 时写 low = mid + 1，nums[mid] > target 时写 high = mid - 1。改完用追踪打印检查每一轮的 low 或 high 至少有一个在变。"
+      },
+      {
+        "title": "循环条件写成 while low < high，区间只剩一个元素时被跳过",
+        "cause": "闭区间下 low == high 表示区间里还有一个元素没检查，用小于号会把这个候选元素漏掉，结果对最后一个位置上的目标返回 -1。",
+        "fix": "闭区间写法统一用 low <= high，初值为 0 和 len(nums) - 1。如果想用「左闭右开」区间，初值、循环条件和收缩方式必须整套一起改，绝不能两种写法混用。"
+      },
+      {
+        "title": "以为空列表需要提前特判，不特判就会越界或返回 0",
+        "cause": "没有意识到空列表时 high = -1，而 low <= high 已经为假，循环根本不会进入，也就不会去读 nums[mid]。",
+        "fix": "让循环条件承担这个判断：直接返回 -1 即可，不用写 if not nums 之类的额外分支；额外特判反而容易让返回值语义变得不统一。"
+      },
+      {
+        "title": "把返回值当成元素值，或者以为它一定是重复元素中最早出现的那个",
+        "cause": "本章实现在 nums[mid] == target 的那一刻立即返回，所以返回的是某个匹配下标；当列表里有重复目标时，返回哪一个取决于 mid 先落到哪里。",
+        "fix": "记住返回值语义：命中返回下标，未命中返回 -1。需要首个匹配位置时，要另写一个不立即返回、命中后继续往左收缩的版本，而不是改动本章这份代码。"
+      },
+      {
+        "title": "在未排序的列表上套用二分搜索",
+        "cause": "判断「目标在 mid 左边还是右边」依赖列表升序，没排序时这个判断不成立，可能返回 -1 却其实存在目标。",
+        "fix": "调用前确认列表已升序；数据本身无序时，先排序再搜索，或改用逐个比较的线性查找。"
+      }
+    ],
+    "source_refs": [
+      {
+        "title": "Python 官方文档：bisect —— 有序列表的二分查找工具",
+        "url": "https://docs.python.org/3/library/bisect.html"
+      },
+      {
+        "title": "维基百科：二分搜索算法（含区间收缩与边界讨论）",
+        "url": "https://zh.wikipedia.org/wiki/二分搜索算法"
+      }
+    ],
+    "teaching_memory": {
+      "key_concepts": [
+        "左右闭区间 [low, high] 表示仍然可能包含目标的候选范围",
+        "low <= high 作为循环条件，区间为空时退出",
+        "mid + 1 与 mid - 1 用来排除已经检查过的 mid",
+        "返回值是索引，未命中返回 -1",
+        "升序是前提，重复元素时不保证返回首个匹配位置"
+      ],
+      "common_mistakes": [
+        "收缩时写 low = mid 或 high = mid，区间不缩小导致死循环",
+        "循环条件用 low < high，漏查只剩一个元素的区间",
+        "以为空列表必须特判，或以为返回的是元素值、是首个匹配位置"
+      ],
+      "assessment_targets": [
+        "能在 [1, 3, 5, 7, 9, 11] 上写出查找 7 的三轮 low、high、mid 变化并说明每轮区间为什么缩小",
+        "能解释空列表与缺失目标为什么都由 low <= high 退出后返回 -1 处理",
+        "能说明未命中分支必须写 mid + 1 或 mid - 1 而不能写成 mid"
+      ]
+    },
+    "plan_node_id": "50000000-0000-4000-8000-000000000010",
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "logical_session_key": "reg40-session-algorithms"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "card_content_id": "1fa91163-d84b-494e-bdbb-bdd439279147",
+    "plan_node_id": "50000000-0000-4000-8000-000000000010",
+    "tool_call_count": 0,
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:14:58.058Z",
+  "finished_at": "2026-10-10T08:15:30.549Z"
+}

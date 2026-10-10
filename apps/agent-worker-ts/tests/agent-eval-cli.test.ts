@@ -68,4 +68,21 @@ describe('parseAgentEvalCommandArgs', () => {
       outputDir: 'runs/001',
     });
   });
+
+  it('score 支持无值的 --retry-failed，普通 score 保持原行为', () => {
+    expect(parseAgentEvalCommandArgs(['score', '--retry-failed', '--owner-id', OWNER_ID])).toMatchObject({
+      command: 'score',
+      ownerId: OWNER_ID,
+      retryFailed: true,
+    });
+    expect(parseAgentEvalCommandArgs(['score', '--owner-id', OWNER_ID])).not.toHaveProperty('retryFailed');
+    expect(formatAgentEvalCliUsage()).toContain('--retry-failed');
+  });
+
+  it('拒绝非 score 命令、重复开关和带值的重试参数', () => {
+    expect(() => parseAgentEvalCommandArgs(['build', '--retry-failed'])).toThrow('只能用于 score');
+    expect(() => parseAgentEvalCommandArgs(['run', '--owner-id', OWNER_ID, '--retry-failed'])).toThrow('只能用于 score');
+    expect(() => parseAgentEvalCommandArgs(['score', '--owner-id', OWNER_ID, '--retry-failed', '--retry-failed'])).toThrow('只能指定一次');
+    expect(() => parseAgentEvalCommandArgs(['score', '--owner-id', OWNER_ID, '--retry-failed=true'])).toThrow(AgentEvalCliError);
+  });
 });

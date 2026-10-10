@@ -1,0 +1,620 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "f849e1dd-bc17-470f-848c-8bc869684ca3",
+  "case_id": "reg40-assessment-10-algorithms",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "assessment_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "diagnostic",
+    "question_count": 20,
+    "difficulty": "normal",
+    "plan_id": null,
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "阅读下面的函数，它的时间复杂度是：\n```python\ndef f(n):\n    i = 1\n    while i < n:\n        j = i\n        while j < n:\n            j *= 2\n        i *= 2\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "O(n log n)"
+          },
+          {
+            "key": "B",
+            "text": "O((log n)^2)"
+          },
+          {
+            "key": "C",
+            "text": "O(n)"
+          },
+          {
+            "key": "D",
+            "text": "O(log n)"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "外层变量 i 每次翻倍，共约 log n 次；当外层取 i = 2^k 时，内层从 i 开始每次翻倍到 n，需要约 log(n / 2^k) 次，总次数约为 (log n) + (log n - 1) + ... + 1，属于 (log n)^2 的量级，因此是 O((log n)^2)。",
+        "skill_tags": [
+          "复杂度分析",
+          "循环结构"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于循环不变量（loop invariant），下列说法正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "循环不变量描述的是算法时间复杂度的上界，用来估计循环要执行多少轮。"
+          },
+          {
+            "key": "B",
+            "text": "循环不变量必须在循环体每次执行的过程中（包括执行到一半时）都保持为真。"
+          },
+          {
+            "key": "C",
+            "text": "循环不变量在每次迭代开始和结束时为真，结合循环终止条件可用于证明算法的正确性。"
+          },
+          {
+            "key": "D",
+            "text": "只要循环不变量在第一次进入循环前成立，就足以保证循环结束后得到正确结果。"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "循环不变量通常按「初始化—保持—终止」三步使用：进入循环前成立，每次迭代后仍成立，循环结束时再与终止条件结合得出所需性质。它本身不是复杂度工具，也不要求在循环体执行中间时刻成立，仅首次成立也不能推出最终结果正确。",
+        "skill_tags": [
+          "循环不变量",
+          "正确性证明"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "需要在非降序数组 a 中实现 lower_bound(a, x)：返回第一个满足 a[i] >= x 的下标，若不存在则返回 len(a)。下列实现正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "```python\ndef lower_bound(a, x):\n    lo, hi = 0, len(a)\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if a[mid] < x:\n            lo = mid + 1\n        else:\n            hi = mid\n    return lo\n```"
+          },
+          {
+            "key": "B",
+            "text": "```python\ndef lower_bound(a, x):\n    lo, hi = 0, len(a)\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if a[mid] <= x:\n            lo = mid + 1\n        else:\n            hi = mid\n    return lo\n```"
+          },
+          {
+            "key": "C",
+            "text": "```python\ndef lower_bound(a, x):\n    lo, hi = 0, len(a)\n    while lo < hi:\n        mid = (lo + hi + 1) // 2\n        if a[mid] < x:\n            lo = mid\n        else:\n            hi = mid - 1\n    return lo\n```"
+          },
+          {
+            "key": "D",
+            "text": "```python\ndef lower_bound(a, x):\n    lo, hi = 0, len(a) - 1\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if a[mid] < x:\n            lo = mid + 1\n        else:\n            hi = mid\n    return lo\n```"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "A 用半开区间 [lo, hi)，当 a[mid] < x 时排除 mid，否则把 hi 收缩到 mid，循环结束时 lo 就是第一个 >= x 的位置，且所有元素都小于 x 时返回 len(a)。B 把 <= 也归入左侧，实际得到第一个 > x 的下标（upper_bound）。C 的取整方向与分支不匹配，会返回错误下标，例如 a = [1, 2, 3]、x = 2 时会返回 0。D 在 x 大于数组所有元素时返回 len(a) - 1 而不是 len(a)，边界错误。",
+        "skill_tags": [
+          "二分查找",
+          "边界处理"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "归并排序的递归式可写作 T(n) = 2T(n / 2) + Θ(n)（n > 1，T(1) = Θ(1)）。根据主定理，T(n) 等于：",
+        "options": [
+          {
+            "key": "A",
+            "text": "Θ(n)"
+          },
+          {
+            "key": "B",
+            "text": "Θ(log n)"
+          },
+          {
+            "key": "C",
+            "text": "Θ(n^2)"
+          },
+          {
+            "key": "D",
+            "text": "Θ(n log n)"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "这里 a = 2、b = 2，n^(log_b a) = n，与 f(n) = Θ(n) 同阶，属于主定理的第二种情形，因此 T(n) = Θ(n log n)，与归并排序每层合并总代价 O(n)、共 O(log n) 层的直觉一致。",
+        "skill_tags": [
+          "递归",
+          "主定理",
+          "复杂度分析"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "0/1 背包中，用 dp[i][w] 表示「只考虑前 i 件物品、容量为 w 时能获得的最大价值」。第 i 件物品重量为 w_i、价值为 v_i。下列状态转移正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "当 w >= w_i 时，dp[i][w] = max(dp[i-1][w], dp[i-1][w - w_i] + v_i)；否则 dp[i][w] = dp[i-1][w]。"
+          },
+          {
+            "key": "B",
+            "text": "当 w >= w_i 时，dp[i][w] = max(dp[i-1][w], dp[i][w - w_i] + v_i)；否则 dp[i][w] = dp[i-1][w]。"
+          },
+          {
+            "key": "C",
+            "text": "当 w >= w_i 时，dp[i][w] = dp[i-1][w] + v_i；否则 dp[i][w] = dp[i-1][w]。"
+          },
+          {
+            "key": "D",
+            "text": "当 w >= w_i 时，dp[i][w] = max(dp[i-1][w], dp[i-1][w + w_i] + v_i)；否则 dp[i][w] = dp[i-1][w]。"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "0/1 背包每件物品最多选一次，选第 i 件时应回到上一行取 dp[i-1][w - w_i]，并和不选的情况 dp[i-1][w] 取较大值。B 在同一行取 dp[i][...]，相当于允许重复选取，那是完全背包。C 无条件加上第 i 件，忽略了容量约束和「不选更优」的情形。D 沿 w + w_i 方向取值，方向错误。",
+        "skill_tags": [
+          "动态规划",
+          "状态转移",
+          "背包问题"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "区间调度问题：给出若干区间，选出尽可能多的互不重叠区间。常见贪心策略是「反复选择结束时间最早、且与已选区间不冲突的区间」。该策略的正确性依据是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "所有区间长度相同，所以按结束时间排序等价于按长度排序，贪心自然最优。"
+          },
+          {
+            "key": "B",
+            "text": "该问题不具备贪心选择性质，贪心只是恰好在小规模数据上正确。"
+          },
+          {
+            "key": "C",
+            "text": "可以证明存在一个最优解包含结束时间最早的区间，再通过交换论证归纳得到整体最优。"
+          },
+          {
+            "key": "D",
+            "text": "每一步都选当前可选的结束最早区间就一定最优，因为贪心法对所有优化问题都成立。"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "标准证明分两步：贪心选择性质——存在包含最早结束区间的最优解（若最优解第一个区间结束更晚，换成结束最早的区间不会造成冲突）；最优子结构——选完后剩余问题结构相同且规模更小，归纳即得整体最优。A 的前提不成立，B 与事实相反，D 把贪心当成通用方法，也是错的。",
+        "skill_tags": [
+          "贪心算法",
+          "正确性证明",
+          "区间调度"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的记忆化斐波那契函数（首次调用 fib(n)）的时间复杂度和额外空间复杂度分别是：\n```python\ndef fib(n, memo={}):\n    if n < 2:\n        return n\n    if n in memo:\n        return memo[n]\n    memo[n] = fib(n - 1, memo) + fib(n - 2, memo)\n    return memo[n]\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "时间 O(2^n)，空间 O(n)"
+          },
+          {
+            "key": "B",
+            "text": "时间 O(n)，空间 O(n)"
+          },
+          {
+            "key": "C",
+            "text": "时间 O(n)，空间 O(1)"
+          },
+          {
+            "key": "D",
+            "text": "时间 O(n^2)，空间 O(n^2)"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "记忆化后每个 n 只会真正计算一次，其余调用 O(1) 命中缓存，因此时间 O(n)。memo 最多保存 n 个值，递归调用栈深度也是 O(n)，所以额外空间为 O(n)。C 忽略了 memo 表和调用栈的开销。",
+        "skill_tags": [
+          "递归",
+          "记忆化",
+          "复杂度分析"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于动态数组（如 Python 的 list）尾部追加操作的复杂度，下列说法正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "每次 append 都是最坏 O(n)，所以 n 次 append 的总时间是 O(n^2)，无法改进。"
+          },
+          {
+            "key": "B",
+            "text": "每次 append 都是严格 O(1)，因为数组总能在原地放下新元素，不会发生复制。"
+          },
+          {
+            "key": "C",
+            "text": "每次 append 平均 O(log n)，因为容量按 2 倍增长，需要执行 log n 次扩容。"
+          },
+          {
+            "key": "D",
+            "text": "单次 append 最坏 O(n)（触发扩容复制），但容量按倍数增长，n 次 append 的总代价为 O(n)，摊还到每次是 O(1)。"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "扩容时需要把已有元素复制到新空间，单次最坏 O(n)。但容量按固定倍数增长，前 n 次操作的总复制代价为 n + n/2 + n/4 + ... = O(n)，摊还到每次 append 是 O(1)。B 忽略了扩容复制，A 忽略了复制代价的几何级数求和，C 的估算方式也不成立。",
+        "skill_tags": [
+          "摊还分析",
+          "动态数组"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的二分查找用来在非降序数组 a 中判断 x 是否存在。它存在什么问题？\n```python\ndef find(a, x):\n    lo, hi = 0, len(a) - 1\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if a[mid] < x:\n            lo = mid\n        else:\n            hi = mid\n    return lo < len(a) and a[lo] == x\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "当 lo 和 hi 相邻时，若 a[mid] < x，赋值 lo = mid 不会收缩区间，可能造成死循环。"
+          },
+          {
+            "key": "B",
+            "text": "循环条件应为 lo <= hi，否则一定会漏掉数组的最后一个元素。"
+          },
+          {
+            "key": "C",
+            "text": "返回值应改为 a[lo] == x，否则访问 a[lo] 时会索引越界。"
+          },
+          {
+            "key": "D",
+            "text": "mid 应改用 (lo + hi + 1) // 2 计算，否则一定会死循环。"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "因为 mid = (lo + hi) // 2 向下取整，当 hi = lo + 1 时 mid 恰好等于 lo。此时若 a[mid] < x，执行 lo = mid 不改变 lo，区间不再缩小，就会死循环，正确写法应为 lo = mid + 1。其余选项描述的问题与该实现的实际情况不符，返回值中的 lo < len(a) 已经防住了越界。",
+        "skill_tags": [
+          "二分查找",
+          "调试",
+          "循环"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "求最长严格递增子序列的 O(n log n) 算法会维护一个辅助数组 tails。关于 tails 的含义，正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "tails 保存的就是最终的最长递增子序列本身，可直接作为答案返回。"
+          },
+          {
+            "key": "B",
+            "text": "tails[k] 表示所有长度为 k+1 的递增子序列中结尾元素的最大值，因此它是递减的。"
+          },
+          {
+            "key": "C",
+            "text": "tails[k] 表示所有长度为 k+1 的递增子序列中结尾元素的最小值，tails 本身严格递增，可以对其二分。"
+          },
+          {
+            "key": "D",
+            "text": "tails 就是原数组从小到大排序并去重后的结果，其长度即为答案。"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "tails[k] 记录长度恰为 k+1 的递增子序列中结尾元素的最小值，这样后续元素更容易接上，而且 tails 保持严格递增，可以用二分定位替换位置，把总时间降到 O(n log n)。它并不是最终的子序列，也不是排序结果。",
+        "skill_tags": [
+          "动态规划",
+          "最长递增子序列",
+          "二分查找"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "用贪心算法解 0/1 背包问题（按价值/重量比从大到小依次选取能放下的物品），下列说法正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "该贪心一定最优，因为单位重量价值最高的物品最划算，优先选取不会挤掉更优组合。"
+          },
+          {
+            "key": "B",
+            "text": "该贪心只在所有物品重量都是整数时才最优，重量出现非整数时才会失败。"
+          },
+          {
+            "key": "C",
+            "text": "该贪心与 0/1 背包的动态规划解法结果完全相同，只是运行常数更小。"
+          },
+          {
+            "key": "D",
+            "text": "该贪心不保证最优。例如容量为 10，物品为 (重量 6, 价值 8)、(重量 5, 价值 5)、(重量 5, 价值 5) 时，贪心先选 (6, 8) 得价值 8，而最优是选两件 (5, 5) 得价值 10。"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "按比值贪心在 0/1 背包上会失败。给定例子中贪心选中 (6, 8) 后剩余容量 4，放不下其它物品，总价值为 8；而选两件 (5, 5) 可得到 10，说明贪心不是最优。该策略只对可以取物品一部分的分数背包最优。",
+        "skill_tags": [
+          "贪心算法",
+          "反例",
+          "背包问题"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "有一个约 10^6 个整数的无序数组，需要反复回答约 10^6 次「某个值是否在数组中」的查询（不修改原数组）。在平均情况下，下列方案中总时间最优的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "每次查询都从头线性扫描数组，命中就提前结束。"
+          },
+          {
+            "key": "B",
+            "text": "先把所有元素放进哈希集合，之后每次查询平均 O(1)。"
+          },
+          {
+            "key": "C",
+            "text": "先排序 O(n log n)，之后每次查询用二分查找 O(log n)。"
+          },
+          {
+            "key": "D",
+            "text": "用两层循环预先比较所有元素对，把结果记录下来备用。"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "建哈希集合需要 O(n)，之后每次查询平均 O(1)，总代价约 O(n + q)，是平均情况下最优的。排序加二分是 O(n log n + q log n)，可行但更慢。A 是 O(nq)，D 是 O(n^2)，都不可取。",
+        "skill_tags": [
+          "算法选择",
+          "哈希表",
+          "复杂度分析"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "汉诺塔问题的移动次数满足 T(1) = 1，T(n) = 2T(n - 1) + 1（n > 1）。T(n) 等于：",
+        "options": [
+          {
+            "key": "A",
+            "text": "Θ(2^n)"
+          },
+          {
+            "key": "B",
+            "text": "Θ(n^2)"
+          },
+          {
+            "key": "C",
+            "text": "Θ(n log n)"
+          },
+          {
+            "key": "D",
+            "text": "Θ(n)"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "展开递推：T(n) = 2T(n-1) + 1 = 2^2 T(n-2) + 2 + 1 = ... = 2^n - 1，因此为 Θ(2^n)。这类「规模每次只减 1 却分成两支」的递推会带来指数级增长。",
+        "skill_tags": [
+          "递归",
+          "递推",
+          "复杂度分析"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在带非负权重的图上，用二叉堆（优先队列）实现 Dijkstra 算法，其时间复杂度通常写作（V 为顶点数，E 为边数）：",
+        "options": [
+          {
+            "key": "A",
+            "text": "O(V + E)"
+          },
+          {
+            "key": "B",
+            "text": "O(V^2)"
+          },
+          {
+            "key": "C",
+            "text": "O((V + E) log V)"
+          },
+          {
+            "key": "D",
+            "text": "O(V * E)"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "Dijkstra 中每条边最多触发一次松弛，每次入堆或出堆代价 O(log V)，因此总复杂度为 O((V + E) log V)。O(V^2) 是不用堆、每次线性扫描找最小距离顶点的实现；O(V + E) 是无权图 BFS 的复杂度。",
+        "skill_tags": [
+          "图算法",
+          "Dijkstra",
+          "复杂度分析"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于归并排序的复杂度，下列说法正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "时间复杂度 O(n log n)，额外空间 O(1)。"
+          },
+          {
+            "key": "B",
+            "text": "时间复杂度 O(n log n)，额外空间 O(n)。"
+          },
+          {
+            "key": "C",
+            "text": "时间复杂度 O(n^2)，额外空间 O(n)。"
+          },
+          {
+            "key": "D",
+            "text": "时间复杂度 O(n log n)，额外空间 O(log n)。"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "归并排序每层合并的总代价是 O(n)，共 O(log n) 层，所以时间 O(n log n)。合并时通常需要一个与原数组等长的辅助数组，因此额外空间为 O(n)。D 中的 O(log n) 是递归调用栈深度，而不是合并所需的空间。",
+        "skill_tags": [
+          "排序",
+          "分治",
+          "空间复杂度"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面用快速幂计算 a^n mod m 的函数，其时间复杂度是：\n```python\ndef power(a, n, m):\n    result = 1\n    a %= m\n    while n > 0:\n        if n & 1:\n            result = result * a % m\n        a = a * a % m\n        n >>= 1\n    return result\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "O(n)"
+          },
+          {
+            "key": "B",
+            "text": "O(n^2)"
+          },
+          {
+            "key": "C",
+            "text": "O(sqrt(n))"
+          },
+          {
+            "key": "D",
+            "text": "O(log n)"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "循环每次把 n 右移一位，执行的次数等于 n 的二进制位数，约为 log2 n，每次循环只做常数次乘法取模，因此总时间 O(log n)。逐次相乘的朴素做法才是 O(n)。",
+        "skill_tags": [
+          "快速幂",
+          "位运算",
+          "复杂度分析"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "函数 search_range(a, x) 返回非降序数组 a 中等于 x 的第一个和最后一个下标（不存在时返回 [-1, -1]）。为检验其边界处理，下列哪组测试用例覆盖最充分？",
+        "options": [
+          {
+            "key": "A",
+            "text": "只测「数组中间存在一个 x」这一种情况即可，其它情况都是它的特例。"
+          },
+          {
+            "key": "B",
+            "text": "只测「数组长度很大且 x 存在」这一种情况，大规模用例能覆盖所有边界。"
+          },
+          {
+            "key": "C",
+            "text": "覆盖空数组、单元素命中与不命中、x 小于所有元素、x 大于所有元素、x 恰好是首元素、x 恰好是尾元素，以及首尾都有重复 x 的情况。"
+          },
+          {
+            "key": "D",
+            "text": "只测 x 不存在的情况，因为 x 存在时返回值一定是正确的。"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "二分类问题的错误多出现在边界：空数组、单元素、目标落在数组两端之外、目标恰好在端点、以及重复元素导致左右边界判定错误。C 覆盖了这些情形，能有效暴露 off-by-one 和区间收缩错误；A、B、D 的覆盖都过窄。",
+        "skill_tags": [
+          "测试用例",
+          "边界处理",
+          "二分查找"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "硬币找零问题（coins 为硬币面值，求凑出金额 amount 所需的最少硬币数，无法凑出时返回 -1）用一维 DP 求解。关于初始化，正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "令 dp[0] = 0，dp[1..amount] 初始化为「大于任何可能答案」的大值（如 amount + 1），这样既能表示不可达，又不会与合法答案混淆。"
+          },
+          {
+            "key": "B",
+            "text": "令 dp[0] = 0，其余都初始化为 0，最后若 dp[amount] 为 0 就说明无法凑出。"
+          },
+          {
+            "key": "C",
+            "text": "令所有 dp[j] 都初始化为 1，表示每个金额至少需要一枚硬币，最后再减 1。"
+          },
+          {
+            "key": "D",
+            "text": "令 dp[0] = amount，其余初始化为 0，用 dp[0] 作为哨兵值判断是否可达。"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "dp[j] 表示凑出金额 j 的最少硬币数，dp[0] = 0 对应空集这个合法解。其余位置若初始化为 0，会让「不可达」和「用 0 枚硬币凑出」混淆；初始化为大值（最多用 amount 枚 1 元硬币，故取 amount + 1 即可）可兼作无穷大，最后仍为大值就说明不可达。转移为 dp[j] = min(dp[j], dp[j - coin] + 1)。",
+        "skill_tags": [
+          "动态规划",
+          "初始化",
+          "边界处理"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在「旋转排序数组」中查找最小值：数组由某个非降序数组旋转得到，且可能包含重复元素，例如 [1, 0, 1, 1, 1]。关于二分查找最小值的最坏时间复杂度，正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "最坏 O(log n)，因为每次都能用 nums[mid] 与 nums[hi] 的比较排除掉一半区间。"
+          },
+          {
+            "key": "B",
+            "text": "最坏 O(n)，因为当 nums[lo] == nums[mid] == nums[hi] 时无法判断最小值在哪一侧，只能收缩一个端点，最坏退化为线性扫描。"
+          },
+          {
+            "key": "C",
+            "text": "最坏 O(n log n)，因为必须先对数组排序才能确定旋转点的位置。"
+          },
+          {
+            "key": "D",
+            "text": "最坏 O(1)，因为最小值一定紧跟在旋转点之后，读取相邻两个元素即可。"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "不含重复元素时可以比较 nums[mid] 与 nums[hi]，每次排除一半区间，得到 O(log n)。但含重复元素时，一旦出现 nums[lo] == nums[mid] == nums[hi]，就无法判定最小值在左半还是右半，只能收缩端点（如 hi -= 1），最坏情况所有元素相同，退化为 O(n)。这是与无重复情形不同的常见分析陷阱。",
+        "skill_tags": [
+          "二分查找",
+          "边界处理",
+          "复杂度分析"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "有 n 个任务，每个任务有截止时间 d_i 和所需处理时间 t_i（均为正整数），任务必须连续执行完且一次只能执行一个。目标是最小化最大延迟，其中某任务的延迟指它的完工时间减去截止时间（可为负值，但比较时按实际差值计算）。下列做法正确的是：",
+        "options": [
+          {
+            "key": "A",
+            "text": "按处理时间 t_i 升序排列依次执行，即最短任务优先，让更多任务尽早完成。"
+          },
+          {
+            "key": "B",
+            "text": "按比值 t_i / d_i 升序排列依次执行，因为该比值同时考虑了处理时间和截止时间。"
+          },
+          {
+            "key": "C",
+            "text": "执行顺序不影响最大延迟，任意排列都会得到相同的最大延迟。"
+          },
+          {
+            "key": "D",
+            "text": "按截止时间 d_i 升序排列依次执行（最早截止优先，EDD 规则），可以通过交换论证证明它最优。"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "最小化最大延迟的经典结论是最早截止时间优先（EDD）。交换论证：若某个最优解中相邻两个任务里前者的截止时间晚于后者，交换两者后各任务的完工时间集合不变，且不会使最大延迟变大，因此总存在按截止时间升序的最优排列。按处理时间排序、按比值排序都不能保证最优，执行顺序显然也会影响各任务的完工时间，所以 C 错误。",
+        "skill_tags": [
+          "贪心算法",
+          "正确性证明",
+          "调度",
+          "迁移应用"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "topic": "算法设计与复杂度分析",
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "search_extract": "not_used",
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "731d0bc6-6a48-4df5-9892-5081dbe85d8a",
+    "status": "ready",
+    "question_count": 20,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:05:07.347Z",
+  "finished_at": "2026-10-10T08:06:27.112Z"
+}

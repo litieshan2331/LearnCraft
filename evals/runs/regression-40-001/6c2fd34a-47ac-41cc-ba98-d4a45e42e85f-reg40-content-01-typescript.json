@@ -1,0 +1,146 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "6c2fd34a-47ac-41cc-ba98-d4a45e42e85f",
+  "case_id": "reg40-content-01-typescript",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "card_content_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "schema_version": "card_content.v2",
+    "foundation": "这一章的主线只有一条：**类型是写在代码上的契约，编译器按契约检查，运行时并不会执行契约。** 学完你要能做三件事：用接口描述一个对象必须长什么样、给函数标注参数与返回值的类型、并说清楚为什么外部拿到的 JSON 光靠接口还不够。\n\n## 接口描述对象的必需属性\n\n**interface** 用来声明一个对象的形状，也就是它有哪些字段、每个字段是什么类型。写 `interface User { id: number; name: string; }` 的意思是：任何被标成 User 的值，都必须同时带有 id（数字）和 name（字符串），一个都不能少。这里有两个容易忽略的点：\n\n- 字段后面**不带问号**，就表示必需字段，缺少会报错；带问号如 `name?: string` 才是可选，读出来可能是 undefined。\n- 接口只是**描述**，它不会生成任何运行时代码，编译后接口就消失了，浏览器里拿不到一个叫 User 的东西。\n- 因此接口能拦住的是「你自己的代码写错了」，拦不住「外面传进来的数据不对」。\n\n## 函数类型：把契约继续传下去\n\n给函数标注类型时，**参数类型回答「我接受什么」，返回类型回答「我保证给你什么」**。例如 `function getUserName(user: User): string`，前半句说明调用者必须传一个满足 User 的对象，后半句说明这个函数一定会返回字符串，调用它的人可以放心当字符串用。返回类型值得显式写出来，原因是：\n\n- 如果只写参数不写返回值，类型是**推断**出来的，函数体一改推断结果就可能悄悄变，错误会跑到更远的调用处才暴露。\n- 显式写返回类型相当于给自己立了规矩，函数内部改坏了，报错位置就在函数本身，而不是在几百行之外的界面代码里。\n- 参数类型标成 User 之后，函数体里写 `user.nmae` 会立刻被编译器拦下，这是**拼写错误能在编辑阶段被发现**的直接来源。\n\n## 外部 JSON 必须单独校验\n\n**任何来自程序外部的数据——网络响应、本地文件、用户输入、JSON.parse 的结果——在编译器眼里都是未知的。** 原因是类型只在编译阶段存在，JSON 是运行时才产生的文本，编译器没法回到运行时去替你检查里面的字段。所以下面这段代码虽然在语法上说得通，逻辑上却是危险的：`const user = JSON.parse(text) as User;`（把解析结果直接断言成 User）。断言只是让编译器闭嘴，它什么都没检查；如果 JSON 里少了 name，程序会在读 `user.name` 时拿到 undefined，甚至更晚才崩。稳妥做法是两步：\n\n- 先用 **unknown** 接收外部数据，明确表示「我还不知道它是什么」。\n- 再逐字段判断类型，确认无误后才构造出一个真正的 User 返回；不符合就返回 null 或抛错，让问题停在边界上。\n\n## 形成判断方式\n\n看到一段报错时，先问自己：**这是编译期就能看见的类型错误，还是运行时的数据问题？** 如果错误来自「缺少必需属性」「类型不匹配」，那是编译期契约在起作用，改代码结构就能解决；如果错误出现在运行中、且数据来自外部，那说明边界上少了一道校验，补校验而不是补断言。记住一句话：**类型约束往前走一步，运行时的意外就往后退一步。**",
+    "worked_example": {
+      "explanation": "这个示例分四层：先定义 User 接口，再写一个只读名字的函数，然后写一个把未知数据转成 User 的校验函数，最后由入口把三者串起来。读的时候注意两条不同的边界——getUserName 接收的是已经可信的 User，parseUser 接收的是还不认识的外部数据。",
+      "files": [
+        {
+          "path": "src/types/user.ts",
+          "language": "ts",
+          "role": "types",
+          "content": "export interface User {\n  id: number;\n  name: string;\n}\n"
+        },
+        {
+          "path": "src/features/user/getUserName.ts",
+          "language": "ts",
+          "role": "module",
+          "content": "import type { User } from '../../types/user';\n\n// 这里已经默认 user 是可信的：参数类型是 User，不是 unknown。\nexport function getUserName(user: User): string {\n  return user.name;\n}\n"
+        },
+        {
+          "path": "src/features/user/parseUser.ts",
+          "language": "ts",
+          "role": "module",
+          "content": "import type { User } from '../../types/user';\n\n// 外部数据进来时是 unknown，必须逐字段检查后才能变成 User。\nexport function parseUser(raw: unknown): User | null {\n  if (typeof raw !== 'object' || raw === null) {\n    return null;\n  }\n\n  const candidate = raw as { id?: unknown; name?: unknown };\n  if (typeof candidate.id !== 'number' || typeof candidate.name !== 'string') {\n    return null;\n  }\n\n  return { id: candidate.id, name: candidate.name };\n}\n"
+        },
+        {
+          "path": "src/main.ts",
+          "language": "ts",
+          "role": "entry",
+          "content": "import type { User } from './types/user';\nimport { getUserName } from './features/user/getUserName';\nimport { parseUser } from './features/user/parseUser';\n\nfunction main(): void {\n  // 场景一：数据在代码里写死，编译器已经检查过，可以直接用。\n  const localUser: User = { id: 1, name: 'Ada' };\n  console.log(getUserName(localUser));\n\n  // 场景二：数据来自外部文本，必须先经过 parseUser 校验。\n  const raw: unknown = JSON.parse('{\"id\": 2, \"name\": \"Lin\"}');\n  const parsed = parseUser(raw);\n\n  if (parsed === null) {\n    console.log('数据格式不正确');\n    return;\n  }\n\n  console.log(getUserName(parsed));\n}\n\nmain();\n"
+        }
+      ],
+      "entry_file": "src/types/user.ts",
+      "call_sequence": [
+        {
+          "step": 1,
+          "file": "src/types/user.ts",
+          "function": "User",
+          "note": "先看接口声明了哪些必需属性，以及这里没有问号表示不可缺省"
+        },
+        {
+          "step": 2,
+          "file": "src/features/user/getUserName.ts",
+          "function": "getUserName",
+          "note": "再看一个受接口保护的函数：参数是 User，返回值显式标成 string"
+        },
+        {
+          "step": 3,
+          "file": "src/features/user/parseUser.ts",
+          "function": "parseUser",
+          "note": "接着看边界函数如何用 unknown 接收外部数据并逐字段校验"
+        },
+        {
+          "step": 4,
+          "file": "src/main.ts",
+          "function": "main",
+          "note": "最后看入口如何分别处理可信数据与外部数据两条路径"
+        }
+      ],
+      "expected_output": "src/main.ts › main：控制台先打印 Ada，再把外部文本校验成 User 后打印 Lin；如果 JSON 里缺少 name 或类型不对，parseUser 返回 null，程序打印「数据格式不正确」而不是继续往下读字段"
+    },
+    "pitfalls_debug": [
+      {
+        "title": "以为写了 User 接口，外部数据就自动被校验了",
+        "cause": "接口只存在于编译阶段，编译产物里没有任何检查代码，运行时不会因为数据「标了 User」而拦住它。",
+        "fix": "在数据进入程序的边界处写显式校验，例如 parseUser 那样用 typeof 逐个判断字段，通过了才返回 User。"
+      },
+      {
+        "title": "用 as User 把 JSON.parse 的结果直接断言掉",
+        "cause": "类型断言的作用是让编译器停止报错，它不做任何运行时检查，属于把问题往后推而不是解决。",
+        "fix": "先用 unknown 接收解析结果，再通过校验函数收窄类型；确实需要断言时，只在你已经从别处保证了数据形状的地方使用。"
+      },
+      {
+        "title": "只给参数标类型，返回值靠推断",
+        "cause": "返回值被推断出来后，函数体一改推断结果就跟着变，调用方可能在很远的地方才看到错误。",
+        "fix": "显式写出返回类型，例如 getUserName(user: User): string，把契约钉死在函数签名上。"
+      },
+      {
+        "title": "把必需字段误写成可选字段",
+        "cause": "多加一个问号，name 就变成可能为 undefined，函数里直接使用会留下隐患，甚至把错误带进返回类型。",
+        "fix": "只在字段确实可能不存在时才用 name?: string；如果允许缺失，函数签名和函数体都要一起处理 undefined 的情况。"
+      }
+    ],
+    "source_refs": [
+      {
+        "title": "TypeScript Handbook：Object Types（接口与属性修饰）",
+        "url": "https://www.typescriptlang.org/docs/handbook/2/objects.html"
+      },
+      {
+        "title": "TypeScript Handbook：More on Functions（参数与返回值类型）",
+        "url": "https://www.typescriptlang.org/docs/handbook/2/functions.html"
+      },
+      {
+        "title": "TypeScript Handbook：Everyday Types（unknown 与类型收窄）",
+        "url": "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html"
+      }
+    ],
+    "teaching_memory": {
+      "key_concepts": [
+        "interface 描述对象的必需属性，是编译期契约",
+        "函数参数类型表示接受什么，返回值类型表示保证什么",
+        "外部数据以 unknown 进入，需要显式校验后才能收窄成 User",
+        "类型只在编译阶段存在，运行时不会自动生效"
+      ],
+      "common_mistakes": [
+        "用 as User 断言外部 JSON，误以为断言等于校验",
+        "把必需属性写成可选属性，导致函数里出现未处理的 undefined",
+        "依赖返回值推断而不写返回类型，错误暴露位置偏远"
+      ],
+      "assessment_targets": [
+        "能写出包含 id: number 与 name: string 的 User 接口",
+        "能为接收 User 并返回名称的函数同时标注参数与返回值类型",
+        "能区分「缺少必需属性」的编译期错误与「外部数据未校验」的运行时风险"
+      ]
+    },
+    "plan_node_id": "50000000-0000-4000-8000-000000000001",
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "logical_session_key": "reg40-session-typescript"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "card_content_id": "454fb0f8-970f-45a0-860b-9d632f8eb018",
+    "plan_node_id": "50000000-0000-4000-8000-000000000001",
+    "tool_call_count": 0,
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:10:01.825Z",
+  "finished_at": "2026-10-10T08:10:19.118Z"
+}

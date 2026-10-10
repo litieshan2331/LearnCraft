@@ -6,6 +6,10 @@ FROM node:24.18.0-bookworm-slim
 ENV PNPM_HOME=/pnpm
 ENV PATH="${PNPM_HOME}:${PATH}"
 ENV NODE_ENV=development
+# 网络较慢时延长 pnpm 单请求超时并降低并发，避免代理连接被批量请求拖断。
+ENV PNPM_CONFIG_FETCH_TIMEOUT=300000
+ENV PNPM_CONFIG_FETCH_RETRIES=5
+ENV PNPM_CONFIG_NETWORK_CONCURRENCY=8
 
 # 在基础层安装并激活锁定版本，容器每次重启均可直接运行 pnpm。
 RUN corepack enable && corepack install --global pnpm@11.15.0

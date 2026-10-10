@@ -1,0 +1,211 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "15c3ae4e-3264-4ca4-92f5-c9a51aed2ed0",
+  "case_id": "reg40-posttest-08-http",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "posttest_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "post_test",
+    "question_count": 6,
+    "difficulty": "normal",
+    "plan_id": null,
+    "plan_node_id": "50000000-0000-4000-8000-000000000008",
+    "source_card_content_id": "60000000-0000-4000-8000-000000000008",
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "用 fetch 请求一个服务器返回 404 的地址时，下面描述正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "fetch 返回的 Promise 会被拒绝，直接进入 catch"
+          },
+          {
+            "key": "B",
+            "text": "fetch 通常仍然兑现为一个 Response，需要检查 response.ok"
+          },
+          {
+            "key": "C",
+            "text": "fetch 会自动抛出 Error，并把状态码写进错误消息"
+          },
+          {
+            "key": "D",
+            "text": "fetch 返回 null，表示这次请求没有响应内容"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "HTTP 状态和网络连接成功与否是两件事。收到 404 这类响应时，fetch 通常仍然兑现为 Response，所以应用要自己检查 response.ok 或状态码来决定处理路径。",
+        "skill_tags": [
+          "HTTP 状态与网络失败的区别",
+          "response.ok"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在一个 fetch 得到的 Response 上，response.ok 为 true 表示什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "响应体一定是合法 JSON，可以直接取字段"
+          },
+          {
+            "key": "B",
+            "text": "HTTP 状态码落在 200 到 299 这个范围里"
+          },
+          {
+            "key": "C",
+            "text": "HTTP 状态码一定等于 200"
+          },
+          {
+            "key": "D",
+            "text": "响应体一定不是空的，至少包含一段文本"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "ok 表示状态在 200 至 299 范围内，所以 201、204 等在范围内也算成功；它不代表状态一定是 200，也不代表响应体是 JSON 或非空。",
+        "skill_tags": [
+          "response.ok",
+          "HTTP 状态码"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，控制台输出是什么？\n```js\nexport async function readJsonResponse(response) {\n  if (!response.ok) {\n    throw new Error('HTTP ' + response.status);\n  }\n  if (response.status === 204) {\n    return null;\n  }\n  return await response.json();\n}\n```\n```js\nconsole.log(await readJsonResponse(new Response(null, { status: 204 })));\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "null"
+          },
+          {
+            "key": "B",
+            "text": "undefined"
+          },
+          {
+            "key": "C",
+            "text": "一个空对象 {}"
+          },
+          {
+            "key": "D",
+            "text": "抛出解析 JSON 失败的异常"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "204 属于 200 至 299，ok 为 true，所以不会抛错；接着命中 status === 204 的分支，直接返回 null，不调用 json，避免把没有内容的成功响应当成解析失败。",
+        "skill_tags": [
+          "204 无响应内容",
+          "分支处理"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码（readJsonResponse 与上一题相同），控制台会输出什么？\n```js\ntry {\n  await readJsonResponse(new Response(null, { status: 404 }));\n} catch (error) {\n  console.log(error.message);\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "HTTP 404"
+          },
+          {
+            "key": "B",
+            "text": "404"
+          },
+          {
+            "key": "C",
+            "text": "null"
+          },
+          {
+            "key": "D",
+            "text": "什么也不输出，因为 404 不会抛出错误"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "404 时 ok 为 false，函数在第一处判断就抛出 new Error('HTTP ' + response.status)，也就是消息为 HTTP 404 的错误，因此 catch 打印出 HTTP 404。",
+        "skill_tags": [
+          "对非 2xx 响应报告 HTTP 错误",
+          "response.ok"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于断网这类网络失败与 HTTP 500 响应，下面说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "断网时 fetch 的 Promise 可能被拒绝，需要 catch；HTTP 500 通常仍兑现为 Response"
+          },
+          {
+            "key": "B",
+            "text": "断网和 HTTP 500 都会让 fetch 的 Promise 被拒绝，都只会进入 catch"
+          },
+          {
+            "key": "C",
+            "text": "HTTP 500 兑现的 Response，其 ok 为 true，可以照常读取字段"
+          },
+          {
+            "key": "D",
+            "text": "断网时 fetch 兑现为 Response，只是 status 为 500，所以要检查 ok"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "网络失败可能直接使 fetch 返回的 Promise 拒绝；而 404、500 这类 HTTP 错误响应通常仍然兑现为 Response，它的 ok 为 false，需要应用自己检查状态。",
+        "skill_tags": [
+          "HTTP 错误与网络失败的区别",
+          "异常处理"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于 await response.json()，下面说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "它是同步方法，调用后立刻返回解析好的对象"
+          },
+          {
+            "key": "B",
+            "text": "它返回 Promise，内容不是合法 JSON 时会拒绝"
+          },
+          {
+            "key": "C",
+            "text": "只要 response.ok 为 true，它就一定能解析成功"
+          },
+          {
+            "key": "D",
+            "text": "对 204 响应调用它，会得到空对象 {}"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "json 返回 Promise，需要 await；如果响应内容不是合法 JSON，这个 Promise 会拒绝。ok 只说明状态在成功范围，并不保证内容是合法 JSON，204 也没有 JSON 文本可解析。",
+        "skill_tags": [
+          "异步 JSON 读取",
+          "204 无响应内容"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "source_card_content_id": "60000000-0000-4000-8000-000000000008",
+      "tool_call_count": 0,
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "8c3dc0ff-2566-4a63-99bb-062f953bf2e3",
+    "question_count": 6,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:17:41.739Z",
+  "finished_at": "2026-10-10T08:17:50.908Z"
+}

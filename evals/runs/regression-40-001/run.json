@@ -1,0 +1,214 @@
+{
+  "schema_version": "agent_eval.run_report.v1",
+  "run_id": "agent-eval-mv23s8vb",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "dataset_version": "regression-40-v1",
+  "total_cases": 40,
+  "completed_cases": 40,
+  "invalid_cases": 0,
+  "failed_cases": 0,
+  "cases": [
+    {
+      "case_id": "reg40-assessment-01-typescript",
+      "status": "completed",
+      "file_name": "183fc057-8238-4b90-bcfb-1056c97c5974-reg40-assessment-01-typescript.json"
+    },
+    {
+      "case_id": "reg40-assessment-02-python",
+      "status": "completed",
+      "file_name": "4c3da6e3-c323-4cfc-be6e-e2aaa20221da-reg40-assessment-02-python.json"
+    },
+    {
+      "case_id": "reg40-assessment-03-javascript",
+      "status": "completed",
+      "file_name": "a23dd646-9f91-4980-b927-5095c90c4f00-reg40-assessment-03-javascript.json"
+    },
+    {
+      "case_id": "reg40-assessment-04-java",
+      "status": "completed",
+      "file_name": "ee331edd-6344-42c8-9718-c9f133583cec-reg40-assessment-04-java.json"
+    },
+    {
+      "case_id": "reg40-assessment-05-go",
+      "status": "completed",
+      "file_name": "de2eb89d-ccd6-4725-86ea-4fae0a367dc9-reg40-assessment-05-go.json"
+    },
+    {
+      "case_id": "reg40-assessment-06-c",
+      "status": "completed",
+      "file_name": "48fcde30-1d20-4979-8fea-107cd7514168-reg40-assessment-06-c.json"
+    },
+    {
+      "case_id": "reg40-assessment-07-sql",
+      "status": "completed",
+      "file_name": "53d75f06-dc8d-485b-80ab-064604267132-reg40-assessment-07-sql.json"
+    },
+    {
+      "case_id": "reg40-assessment-08-http",
+      "status": "completed",
+      "file_name": "2683b116-b6a6-42ef-878a-880047d291f5-reg40-assessment-08-http.json"
+    },
+    {
+      "case_id": "reg40-assessment-09-testing",
+      "status": "completed",
+      "file_name": "48798e9c-6059-4618-a112-05b63151535a-reg40-assessment-09-testing.json"
+    },
+    {
+      "case_id": "reg40-assessment-10-algorithms",
+      "status": "completed",
+      "file_name": "f849e1dd-bc17-470f-848c-8bc869684ca3-reg40-assessment-10-algorithms.json"
+    },
+    {
+      "case_id": "reg40-plan-01-typescript",
+      "status": "completed",
+      "file_name": "5214dc63-cc21-4bef-a4c6-272d153e127e-reg40-plan-01-typescript.json"
+    },
+    {
+      "case_id": "reg40-plan-02-python",
+      "status": "completed",
+      "file_name": "67d5830c-f397-459f-8e1f-141171dfdb99-reg40-plan-02-python.json"
+    },
+    {
+      "case_id": "reg40-plan-03-javascript",
+      "status": "completed",
+      "file_name": "7b9ad014-5c46-4763-8543-9479fe739afe-reg40-plan-03-javascript.json"
+    },
+    {
+      "case_id": "reg40-plan-04-java",
+      "status": "completed",
+      "file_name": "ef291e59-8417-464d-ba34-53bf75884911-reg40-plan-04-java.json"
+    },
+    {
+      "case_id": "reg40-plan-05-go",
+      "status": "completed",
+      "file_name": "d11e2763-b36d-4ccf-8576-1801ce597c62-reg40-plan-05-go.json"
+    },
+    {
+      "case_id": "reg40-plan-06-c",
+      "status": "completed",
+      "file_name": "b2a2144a-c737-4888-b977-72815cafd32c-reg40-plan-06-c.json"
+    },
+    {
+      "case_id": "reg40-plan-07-sql",
+      "status": "completed",
+      "file_name": "7f28b262-c28b-42bf-a24f-1d2080b32b37-reg40-plan-07-sql.json"
+    },
+    {
+      "case_id": "reg40-plan-08-http",
+      "status": "completed",
+      "file_name": "4ac94629-0c24-4879-96e6-d3ffcac3b1b0-reg40-plan-08-http.json"
+    },
+    {
+      "case_id": "reg40-plan-09-testing",
+      "status": "completed",
+      "file_name": "045c0667-8f3b-4b3a-8433-aa056325c495-reg40-plan-09-testing.json"
+    },
+    {
+      "case_id": "reg40-plan-10-algorithms",
+      "status": "completed",
+      "file_name": "7e62d59a-0b14-4e17-aadc-9a53fa620096-reg40-plan-10-algorithms.json"
+    },
+    {
+      "case_id": "reg40-content-01-typescript",
+      "status": "completed",
+      "file_name": "6c2fd34a-47ac-41cc-ba98-d4a45e42e85f-reg40-content-01-typescript.json"
+    },
+    {
+      "case_id": "reg40-content-02-python",
+      "status": "completed",
+      "file_name": "bffa0511-db8d-4c7e-b964-9f782c5bd264-reg40-content-02-python.json"
+    },
+    {
+      "case_id": "reg40-content-03-javascript",
+      "status": "completed",
+      "file_name": "568be731-990c-4463-87d0-e55088edf767-reg40-content-03-javascript.json"
+    },
+    {
+      "case_id": "reg40-content-04-java",
+      "status": "completed",
+      "file_name": "5fdedf10-de0c-4102-9261-b916ead927c8-reg40-content-04-java.json"
+    },
+    {
+      "case_id": "reg40-content-05-go",
+      "status": "completed",
+      "file_name": "2f6f9e8c-0bdb-43f8-a74b-bc7c2c73f037-reg40-content-05-go.json"
+    },
+    {
+      "case_id": "reg40-content-06-c",
+      "status": "completed",
+      "file_name": "eaa38fa5-e433-4be3-88da-cedf330dcc16-reg40-content-06-c.json"
+    },
+    {
+      "case_id": "reg40-content-07-sql",
+      "status": "completed",
+      "file_name": "d29199fd-7db2-4772-badd-8b872ae0736c-reg40-content-07-sql.json"
+    },
+    {
+      "case_id": "reg40-content-08-http",
+      "status": "completed",
+      "file_name": "22b54e99-46f7-40d0-9824-f180237bf085-reg40-content-08-http.json"
+    },
+    {
+      "case_id": "reg40-content-09-testing",
+      "status": "completed",
+      "file_name": "5eaf2d41-67d4-41c3-aba3-2884cf09e98c-reg40-content-09-testing.json"
+    },
+    {
+      "case_id": "reg40-content-10-algorithms",
+      "status": "completed",
+      "file_name": "383687c3-9640-4a3d-8da9-52f78cc2ceb9-reg40-content-10-algorithms.json"
+    },
+    {
+      "case_id": "reg40-posttest-01-typescript",
+      "status": "completed",
+      "file_name": "11990e8e-1755-4840-8927-bde818ec5305-reg40-posttest-01-typescript.json"
+    },
+    {
+      "case_id": "reg40-posttest-02-python",
+      "status": "completed",
+      "file_name": "3487e928-5114-4e10-a016-2cb6c655af79-reg40-posttest-02-python.json"
+    },
+    {
+      "case_id": "reg40-posttest-03-javascript",
+      "status": "completed",
+      "file_name": "dab9286a-ebce-4bc3-a416-45b18eb1315c-reg40-posttest-03-javascript.json"
+    },
+    {
+      "case_id": "reg40-posttest-04-java",
+      "status": "completed",
+      "file_name": "21dade3b-fb06-4598-9134-0acdade352af-reg40-posttest-04-java.json"
+    },
+    {
+      "case_id": "reg40-posttest-05-go",
+      "status": "completed",
+      "file_name": "c99de5d3-04c0-4904-a6ea-8e77b32e810d-reg40-posttest-05-go.json"
+    },
+    {
+      "case_id": "reg40-posttest-06-c",
+      "status": "completed",
+      "file_name": "c43c52d4-067a-466f-8f35-7ef7465ec3ab-reg40-posttest-06-c.json"
+    },
+    {
+      "case_id": "reg40-posttest-07-sql",
+      "status": "completed",
+      "file_name": "2de4da8d-3009-459f-b11e-483810c7d670-reg40-posttest-07-sql.json"
+    },
+    {
+      "case_id": "reg40-posttest-08-http",
+      "status": "completed",
+      "file_name": "15c3ae4e-3264-4ca4-92f5-c9a51aed2ed0-reg40-posttest-08-http.json"
+    },
+    {
+      "case_id": "reg40-posttest-09-testing",
+      "status": "completed",
+      "file_name": "4f4b3400-3595-4ff6-a531-b2fed472dd9a-reg40-posttest-09-testing.json"
+    },
+    {
+      "case_id": "reg40-posttest-10-algorithms",
+      "status": "completed",
+      "file_name": "368912c7-bf48-4a60-9e30-5ce4cfbeef36-reg40-posttest-10-algorithms.json"
+    }
+  ],
+  "started_at": "2026-10-10T07:59:11.591Z",
+  "finished_at": "2026-10-10T08:18:36.774Z"
+}

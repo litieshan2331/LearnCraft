@@ -28,6 +28,7 @@ export interface AgentEvalCommandOptions {
   inputPath: string;
   datasetPath: string;
   outputDir: string;
+  retryFailed?: boolean;
 }
 
 /** 评测进程解析后的命令行配置。 */
@@ -142,7 +143,7 @@ export function formatAgentEvalCliUsage(): string {
     '用法：',
     '  agent-eval build [--input <草稿文件>] [--dataset <已构建评测集>]',
     '  agent-eval run --owner-id <用户UUID> [--dataset <评测集文件>] [--output <运行目录>]',
-    '  agent-eval score --owner-id <用户UUID> [--dataset <评测集文件>] [--output <运行目录>]',
+    '  agent-eval score --owner-id <用户UUID> [--dataset <评测集文件>] [--output <运行目录>] [--retry-failed]',
     '  agent-eval --owner-id <用户UUID> [--dataset <评测集文件>] [--output <运行目录>]',
     '',
     '选项：',
@@ -150,6 +151,7 @@ export function formatAgentEvalCliUsage(): string {
     '  --input <草稿文件>          build 阶段输入；默认：' + DEFAULT_AGENT_EVAL_DATASET_PATH,
     '  --dataset <评测集文件>      run/score 默认：evals/datasets/built.json。',
     '  --output <结果目录>         默认：' + DEFAULT_AGENT_EVAL_OUTPUT_DIR,
+    '  --retry-failed              仅用于 score；保留已有成功及无效结果，只重试 failed 并重新汇总。',
     '  --help                     显示帮助。',
   ].join('\n');
 }
@@ -190,10 +192,21 @@ function parseCommandOptions(
   let inputPath = DEFAULT_AGENT_EVAL_DATASET_PATH;
   let datasetPath = DEFAULT_AGENT_EVAL_BUILT_DATASET_PATH;
   let outputDir = DEFAULT_AGENT_EVAL_OUTPUT_DIR;
+  let retryFailed = false;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--help' || argument === '-h') {
       return { help: true };
+    }
+    if (argument === '--retry-failed') {
+      if (command !== 'score') {
+        throw new AgentEvalCliError('参数 --retry-failed 只能用于 score 命令。');
+      }
+      if (retryFailed) {
+        throw new AgentEvalCliError('参数 --retry-failed 只能指定一次。');
+      }
+      retryFailed = true;
+      continue;
     }
     const match = /^(--owner-id|--input|--dataset|--output)(?:=(.*))?$/.exec(argument ?? '');
     if (match === null) {
@@ -225,5 +238,5 @@ function parseCommandOptions(
       throw new AgentEvalCliError('参数 --owner-id 必须是合法 UUID。');
     }
   }
-  return { command, ownerId, inputPath, datasetPath, outputDir };
+  return { command, ownerId, inputPath, datasetPath, outputDir, ...(retryFailed ? { retryFailed: true } : {}) };
 }

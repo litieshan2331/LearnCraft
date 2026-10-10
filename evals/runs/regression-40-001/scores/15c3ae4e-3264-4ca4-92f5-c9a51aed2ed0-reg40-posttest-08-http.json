@@ -1,0 +1,249 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "15c3ae4e-3264-4ca4-92f5-c9a51aed2ed0",
+  "case_id": "reg40-posttest-08-http",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "posttest_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "kind": "post_test",
+    "question_count": 6,
+    "difficulty": "normal",
+    "plan_id": null,
+    "plan_node_id": "50000000-0000-4000-8000-000000000008",
+    "source_card_content_id": "60000000-0000-4000-8000-000000000008",
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "用 fetch 请求一个服务器返回 404 的地址时，下面描述正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "fetch 返回的 Promise 会被拒绝，直接进入 catch"
+          },
+          {
+            "key": "B",
+            "text": "fetch 通常仍然兑现为一个 Response，需要检查 response.ok"
+          },
+          {
+            "key": "C",
+            "text": "fetch 会自动抛出 Error，并把状态码写进错误消息"
+          },
+          {
+            "key": "D",
+            "text": "fetch 返回 null，表示这次请求没有响应内容"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "HTTP 状态和网络连接成功与否是两件事。收到 404 这类响应时，fetch 通常仍然兑现为 Response，所以应用要自己检查 response.ok 或状态码来决定处理路径。",
+        "skill_tags": [
+          "HTTP 状态与网络失败的区别",
+          "response.ok"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在一个 fetch 得到的 Response 上，response.ok 为 true 表示什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "响应体一定是合法 JSON，可以直接取字段"
+          },
+          {
+            "key": "B",
+            "text": "HTTP 状态码落在 200 到 299 这个范围里"
+          },
+          {
+            "key": "C",
+            "text": "HTTP 状态码一定等于 200"
+          },
+          {
+            "key": "D",
+            "text": "响应体一定不是空的，至少包含一段文本"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "ok 表示状态在 200 至 299 范围内，所以 201、204 等在范围内也算成功；它不代表状态一定是 200，也不代表响应体是 JSON 或非空。",
+        "skill_tags": [
+          "response.ok",
+          "HTTP 状态码"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，控制台输出是什么？\n```js\nexport async function readJsonResponse(response) {\n  if (!response.ok) {\n    throw new Error('HTTP ' + response.status);\n  }\n  if (response.status === 204) {\n    return null;\n  }\n  return await response.json();\n}\n```\n```js\nconsole.log(await readJsonResponse(new Response(null, { status: 204 })));\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "null"
+          },
+          {
+            "key": "B",
+            "text": "undefined"
+          },
+          {
+            "key": "C",
+            "text": "一个空对象 {}"
+          },
+          {
+            "key": "D",
+            "text": "抛出解析 JSON 失败的异常"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "204 属于 200 至 299，ok 为 true，所以不会抛错；接着命中 status === 204 的分支，直接返回 null，不调用 json，避免把没有内容的成功响应当成解析失败。",
+        "skill_tags": [
+          "204 无响应内容",
+          "分支处理"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码（readJsonResponse 与上一题相同），控制台会输出什么？\n```js\ntry {\n  await readJsonResponse(new Response(null, { status: 404 }));\n} catch (error) {\n  console.log(error.message);\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "HTTP 404"
+          },
+          {
+            "key": "B",
+            "text": "404"
+          },
+          {
+            "key": "C",
+            "text": "null"
+          },
+          {
+            "key": "D",
+            "text": "什么也不输出，因为 404 不会抛出错误"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "404 时 ok 为 false，函数在第一处判断就抛出 new Error('HTTP ' + response.status)，也就是消息为 HTTP 404 的错误，因此 catch 打印出 HTTP 404。",
+        "skill_tags": [
+          "对非 2xx 响应报告 HTTP 错误",
+          "response.ok"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于断网这类网络失败与 HTTP 500 响应，下面说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "断网时 fetch 的 Promise 可能被拒绝，需要 catch；HTTP 500 通常仍兑现为 Response"
+          },
+          {
+            "key": "B",
+            "text": "断网和 HTTP 500 都会让 fetch 的 Promise 被拒绝，都只会进入 catch"
+          },
+          {
+            "key": "C",
+            "text": "HTTP 500 兑现的 Response，其 ok 为 true，可以照常读取字段"
+          },
+          {
+            "key": "D",
+            "text": "断网时 fetch 兑现为 Response，只是 status 为 500，所以要检查 ok"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "网络失败可能直接使 fetch 返回的 Promise 拒绝；而 404、500 这类 HTTP 错误响应通常仍然兑现为 Response，它的 ok 为 false，需要应用自己检查状态。",
+        "skill_tags": [
+          "HTTP 错误与网络失败的区别",
+          "异常处理"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于 await response.json()，下面说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "它是同步方法，调用后立刻返回解析好的对象"
+          },
+          {
+            "key": "B",
+            "text": "它返回 Promise，内容不是合法 JSON 时会拒绝"
+          },
+          {
+            "key": "C",
+            "text": "只要 response.ok 为 true，它就一定能解析成功"
+          },
+          {
+            "key": "D",
+            "text": "对 204 响应调用它，会得到空对象 {}"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "json 返回 Promise，需要 await；如果响应内容不是合法 JSON，这个 Promise 会拒绝。ok 只说明状态在成功范围，并不保证内容是合法 JSON，204 也没有 JSON 文本可解析。",
+        "skill_tags": [
+          "异步 JSON 读取",
+          "204 无响应内容"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "source_card_content_id": "60000000-0000-4000-8000-000000000008",
+      "tool_call_count": 0,
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "六道题的答案与解析均与固定教材事实一致：404 仍需检查 response.ok，ok 表示 200–299，204 返回 null，404 抛出 HTTP 404，网络失败与 HTTP 500 区分明确，json 返回 Promise 且非法 JSON 会拒绝。",
+      "evidence": [
+        "candidate_output.questions[2].answer_key：204 题答案为 A，与 readJsonResponse 返回 null 一致",
+        "candidate_output.questions[3].explanation：404 抛出消息为 HTTP 404，与 reference_facts 一致"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "题量恰好 6，覆盖全部 required_knowledge_points，并覆盖两个主要误区：只靠 catch 判断 HTTP 错误、对 204 一律调用 json；同时包含两道代码理解题。",
+      "evidence": [
+        "candidate_output.question_count：6，与 input_snapshot.question_count 一致",
+        "candidate_output.questions[0].skill_tags 与 questions[4].skill_tags：覆盖 HTTP 错误与网络失败的区别"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "所有题目只考查当前节点中的 Response.ok、HTTP 状态、204、异步 JSON 读取以及 HTTP 错误与网络失败的区别，没有引入未学框架或真实服务作为作答前提。",
+      "evidence": [
+        "candidate_output.questions[1].prompt：围绕 response.ok 的含义提问",
+        "candidate_output.questions[5].prompt：围绕 await response.json() 提问，未涉及未提供的新概念"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "题干、选项和代码片段简洁清楚，解析能定位到具体概念、状态码范围或代码分支行为。",
+      "evidence": [
+        "candidate_output.questions[2].explanation：明确说明 204 命中 status === 204 分支并返回 null",
+        "candidate_output.questions[4].explanation：清楚区分断网时 Promise 可能拒绝与 HTTP 500 仍兑现为 Response"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 5,
+      "reason": "面向刚学完本章的初学者，normal 难度下主要在已学概念内考查代码行为判断和简单应用，题干提供了足够上下文。",
+      "evidence": [
+        "candidate_output.questions[3].prompt：通过 try/catch 与固定 404 Response 考查已学错误分支",
+        "candidate_output.questions[5].explanation：用教材内的 json 返回 Promise 与 ok 的边界解释选项"
+      ]
+    }
+  },
+  "weighted_score": 5,
+  "percentage_score": 100,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:17:41.739Z",
+  "finished_at": "2026-10-10T09:58:23.586Z"
+}

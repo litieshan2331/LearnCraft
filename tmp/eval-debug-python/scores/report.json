@@ -1,0 +1,30 @@
+{
+  "schema_version": "agent_eval.report.v1",
+  "run_id": "agent-eval-mv23s8vb",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "dataset_version": "regression-40-v1",
+  "judge_model": "deepseek-v4-flash-0731",
+  "total_cases": 1,
+  "scored_cases": 0,
+  "invalid_cases": 0,
+  "failed_cases": 1,
+  "dimension_averages": {
+    "correctness": null,
+    "completeness": null,
+    "relevance": null,
+    "readability": null,
+    "teaching_adaptation": null
+  },
+  "weighted_average": null,
+  "percentage_average": null,
+  "cases": [
+    {
+      "case_id": "reg40-assessment-02-python",
+      "status": "failed",
+      "weighted_score": null,
+      "percentage_score": null
+    }
+  ],
+  "started_at": "2026-10-10T07:59:11.591Z",
+  "finished_at": "2026-10-10T09:05:50.205Z"
+}

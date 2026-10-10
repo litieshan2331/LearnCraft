@@ -1,0 +1,387 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "183fc057-8238-4b90-bcfb-1056c97c5974",
+  "case_id": "reg40-assessment-01-typescript",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "assessment_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "diagnostic",
+    "question_count": 12,
+    "difficulty": "hard",
+    "plan_id": null,
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "阅读下面的代码，变量 `label` 被推断为什么类型？\n```ts\nlet label = \"hello\";\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "`\"hello\"`，即字符串字面量类型"
+          },
+          {
+            "key": "B",
+            "text": "`string`，即字符串类型"
+          },
+          {
+            "key": "C",
+            "text": "`any`，即任意类型"
+          },
+          {
+            "key": "D",
+            "text": "`unknown`，即未知类型"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "用 let 声明并用字符串初始化时，TypeScript 推断出的是宽泛的 string 类型。若换成 const，才会推断为字面量类型 \"hello\"。",
+        "skill_tags": [
+          "类型推断",
+          "基础类型"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的代码在编译时会报错，原因是什么？\n```ts\nfunction formatPrice(value: number): string {\n  return value;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "参数 value 没有默认值，需要先声明默认值"
+          },
+          {
+            "key": "B",
+            "text": "函数缺少 return 语句，TS 会提示没有返回值"
+          },
+          {
+            "key": "C",
+            "text": "返回值实际是 number，不能赋给声明的 string 返回类型"
+          },
+          {
+            "key": "D",
+            "text": "number 不能作为函数参数的类型使用"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "函数已经显式声明返回类型为 string，而 return 的 value 是 number，编译器会报「number 不能赋给 string」。这是返回值类型标注与实现不一致的典型错误。",
+        "skill_tags": [
+          "函数返回值类型",
+          "类型错误排查"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的代码可以通过 TypeScript 编译吗？\n```ts\ninterface User {\n  name: string;\n  age?: number;\n}\n\nconst user: User = { name: \"Ada\" };\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "不能通过，因为缺少 age 属性会报错"
+          },
+          {
+            "key": "B",
+            "text": "可以通过，age 带问号表示可选，可以不提供"
+          },
+          {
+            "key": "C",
+            "text": "可以通过，但必须把 age 显式写成 null"
+          },
+          {
+            "key": "D",
+            "text": "不能通过，User 必须先声明为 class 才能使用"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "接口属性后的问号表示该属性可选，对象字面量可以省略它。省略后读取 user.age 得到的类型是 number | undefined。",
+        "skill_tags": [
+          "接口",
+          "对象建模",
+          "可选属性"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的代码会怎样？\n```ts\ninterface Point {\n  x: number;\n  y: number;\n}\n\nconst points: Point[] = [];\npoints.push({ x: 3 });\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "编译报错，因为 { x: 3 } 缺少 Point 要求的 y 属性"
+          },
+          {
+            "key": "B",
+            "text": "编译通过，缺少的 y 会被自动补成 0"
+          },
+          {
+            "key": "C",
+            "text": "编译通过，数组元素类型会自动放宽为 any"
+          },
+          {
+            "key": "D",
+            "text": "编译通过，但运行时报错，push 不接受对象"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "points 被标注为 Point[]，push 的实参必须满足 Point，而 { x: 3 } 缺少必需的 y 属性，编译期就会报错。TypeScript 不会自动补齐缺失属性或放宽元素类型。",
+        "skill_tags": [
+          "接口",
+          "数组类型",
+          "类型错误排查"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面函数中，`id.toUpperCase()` 这一行能通过编译的原因是什么？\n```ts\nfunction normalize(id: string | number) {\n  if (typeof id === \"string\") {\n    return id.toUpperCase();\n  }\n  return id.toFixed(2);\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "toUpperCase 在 string 和 number 上都有定义"
+          },
+          {
+            "key": "B",
+            "text": "if 分支内 id 被收窄为 string，因此可以调用"
+          },
+          {
+            "key": "C",
+            "text": "TS 会自动把 number 转换为 string 再调用"
+          },
+          {
+            "key": "D",
+            "text": "必须写成 (id as string).toUpperCase() 才能通过编译"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "联合类型 string | number 经过 typeof id === \"string\" 判断后，if 分支内 id 被收窄为 string，后续分支则被收窄为 number，因此两个分支的方法调用都合法，不需要类型断言。",
+        "skill_tags": [
+          "联合类型",
+          "类型收窄"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面的代码在编译时会报什么错？\n```ts\nfunction parseName(input: unknown) {\n  return input.trim();\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "没有报错，unknown 类型可以调用任意方法"
+          },
+          {
+            "key": "B",
+            "text": "报错：函数缺少返回类型标注"
+          },
+          {
+            "key": "C",
+            "text": "报错：input 是 unknown 类型，不能直接调用 trim"
+          },
+          {
+            "key": "D",
+            "text": "报错：trim 只能用于 string 类型的变量"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "unknown 是类型安全的顶层类型，编译器不允许在它上面直接调用方法或访问属性。需要先用 typeof input === \"string\" 等方式收窄，才能调用 trim。",
+        "skill_tags": [
+          "unknown",
+          "类型收窄",
+          "类型错误排查"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，下列说法正确的是？\n```ts\nconst raw = '{\"age\": \"18\"}';\nconst data = JSON.parse(raw) as { age: number };\nconsole.log(data.age + 1);\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "编译通过，但运行时 data.age 仍是字符串，加法结果不符合预期"
+          },
+          {
+            "key": "B",
+            "text": "编译报错，JSON.parse 的返回值不能断言成对象类型"
+          },
+          {
+            "key": "C",
+            "text": "as 断言会在运行时检查 age 是否为 number，并自动完成转换"
+          },
+          {
+            "key": "D",
+            "text": "运行时会抛出异常，因为 \"18\" 不是 number 类型"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "as 只影响编译期类型，不会在运行时校验或转换数据。JSON.parse 得到的是字符串 \"18\"，data.age + 1 实际执行字符串拼接得到 \"181\"。要保证安全，需要在运行时校验后再使用。",
+        "skill_tags": [
+          "类型断言",
+          "编译期与运行时",
+          "外部输入校验"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，结果是？\n```ts\ntype Status = \"idle\" | \"loading\" | \"done\";\nlet status: Status = \"loading\";\nstatus = \"error\";\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "编译通过，任意字符串都可以赋给 Status"
+          },
+          {
+            "key": "B",
+            "text": "编译通过，但运行时会抛出异常"
+          },
+          {
+            "key": "C",
+            "text": "编译报错，因为 status 声明后不能再重新赋值"
+          },
+          {
+            "key": "D",
+            "text": "编译报错，`\"error\"` 不在 Status 允许的取值范围内"
+          }
+        ],
+        "answer_key": "D",
+        "explanation": "Status 是三个字符串字面量组成的联合类型，只允许这三个取值。赋值为 \"error\" 会在编译期报错，而且这类错误在代码运行前就能被发现。",
+        "skill_tags": [
+          "字面量类型",
+          "联合类型"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在开启 strict 的项目中，下面的代码会怎样？\n```ts\ninterface Config {\n  retries?: number;\n}\n\nfunction getRetries(config: Config): number {\n  return config.retries;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "编译通过，可选属性会被自动当作 0 处理"
+          },
+          {
+            "key": "B",
+            "text": "编译报错，config.retries 的类型是 number | undefined，不能作为 number 返回"
+          },
+          {
+            "key": "C",
+            "text": "编译报错，因为 retries 不能声明为可选属性"
+          },
+          {
+            "key": "D",
+            "text": "编译通过，但运行时一定返回 undefined"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "可选属性读取时可能得到 undefined，因此 config.retries 的类型是 number | undefined，不能直接当作 number 返回。常见做法是先判断是否为空，或用 ?? 提供默认值。",
+        "skill_tags": [
+          "可选属性",
+          "undefined",
+          "strict 检查"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "在开启 noImplicitAny 的项目中，下面的代码会怎样？\n```ts\nfunction add(a: number, b) {\n  return a + b;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "编译报错，参数 b 缺少类型标注，会被推断为 any"
+          },
+          {
+            "key": "B",
+            "text": "编译通过，b 会根据 a 自动推断为 number"
+          },
+          {
+            "key": "C",
+            "text": "编译报错，函数必须显式声明返回类型"
+          },
+          {
+            "key": "D",
+            "text": "编译通过，b 默认被当作 string 处理"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "函数参数没有可从上下文推断的类型时，未标注就会被视为隐式 any，noImplicitAny 下会报错。参数之间不会相互推断，需要显式写成 b: number。",
+        "skill_tags": [
+          "函数参数类型",
+          "隐式 any",
+          "类型推断"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，说法正确的是？\n```ts\ninterface Product {\n  name: string;\n  price: number;\n}\n\nfunction namesOf(products: Product[]): string[] {\n  return products.map((p) => p.name);\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "编译报错，map 的回调参数必须显式标注类型"
+          },
+          {
+            "key": "B",
+            "text": "编译报错，返回值必须是 Product[] 而不是 string[]"
+          },
+          {
+            "key": "C",
+            "text": "回调参数 p 被推断为 Product，函数返回 string[]"
+          },
+          {
+            "key": "D",
+            "text": "回调参数 p 被推断为 any，因为没有显式标注"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "products 的元素类型是 Product，map 的回调参数由数组元素类型提供上下文类型，因此 p 自动推断为 Product，p.name 是 string，回调整体返回 string[]，与声明的返回类型一致。",
+        "skill_tags": [
+          "接口",
+          "数组方法",
+          "上下文类型推断"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，最后一行能访问 `shape.width` 的原因是？\n```ts\ntype Shape =\n  | { kind: \"circle\"; radius: number }\n  | { kind: \"rect\"; width: number; height: number };\n\nfunction area(shape: Shape): number {\n  if (shape.kind === \"circle\") {\n    return Math.PI * shape.radius * shape.radius;\n  }\n  return shape.width * shape.height;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "Shape 的每个成员都定义了 width 属性"
+          },
+          {
+            "key": "B",
+            "text": "if 分支排除了 kind 为 `\"circle\"` 的情况，后面 shape 被收窄为 rect 类型"
+          },
+          {
+            "key": "C",
+            "text": "kind 是可选属性，类型检查会跳过 width 的检查"
+          },
+          {
+            "key": "D",
+            "text": "必须先写 shape as Rect 断言，否则这里一定会报错"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "这是可辨识联合：两个成员都有 kind 属性且取值不同。用 kind 比较后，if 分支内收窄为 circle 类型，其余路径自动收窄为 rect 类型，因此在函数末尾可以安全访问 width 和 height。",
+        "skill_tags": [
+          "可辨识联合",
+          "类型收窄",
+          "接口建模"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "topic": "TypeScript 类型安全基础",
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "search_extract": "not_used",
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "396a53cd-f23b-4016-9a94-f3e799c233d5",
+    "status": "ready",
+    "question_count": 12,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T07:59:11.592Z",
+  "finished_at": "2026-10-10T07:59:44.342Z"
+}

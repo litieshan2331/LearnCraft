@@ -1,0 +1,218 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "3487e928-5114-4e10-a016-2cb6c655af79",
+  "case_id": "reg40-posttest-02-python",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "posttest_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "kind": "post_test",
+    "question_count": 5,
+    "difficulty": "normal",
+    "plan_id": null,
+    "plan_node_id": "50000000-0000-4000-8000-000000000002",
+    "source_card_content_id": "60000000-0000-4000-8000-000000000002",
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "要把数值列表里的元素逐个累加起来，累加变量（例如 total）应该在哪里初始化为 0？",
+        "options": [
+          {
+            "key": "A",
+            "text": "放在循环体内部，每一轮开始时都重新设为 0"
+          },
+          {
+            "key": "B",
+            "text": "放在进入循环之前，循环外的函数体开头"
+          },
+          {
+            "key": "C",
+            "text": "放在循环结束之后，紧贴 return 之前"
+          },
+          {
+            "key": "D",
+            "text": "通过函数参数由调用方传进来"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "累加变量必须在循环外初始化。如果在循环内每轮重置为 0，前面元素累加的结果会被丢弃，最后只剩最后一个元素的值。",
+        "skill_tags": [
+          "循环外初始化累加变量",
+          "for 遍历列表元素"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出的结果是什么？\n```python\ndef sum_scores(scores):\n    total = 0\n    for score in scores:\n        total = 0\n        total += score\n    return total\n\nprint(sum_scores([2, 4, 6]))\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "2"
+          },
+          {
+            "key": "B",
+            "text": "4"
+          },
+          {
+            "key": "C",
+            "text": "6"
+          },
+          {
+            "key": "D",
+            "text": "12"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "total 在循环体内被重新设为 0，所以每轮都丢弃之前的累计结果；循环结束时 total 就是最后一项 6。把 total = 0 移到循环外才能得到 12。",
+        "skill_tags": [
+          "在循环内重置 total",
+          "累加求和"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，输出的结果是什么？\n```python\ndef sum_scores(scores):\n    total = 0\n    for score in scores:\n        total += score\n        return total\n\nprint(sum_scores([2, 4, 6]))\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "12"
+          },
+          {
+            "key": "B",
+            "text": "6"
+          },
+          {
+            "key": "C",
+            "text": "2"
+          },
+          {
+            "key": "D",
+            "text": "0"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "return 写在循环体内，处理第一个元素 2 之后就结束函数并返回，后面的 4 和 6 根本没参与累加。return 应放在循环完成之后。",
+        "skill_tags": [
+          "在循环内提前 return",
+          "循环后返回结果"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "使用下面这个函数调用：\n```python\nprint(sum_scores([]))\n```\n其中 sum_scores 的定义是先初始化 total = 0，再用 for 循环累加，最后 return total。屏幕上的输出是什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "0"
+          },
+          {
+            "key": "B",
+            "text": "None"
+          },
+          {
+            "key": "C",
+            "text": "报错 TypeError"
+          },
+          {
+            "key": "D",
+            "text": "空列表 []"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "空列表不执行任何一轮循环，函数跳过累加过程，直接返回初始值 0，所以输出 0。",
+        "skill_tags": [
+          "空列表处理",
+          "for 遍历列表元素"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "有同学这样写函数：\n```python\ndef sum_scores(scores):\n    total = 0\n    for score in scores:\n        total += score\n    print(total)\n```\n执行 `result = sum_scores([2, 4, 6])` 之后，变量 result 的值是什么？",
+        "options": [
+          {
+            "key": "A",
+            "text": "12"
+          },
+          {
+            "key": "B",
+            "text": "None"
+          },
+          {
+            "key": "C",
+            "text": "0"
+          },
+          {
+            "key": "D",
+            "text": "报错 NameError"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "函数里没有 return，只有 print。print 只是在屏幕上展示 12，并不能把结果交回给调用方，因此 result 拿到的是 Python 的默认返回值 None。要得到 12 必须写成 return total。",
+        "skill_tags": [
+          "print 与 return 的区别",
+          "return 返回结果"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "source_card_content_id": "60000000-0000-4000-8000-000000000002",
+      "tool_call_count": 0,
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "五道题的代码行为、答案与解析均与教材事实一致：循环内重置 total 得最后一项，循环内 return 返回首项，空列表返回 0，无 return 时调用方得到 None，且 print 与 return 的区分正确。",
+      "evidence": [
+        "candidate_output.questions[1].answer_key：C，解析说明 total 在循环内被重置，末项为 6",
+        "candidate_output.questions[3].answer_key：A，解析说明空列表直接返回初始值 0"
+      ]
+    },
+    "completeness": {
+      "score": 4,
+      "reason": "题量准确且覆盖了四个 required_knowledge_points 和两个主要误区，但没有验证标准调用 sum_scores([2,4,6]) 返回 12，也没有涉及函数不修改输入列表这一教材边界。",
+      "evidence": [
+        "candidate_output.questions[1].prompt：使用 [2,4,6] 但只考查循环内重置 total 的错误变体，未正面验证返回 12",
+        "candidate_output.questions：没有题目检查调用后输入列表是否保持不变"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "所有题目均围绕本章的列表遍历、累加初始化、循环后 return、空列表处理及 print/return 区别，没有引入未提供的框架或真实服务。",
+      "evidence": [
+        "candidate_output.questions[4].skill_tags：包含 print 与 return 的区别、return 返回结果，均可对应 card_content_context.foundation"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "题干、代码片段和选项简洁清楚，解析能定位到具体代码行为或概念。",
+      "evidence": [
+        "candidate_output.questions[2].explanation：直接说明 return 在循环体内导致只处理第一个元素 2"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 5,
+      "reason": "面向刚学完本章的初学者，normal 难度集中在已学概念内的代码阅读和误区辨析，解析能帮助迁移到正确写法。",
+      "evidence": [
+        "candidate_output.questions[0].prompt：以累加变量初始化位置为核心，适合巩固本章概念"
+      ]
+    }
+  },
+  "weighted_score": 4.8,
+  "percentage_score": 96,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:15:43.190Z",
+  "finished_at": "2026-10-10T09:51:37.878Z"
+}

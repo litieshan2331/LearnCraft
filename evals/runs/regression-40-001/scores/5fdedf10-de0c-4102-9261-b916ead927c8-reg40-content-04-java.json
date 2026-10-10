@@ -1,0 +1,161 @@
+{
+  "schema_version": "agent_eval.case_result.v1",
+  "run_id": "5fdedf10-de0c-4102-9261-b916ead927c8",
+  "case_id": "reg40-content-04-java",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "card_content_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "judge_model": "deepseek-v4.1-flash",
+  "candidate_output": {
+    "schema_version": "card_content.v2",
+    "foundation": "## 结论：构造方法决定对象「出生时的状态」\n\n**构造方法是对象被 new 出来时唯一自动执行的一段代码**，它的职责是把每个实例字段从 Java 的默认值（引用类型是 null、数值是 0）变成有业务含义的初始值。\n\n- 它必须与类同名，例如类叫 Product，构造方法就叫 Product；\n- 它**没有返回类型**，连 void 都不写，一旦写了 void 就退化成普通方法；\n- 没有手写任何构造方法时，编译器会自动补一个无参构造方法；但只要你写了带参构造方法，这个自动版本就不再存在。\n\n## 参数名与字段名撞车时，用 this 指明「对象自己的字段」\n\n当构造方法的参数叫 name，类里也有一个实例字段 name，「就近原则」会优先把 name 当成参数，所以必须用 this.name 才表示「这个对象自己的字段」。\n\n- this 写在实例方法或构造方法里，指「当前正在被操作的那个对象」；\n- 于是 this.name = name 读作：把参数 name 的值，写进当前对象的实例字段 name；\n- private 修饰字段表示只有 Product 类内部的代码能直接读写它，外部想读必须经过公开的实例方法（通常叫 getName 这类读取方法，也就是 getter）。\n\n## 两个对象各自持有一份实例字段，因此互不覆盖\n\n每执行一次 new Product(...)，Java 都会新分配一块对象空间，里面装着属于它自己的一份 name 和 price；两个变量指向两块不同的空间，改一个不会影响另一个。\n\n- 这与 static 字段形成对比：static 字段整个类共用一份，才会出现「后创建的覆盖先创建的」；\n- tea 与 cup 的名字不同，是因为它们各自保存了构造时传入的那次参数值，不是因为赋值先后顺序；\n- 封装带来的判断方式是：字段用 private 藏起来，读取走公开的实例方法，让状态只能从受控入口被观察。\n\n## 读代码时的判断顺序\n\n看到一个字段，先问它「什么时候被赋值、由谁赋值」，再问「外部怎样读到它」。\n\n- 赋值发生在构造方法里 → 这是对象出生就确定的状态；\n- 赋值发生在 setter 或普通方法里 → 这是运行过程中可变的**状态**；\n- 只有读取方法没有写入方法 → 说明这个字段对外是只读视图，外部只能观察不能改。",
+    "worked_example": {
+      "explanation": "先读 Product.java：字段是 private，构造方法负责把传入的名字与价格写进实例字段，实例方法负责把字段读出来。再看 Main.java：连续 new 出两个对象，分别调用 describe 和 getName，观察两次输出为何不同。\n\n建议的阅读顺序：\n- 先看字段声明和 private，理解状态被藏在哪里；\n- 再看构造方法里的 this.name = name，理解状态在什么时刻被写入；\n- 最后看实例方法和入口，理解状态怎样被读出来、为什么两个对象互不影响。",
+      "files": [
+        {
+          "path": "src/Product.java",
+          "language": "java",
+          "role": "types",
+          "content": "public class Product {\n    private String name;\n    private double price;\n\n    public Product(String name, double price) {\n        this.name = name;\n        this.price = price;\n    }\n\n    public String getName() {\n        return name;\n    }\n\n    public double getPrice() {\n        return price;\n    }\n\n    public String describe() {\n        return name + \" 售价 \" + price + \" 元\";\n    }\n}\n"
+        },
+        {
+          "path": "src/Main.java",
+          "language": "java",
+          "role": "entry",
+          "content": "public class Main {\n    public static void main(String[] args) {\n        Product tea = new Product(\"龙井茶\", 128.0);\n        Product cup = new Product(\"陶瓷杯\", 39.5);\n\n        System.out.println(tea.describe());\n        System.out.println(cup.describe());\n        System.out.println(\"两个实例的名字相同吗: \" + tea.getName().equals(cup.getName()));\n    }\n}\n"
+        }
+      ],
+      "entry_file": "src/Main.java",
+      "call_sequence": [
+        {
+          "step": 1,
+          "file": "src/Product.java",
+          "function": "Product",
+          "note": "看构造方法如何用 this.name = name 把参数写进当前对象的实例字段"
+        },
+        {
+          "step": 2,
+          "file": "src/Product.java",
+          "function": "getName",
+          "note": "看封装后的字段怎样通过公开方法被读出来"
+        },
+        {
+          "step": 3,
+          "file": "src/Product.java",
+          "function": "describe",
+          "note": "看实例方法如何组合自身字段拼出一段描述文本"
+        },
+        {
+          "step": 4,
+          "file": "src/Main.java",
+          "function": "main",
+          "note": "创建两个 Product 实例并分别读取，说明两次构造各自写入自己的字段"
+        }
+      ],
+      "expected_output": "src/Main.java › main：依次打印「龙井茶 售价 128.0 元」和「陶瓷杯 售价 39.5 元」，再打印一行比较结果为 false，表明两个实例各自持有自己的 name，第一次构造写入的值没有被第二次覆盖。"
+    },
+    "pitfalls_debug": [
+      {
+        "title": "把构造方法写成有返回类型的方法",
+        "cause": "写成 public void Product(String name)，加上了 void 之后它就不再是构造方法，只是一名普通方法，new 的时候编译器不会调用它。",
+        "fix": "删掉 void，让方法签名只保留 public Product(String name, double price)，确认它和类名完全相同且没有返回类型。"
+      },
+      {
+        "title": "参数与字段同名却漏写 this",
+        "cause": "只写 name = name 时，赋值两边都被解析成方法参数，实例字段始终没有被写入，读取时仍然是 null。",
+        "fix": "改成 this.name = name，用 this 明确左边是当前对象的字段；也可以给参数改名（如 newName）来彻底避免同名。"
+      },
+      {
+        "title": "以为第二个对象会覆盖第一个对象的字段",
+        "cause": "把实例字段与 static 字段混为一谈，误以为同一类的对象共享同一份 name。",
+        "fix": "记住每次 new 都会分配一块新的对象空间，各自带一份实例字段；只有用 static 修饰的字段才是全类共用一份。"
+      },
+      {
+        "title": "封装后忘记提供读取方法",
+        "cause": "字段改成 private 之后，类外部无法再直接访问，如果没有公开的 getName，外部代码拿不到值。",
+        "fix": "为需要对外暴露的字段补上公开的实例方法，例如返回 name 的 getName；不想暴露的字段就保持不提供读取方法。"
+      }
+    ],
+    "source_refs": [],
+    "teaching_memory": {
+      "key_concepts": [
+        "构造方法：与类同名、无返回类型、new 时自动执行",
+        "this 用于区分实例字段与同名参数",
+        "实例字段属于每个对象私有的一份状态，与 static 字段相对",
+        "private 字段通过公开实例方法读取，形成封装"
+      ],
+      "common_mistakes": [
+        "构造方法被写成带 void 的普通方法",
+        "同名参数赋值时漏写 this，字段一直是默认值",
+        "把实例字段误当成全类共享，认为第二个对象会覆盖第一个"
+      ],
+      "assessment_targets": [
+        "能写出 Product 类中与类同名且无返回类型的构造方法",
+        "能用 this.name = name 解释为什么字段会被正确写入",
+        "能说明两个 Product 实例名字不同的原因是各自持有一份实例字段",
+        "能通过实例方法读取 private 字段并说出封装带来的限制"
+      ]
+    },
+    "plan_node_id": "50000000-0000-4000-8000-000000000004",
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "logical_session_key": "reg40-session-java"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "scores": {
+    "correctness": {
+      "score": 5,
+      "reason": "构造方法无返回类型、与类同名、this.name 指向当前实例字段、两个实例各自持有一份实例字段等关键事实均准确，代码与预期输出自洽，替换成 tea/cup 与参考事实等价且被明确允许。",
+      "evidence": [
+        "candidate_output.worked_example.files[0].content：public Product(String name, double price) 无返回类型且与类同名，this.name = name 正确区分字段与参数",
+        "candidate_output.expected_output：依次打印两个对象各自的描述并输出比较结果 false，与「两个对象实例字段独立」的参考事实一致"
+      ]
+    },
+    "completeness": {
+      "score": 5,
+      "reason": "覆盖了类与实例、构造方法初始化、this 区分字段与参数、private 字段与实例方法四个知识点，节点完成标准和可接受答案要点（基础段落、完整示例与阅读顺序、误区原因与修复、教学记忆、预期行为与来源）均已具备。",
+      "evidence": [
+        "candidate_output.foundation：四个实质段落分别解释构造方法初始化、this 与封装、实例字段独立性、读代码顺序",
+        "candidate_output.pitfalls_debug：四条误区均含 title、cause、fix；candidate_output.teaching_memory 含 key_concepts、common_mistakes、assessment_targets"
+      ]
+    },
+    "relevance": {
+      "score": 5,
+      "reason": "内容始终围绕「构造方法与实例状态」这一节点，使用该节点的 Product 场景与 Java 语言，未扩展到整个学习路线的其他主题。",
+      "evidence": [
+        "candidate_output.worked_example.files：只包含 Product.java 与 Main.java 两个与本节点直接相关的文件",
+        "candidate_output.foundation：全部段落主题为构造方法、this、实例字段独立与读取封装字段"
+      ]
+    },
+    "readability": {
+      "score": 5,
+      "reason": "教材段落分层清晰，术语（构造方法、this、private、getter、static 字段）均有解释，文件职责、入口与阅读顺序说明明确。",
+      "evidence": [
+        "candidate_output.foundation：使用「结论/用 this 指明/两个对象各自持有/读代码时的判断顺序」分级标题并逐条解释术语",
+        "candidate_output.worked_example.call_sequence：给出 4 步带 note 的阅读顺序，指明每步看什么"
+      ]
+    },
+    "teaching_adaptation": {
+      "score": 4,
+      "reason": "面向初学者解释了默认值、就近原则和实例状态来源，示例上下文充分；但顺带引入 setter、static 字段与「只读视图」等尚未教授的概念，仅有简短说明。",
+      "evidence": [
+        "candidate_output.foundation：出现「setter 或普通方法」「只读视图」等术语，未展开定义，可能超出当前初学者的已学范围",
+        "candidate_output.pitfalls_debug[2]：用 static 字段对比解释实例字段独立，属于前置知识之外的补充概念"
+      ]
+    }
+  },
+  "weighted_score": 4.9,
+  "percentage_score": 98.00000000000001,
+  "status": "scored",
+  "error": null,
+  "started_at": "2026-10-10T08:11:14.189Z",
+  "finished_at": "2026-10-10T09:48:44.009Z"
+}

@@ -1,0 +1,210 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "11990e8e-1755-4840-8927-bde818ec5305",
+  "case_id": "reg40-posttest-01-typescript",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "posttest_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "kind": "post_test",
+    "question_count": 6,
+    "difficulty": "normal",
+    "plan_id": null,
+    "plan_node_id": "50000000-0000-4000-8000-000000000001",
+    "source_card_content_id": "60000000-0000-4000-8000-000000000001",
+    "schema_version": "assessment.single_choice.v1",
+    "questions": [
+      {
+        "prompt": "阅读下面的代码，它会产生什么结果？\n```ts\ninterface User {\n  id: number;\n  name: string;\n}\n\nfunction displayName(user: User): string {\n  return user.name;\n}\n\nconst u = { id: 1 };\ndisplayName(u);\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "编译时报错，因为 u 缺少 User 要求的 name 属性"
+          },
+          {
+            "key": "B",
+            "text": "编译通过，运行时输出 undefined"
+          },
+          {
+            "key": "C",
+            "text": "编译通过，运行时会抛出异常"
+          },
+          {
+            "key": "D",
+            "text": "编译报错，因为 id 的值类型应该是 string"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "User 接口声明了 id: number 和 name: string，缺少 name 的对象不满足接口要求，因此编译期就会报类型错误。",
+        "skill_tags": [
+          "接口必需属性",
+          "类型错误识别"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面这个函数的写法有什么问题？\n```ts\ninterface User {\n  id: number;\n  name: string;\n}\n\nfunction displayName(user: User): string {\n  return user.id;\n}\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "编译报错，因为返回的是 number，与声明的返回值类型 string 不符"
+          },
+          {
+            "key": "B",
+            "text": "编译报错，因为 user.id 在 User 接口里不存在"
+          },
+          {
+            "key": "C",
+            "text": "编译通过，返回的数字会被自动转换为字符串"
+          },
+          {
+            "key": "D",
+            "text": "编译通过，但运行时才提示返回值类型不匹配"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "函数签名声明返回 string，而 user.id 的类型是 number，返回值与声明的类型不一致会在编译期报错。",
+        "skill_tags": [
+          "函数返回值类型",
+          "类型错误识别"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "关于 `interface User { id: number; name: string; }` 这类类型信息在编译后的 JavaScript 中的处理，下列说法正确的是？",
+        "options": [
+          {
+            "key": "A",
+            "text": "类型信息被擦除，编译产物中不会保留任何属性校验逻辑"
+          },
+          {
+            "key": "B",
+            "text": "每个接口都会生成一个校验函数，在赋值时检查属性"
+          },
+          {
+            "key": "C",
+            "text": "接口会变成 class，并在构造函数里自动校验传参"
+          },
+          {
+            "key": "D",
+            "text": "编译后的代码会在属性类型不匹配时抛出运行时错误"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "类型注解与接口只参与编译期检查，编译成 JavaScript 后会被擦除，不会产生运行时校验代码。",
+        "skill_tags": [
+          "编译期类型检查与运行时校验边界"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "阅读下面的代码，分析它的运行结果。\n```ts\ninterface User {\n  id: number;\n  name: string;\n}\n\nfunction displayName(user: User): string {\n  return user.name;\n}\n\nconst data = JSON.parse('{\"id\": 1}');\nconst user = data as User;\nconsole.log(displayName(user).toUpperCase());\n```",
+        "options": [
+          {
+            "key": "A",
+            "text": "类型断言会插入校验代码，运行时提示缺少 name 属性"
+          },
+          {
+            "key": "B",
+            "text": "断言不产生运行时校验，user 实际没有 name，displayName 返回 undefined，调用 toUpperCase 时报错"
+          },
+          {
+            "key": "C",
+            "text": "编译报错，因为 JSON.parse 的结果不能断言为 User"
+          },
+          {
+            "key": "D",
+            "text": "正常运行并输出 1，因为 id 会被当作名称使用"
+          }
+        ],
+        "answer_key": "B",
+        "explanation": "as User 只是让编译器接受这个值，不会生成检查代码；外部数据里没有 name，运行时 displayName 返回 undefined，随后调用 toUpperCase 会出错。",
+        "skill_tags": [
+          "类型断言与运行时校验",
+          "外部数据边界"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "下面哪个值可以直接赋给类型为 `User` 的变量（User 要求 id: number 和 name: string），而不产生编译类型错误？",
+        "options": [
+          {
+            "key": "A",
+            "text": "{ name: 'Lin' }"
+          },
+          {
+            "key": "B",
+            "text": "{ id: 1 }"
+          },
+          {
+            "key": "C",
+            "text": "{ id: 1, name: 'Lin' }"
+          },
+          {
+            "key": "D",
+            "text": "{ id: '1', name: 'Lin' }"
+          }
+        ],
+        "answer_key": "C",
+        "explanation": "User 要求同时具备数值类型的 id 和字符串类型的 name；缺少任一属性或 id 写成字符串都不满足接口。",
+        "skill_tags": [
+          "接口必需属性",
+          "属性类型匹配"
+        ],
+        "max_score": 1
+      },
+      {
+        "prompt": "从一个外部接口取回 JSON 数据后，要安全地把它交给 `displayName(user: User): string` 使用，下面哪种做法最合适？",
+        "options": [
+          {
+            "key": "A",
+            "text": "在调用前显式检查数据是否包含数值 id 与字符串 name，确认后再传入"
+          },
+          {
+            "key": "B",
+            "text": "用 `as User` 断言即可，断言本身会在运行时校验属性是否齐全"
+          },
+          {
+            "key": "C",
+            "text": "只要 displayName 的返回值标注为 string，就能自动校验传入的数据"
+          },
+          {
+            "key": "D",
+            "text": "把 displayName 的参数类型改成 any，编译不再报错就说明运行安全"
+          }
+        ],
+        "answer_key": "A",
+        "explanation": "接口和类型断言都只在编译期起作用，外部数据进入内部函数前需要在边界处显式校验必需属性和类型。",
+        "skill_tags": [
+          "外部数据边界",
+          "编译期类型检查与运行时校验边界"
+        ],
+        "max_score": 1
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "source_card_content_id": "60000000-0000-4000-8000-000000000001",
+      "tool_call_count": 0,
+      "recovery_stage": "initial"
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "assessment_id": "311ea71d-b2ab-4244-a2bc-754bcf9d0491",
+    "question_count": 6,
+    "tool_call_count": 0,
+    "recovery_stage": "initial",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:15:30.558Z",
+  "finished_at": "2026-10-10T08:15:43.182Z"
+}

@@ -1,0 +1,213 @@
+{
+  "schema_version": "agent_eval.run_case.v1",
+  "run_id": "4ac94629-0c24-4879-96e6-d3ffcac3b1b0",
+  "case_id": "reg40-plan-08-http",
+  "owner_id": "2fd796ae-79a8-405f-9ce4-fdb147ba94de",
+  "run_type": "plan_generate",
+  "business_model": {
+    "connection_id": "38ac512e-bb3e-4b91-adfe-f95ca673761d",
+    "model_id": "deepseek-flash"
+  },
+  "candidate_output": {
+    "schema_version": "learning_plan.v1",
+    "title": "HTTP 与 JSON 接口调用学习路线",
+    "summary": "面向刚开始接触前后端接口的学习者，从 HTTP 请求与响应的构成讲起，依次覆盖方法与状态码、请求头与 JSON 数据、fetch 的异步读取、状态码检查、网络失败与 HTTP 错误的区分，最后落到空响应与错误处理的综合实践。全部练习基于固定响应示例，不需要真实服务或认证配置。按每周约 30 分钟安排，每章可独立学习。",
+    "nodes": [
+      {
+        "node_key": "http_request_response_shape",
+        "ordinal": 1,
+        "title": "一次 HTTP 交互由什么组成",
+        "node_brief": "把一次接口调用拆成请求与响应两部分：请求行/请求方法、请求头、请求体；响应状态行、响应头、响应体。用固定文本示例展示两边各自长什么样。",
+        "learning_objective": "能指认一段 HTTP 报文中哪些行属于请求头、哪些属于响应体，并说明请求与响应各自携带什么信息。",
+        "rationale": "后面所有章节讨论的状态码、请求头、响应体都挂在这个结构上，先建立整体骨架才能分清概念边界。",
+        "difficulty": 1,
+        "estimated_minutes": 30,
+        "prerequisite_node_keys": [],
+        "completion_criteria": [
+          "能在一段给定的 HTTP 报文中标出请求行、请求头、请求体",
+          "能在一段给定的响应中标出状态行、响应头、响应体",
+          "能用自己的话说出请求与响应分别由谁发出、谁接收",
+          "能说明为什么响应体不一定存在"
+        ]
+      },
+      {
+        "node_key": "http_methods_and_status_codes",
+        "ordinal": 2,
+        "title": "请求方法与状态码的含义",
+        "node_brief": "常见请求方法 GET/POST/PUT/PATCH/DELETE 的语义差异，以及状态码分段 2xx、3xx、4xx、5xx 各自代表什么，重点区分 200、201、204、400、401、404、500。",
+        "learning_objective": "看到一串状态码能判断这次调用是成功、客户端出错还是服务端出错，并能为读数据、建数据、删数据选择合适的方法。",
+        "rationale": "���态码是判断接口调用结果的第一手依据，也是后面「先检查状态再解析」这一步的判断标准。",
+        "difficulty": 2,
+        "estimated_minutes": 30,
+        "prerequisite_node_keys": [
+          "http_request_response_shape"
+        ],
+        "completion_criteria": [
+          "能把给定状态码分别归入 2xx、4xx、5xx 并说出大类含义",
+          "能说明 200、201、204 三者返回结果的差别",
+          "能区分 404 与 500 分别是谁的问题",
+          "能为「读取列表」「新建一条记录」「删除一条记录」各选一个请求方法并说明理由"
+        ]
+      },
+      {
+        "node_key": "request_headers_and_json_body",
+        "ordinal": 3,
+        "title": "请求头与 JSON 请求体",
+        "node_brief": "请求头的作用与常见字段 Content-Type、Accept 的含义，以及把 JavaScript 对象用 JSON.stringify 转成 JSON 字符串作为请求体发送的过程；同时说明认证头在这里只是概念，不涉及真实配置。",
+        "learning_objective": "能写出一次带 JSON 请求体的 POST 调用所需的头信息与请求体，并解释 Content-Type 与实际数据格式不一致会发生什么。",
+        "rationale": "这是「请求头与 JSON」这一薄弱点的直接对应章节，也是理解响应体为何是 JSON 的前提。",
+        "difficulty": 2,
+        "estimated_minutes": 35,
+        "prerequisite_node_keys": [
+          "http_request_response_shape",
+          "http_methods_and_status_codes"
+        ],
+        "completion_criteria": [
+          "能说出 Content-Type 和 Accept 各自描述哪一方的数据格式",
+          "能对一个给定的 JavaScript 对象写出对应的 JSON 字符串",
+          "能列出一次发送 JSON 的 POST 请求至少需要的两个头字段",
+          "能解释请求头写错数据类型时服务端可能返回哪一类状态码"
+        ]
+      },
+      {
+        "node_key": "json_text_to_object",
+        "ordinal": 4,
+        "title": "从 JSON 文本到可用的数据",
+        "node_brief": "JSON 的取值类型与语法约束（键必须双引号、不能有注释、不能有 undefined），JSON 与 JavaScript 对象的区别，以及 JSON.parse 把响应文本转成对象后如何按路径取值。",
+        "learning_objective": "能把一段 JSON 响应文本解析成对象，并准确取出嵌套字段和数组中的元素。",
+        "rationale": "接口数据到手后必须变成可操作的对象才能用，这一步做不对，后面的错误处理就无从判断。",
+        "difficulty": 2,
+        "estimated_minutes": 30,
+        "prerequisite_node_keys": [
+          "request_headers_and_json_body"
+        ],
+        "completion_criteria": [
+          "能指出一段 JSON 文本中违反 JSON 语法的位置",
+          "能把给定的 JSON 文本解析成对象并取出一个嵌套字段",
+          "能从 JSON 数组中取出第二个元素的指定属性",
+          "能说明 JSON 字符串与 JavaScript 对象在写法上的两点区别"
+        ]
+      },
+      {
+        "node_key": "fetch_promise_async",
+        "ordinal": 5,
+        "title": "fetch 与异步读取响应",
+        "node_brief": "fetch 返回 Promise 这一事实，await 拿到的是响应对象而非数据本身，以及读取响应体需要再走一次异步（json() / text()）的原因。",
+        "learning_objective": "能写出一个使用 async/await 的 fetch 调用，并解释为什么要 await 两次才能拿到最终数据。",
+        "rationale": "「fetch 与异步读取」是前测中的薄弱点，不理解两次异步就无法正确安排检查状态码的时机。",
+        "difficulty": 3,
+        "estimated_minutes": 40,
+        "prerequisite_node_keys": [
+          "json_text_to_object",
+          "http_methods_and_status_codes"
+        ],
+        "completion_criteria": [
+          "能写出带 async/await 的 fetch 调用并取到响应体数据",
+          "能说明第一次 await 得到的是什么、第二次 await 得到的是什么",
+          "能解释为什么在 await fetch 之后不能立刻访问数据字段",
+          "能说明响应体只能被读取一次的原因"
+        ]
+      },
+      {
+        "node_key": "check_status_before_parse",
+        "ordinal": 6,
+        "title": "先看状态码，再解析数据",
+        "node_brief": "用 response.ok 与 response.status 判断结果，把「状态检查」放在「解析响应体」之前，避免对错误响应盲目调用 json()。",
+        "learning_objective": "能写出先判断 response.ok、再决定是否解析响应体的调用顺序，并说明顺序颠倒会带来什么问题。",
+        "rationale": "这是期望结果中「先检查 HTTP 状态再解析数据」的核心环节，也是后续区分错误类型的基础。",
+        "difficulty": 3,
+        "estimated_minutes": 30,
+        "prerequisite_node_keys": [
+          "fetch_promise_async"
+        ],
+        "completion_criteria": [
+          "能写出包含 response.ok 判断的调用流程",
+          "能说明 404 响应为什么可能仍然带着一段响应体",
+          "能指出一段先解析后检查的代码可能出现的错误",
+          "能对同一个响应分别给出「状态检查结果」和「是否继续解析」的结论"
+        ]
+      },
+      {
+        "node_key": "network_failure_vs_http_error",
+        "ordinal": 7,
+        "title": "网络失败与 HTTP 错误不是一回事",
+        "node_brief": "fetch 只在网络层失败（断网、域名解析失败、请求被中断）时进入 reject，4xx/5xx 都算正常完成；用 try/catch 捕获前者，用状态码判断后者。",
+        "learning_objective": "能对同一个错误场景判断它应被 catch 捕获还是应被状态码判断处理，并把两类处理写在同一段代码里。",
+        "rationale": "「网络失败与 HTTP 错误」是前测薄弱点，混为一谈会导致错误提示张冠李戴。",
+        "difficulty": 3,
+        "estimated_minutes": 35,
+        "prerequisite_node_keys": [
+          "check_status_before_parse"
+        ],
+        "completion_criteria": [
+          "能说明 500 响应不会让 fetch 进入 catch 的原因",
+          "能列出至少两种会进入 catch 的网络层失败场景",
+          "能写出一段同时包含 try/catch 与状态码判断的代码",
+          "能对一个给定的失败现象判断它属于网络失败还是 HTTP 错误"
+        ]
+      },
+      {
+        "node_key": "empty_and_missing_body",
+        "ordinal": 8,
+        "title": "没有响应体和空响应体怎么处理",
+        "node_brief": "204 与 Content-Length 为 0 的响应没有内容可解析，对空文本调用 JSON.parse 会抛错；通过先读取文本再判断是否为空的方式规避。",
+        "learning_objective": "能识别可能没有响应体的调用，并写出不会因空内容而崩溃的处理方式。",
+        "rationale": "期望结果明确要求正确处理「没有响应体」的情况，这是状态码检查之后的最后一道防线。",
+        "difficulty": 4,
+        "estimated_minutes": 35,
+        "prerequisite_node_keys": [
+          "network_failure_vs_http_error"
+        ],
+        "completion_criteria": [
+          "能指出哪些成功状态码通常不带响应体",
+          "能说明对空字符串调用 JSON.parse 会发生什么",
+          "能写出先取文本、判断为空则跳过解析的处理流程",
+          "能为「删除成功」这类无响应体的接口设计合适的返回值"
+        ]
+      },
+      {
+        "node_key": "error_handling_walkthrough",
+        "ordinal": 9,
+        "title": "综合演练：用固定响应示例走完整个流程",
+        "node_brief": "在断网、404 带错误信息、500、204 无响应体、正常 200 这几种固定响应示例下，走完「发起调用 → 检查状态 → 决定是否解析 → 返回结果或错误」的完整路径。",
+        "learning_objective": "能针对给定的固定响应示例，独立写出一段覆盖成功、HTTP 错误、网络失败与空响应四类情况的调用代码，并说明每一类走向哪个分支。",
+        "rationale": "把前八章的知识串成一条可复用的调用流程，对应期望结果中「正确处理网络失败和没有响应体」的整体能力。",
+        "difficulty": 4,
+        "estimated_minutes": 40,
+        "prerequisite_node_keys": [
+          "empty_and_missing_body"
+        ],
+        "completion_criteria": [
+          "能在固定响应示例下说出每一类情况进入哪个代码分支",
+          "能写出覆盖四类情况的完整调用流程",
+          "能对每种情况给出面向调用方的可读结果或错误信息",
+          "能指出自己代码中「先解析后检查」这类顺序错误并修正",
+          "能在不依赖真实服务与认证配置的前提下复现全部四类情况"
+        ]
+      }
+    ],
+    "generation_metadata": {
+      "model_id": "deepseek-flash",
+      "tool_call_count": 0,
+      "repair_attempts": 0,
+      "generation_path": "model_knowledge",
+      "fallback_used": false
+    }
+  },
+  "structure_check": {
+    "passed": true,
+    "errors": []
+  },
+  "output_summary": {
+    "learning_plan_id": "059002c6-974f-46c9-97e1-12b22d1c79ef",
+    "node_count": 9,
+    "tool_call_count": 0,
+    "repair_attempts": 0,
+    "generation_path": "model_knowledge",
+    "model_id": "deepseek-flash"
+  },
+  "status": "completed",
+  "error": null,
+  "started_at": "2026-10-10T08:08:52.081Z",
+  "finished_at": "2026-10-10T08:09:06.840Z"
+}
