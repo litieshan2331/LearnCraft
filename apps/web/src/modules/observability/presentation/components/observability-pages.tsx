@@ -29,6 +29,9 @@ interface TraceEventPage {
   next_cursor: number | null;
 }
 
+/** 短暂网络抖动不立即打断观测页面布局，持续断线后才显示续传提示。 */
+const TRACE_DISCONNECT_NOTICE_DELAY_MS = 3_000;
+
 /** 解析 JSON 接口错误，保留用户可理解的服务端提示。 */
 async function requestJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { cache: "no-store" });
@@ -58,7 +61,7 @@ async function requestAllTraceEvents(runId: string): Promise<TraceEvent[]> {
   let after: number | null = null;
   while (true) {
     const cursor: string = after === null ? "" : `&after=${after}`;
-    const page: TraceEventPage = await requestJsonWithRetry<TraceEventPage>(`/api/v1/observability/runs/${runId}/events?limit=100${cursor}`);
+    const page: TraceEventPage = await requestJsonWithRetry<TraceEventPage>(`/api/v1/observability/runs/${runId}?events=1&limit=100${cursor}`);
     events.push(...page.items);
     if (page.next_cursor === null) return events;
     if (page.next_cursor <= (after ?? 0)) throw new Error("观测轨迹游标未向前推进。");
@@ -249,12 +252,30 @@ export function ObservabilityRunDetailPage({ runId }: Readonly<{ runId: string }
     let active = true;
     let source: EventSource | null = null;
     let retryDelay = 1_000;
+    let disconnectNoticeTimer: number | null = null;
+
+    /** 清理尚未显示的持续断线提示计时器。 */
+    function clearDisconnectNotice(): void {
+      if (disconnectNoticeTimer === null) return;
+      window.clearTimeout(disconnectNoticeTimer);
+      disconnectNoticeTimer = null;
+    }
 
     /** 在 SSE 断开后检查运行状态，避免已取消运行持续重连。 */
     function scheduleReconnect(): void {
       if (!active) return;
-      setConnectionState("disconnected");
-      reconnectTimer.current = window.setTimeout(connect, retryDelay);
+      // 连接很快恢复时只保持“连接中”状态，避免断线横幅闪现。
+      setConnectionState("connecting");
+      if (disconnectNoticeTimer === null) {
+        disconnectNoticeTimer = window.setTimeout(() => {
+          disconnectNoticeTimer = null;
+          if (active) setConnectionState("disconnected");
+        }, TRACE_DISCONNECT_NOTICE_DELAY_MS);
+      }
+      reconnectTimer.current = window.setTimeout(() => {
+        reconnectTimer.current = null;
+        connect();
+      }, retryDelay);
       retryDelay = Math.min(10_000, retryDelay * 2);
     }
 
@@ -262,7 +283,7 @@ export function ObservabilityRunDetailPage({ runId }: Readonly<{ runId: string }
     function connect(): void {
       if (!active) return;
       setConnectionState("connecting");
-      source = new EventSource(`/api/v1/observability/runs/${runId}/events/stream?after=${lastSequence.current}`);
+      source = new EventSource(`/api/v1/observability/runs/${runId}?stream=1&after=${lastSequence.current}`);
       source.addEventListener("trace", (rawEvent) => {
         try {
           const event = JSON.parse((rawEvent as MessageEvent<string>).data) as TraceEvent;
@@ -270,6 +291,7 @@ export function ObservabilityRunDetailPage({ runId }: Readonly<{ runId: string }
           lastSequence.current = event.sequence_no;
           setEvents((current) => [...current, event]);
           setEventsError(null);
+          clearDisconnectNotice();
           setConnectionState("live"); retryDelay = 1_000;
           if (event.event_type === "run.completed" || event.event_type === "run.failed") {
             setConnectionState("closed");
@@ -278,7 +300,7 @@ export function ObservabilityRunDetailPage({ runId }: Readonly<{ runId: string }
           }
         } catch { /* 单条坏事件不影响后续续传。 */ }
       });
-      source.onopen = () => { setConnectionState("live"); retryDelay = 1_000; };
+      source.onopen = () => { clearDisconnectNotice(); setConnectionState("live"); retryDelay = 1_000; };
       source.onerror = () => {
         source?.close(); source = null;
         if (!active) return;
@@ -286,6 +308,7 @@ export function ObservabilityRunDetailPage({ runId }: Readonly<{ runId: string }
           .then((latestRun) => {
             if (!active) return;
             if (["succeeded", "failed", "cancelled", "expired"].includes(latestRun.status)) {
+              clearDisconnectNotice();
               active = false;
               void loadInitial();
               return;
@@ -296,7 +319,15 @@ export function ObservabilityRunDetailPage({ runId }: Readonly<{ runId: string }
       };
     }
     connect();
-    return () => { active = false; source?.close(); if (reconnectTimer.current !== null) window.clearTimeout(reconnectTimer.current); };
+    return () => {
+      active = false;
+      clearDisconnectNotice();
+      source?.close();
+      if (reconnectTimer.current !== null) {
+        window.clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
+    };
   }, [loadInitial, loading, run, runId]);
 
   if (loading) return <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7"><LoadingDetail /></main>;

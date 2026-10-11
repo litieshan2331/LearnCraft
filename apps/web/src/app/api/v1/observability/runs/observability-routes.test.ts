@@ -100,4 +100,18 @@ describe("观测接口的用户隔离", () => {
     abort.abort();
     expect(queries.listTraceEvents).toHaveBeenCalledWith(OWNER_ID, RUN_ID, 3, 100);
   });
+
+  it("详情路由的事件兼容入口在开发路由扫描不完整时仍可读取", async () => {
+    queries.findTraceRunStatus.mockResolvedValue("running");
+    queries.listTraceEvents.mockResolvedValue({ items: [], hasMore: false });
+    const context = { params: Promise.resolve({ runId: RUN_ID }) };
+
+    const events = await getRun(request(`/${RUN_ID}?events=1&after=3`), context);
+    expect(events.status).toBe(200);
+    expect(queries.listTraceEvents).toHaveBeenCalledWith(OWNER_ID, RUN_ID, 3, 50);
+
+    const stream = await getRun(request(`/${RUN_ID}?stream=1&after=3`), context);
+    expect(stream.status).toBe(200);
+    expect(sseFactory).toHaveBeenCalledWith(expect.objectContaining({ after: 3 }));
+  });
 });
