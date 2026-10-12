@@ -259,6 +259,19 @@ export function readAgentReactMaxTurns(): AgentReactTurnsConfig {
   };
 }
 
+/** 读取学习助手主 Agent 与两个子 Agent 的独立 ReAct 轮数上限。 */
+export function readLearningAssistantReactLimits(): {
+  main: number;
+  error_attribution: number;
+  socratic_tutor: number;
+} {
+  return {
+    main: readPositiveInteger('LEARNING_ASSISTANT_REACT_MAX_TURNS_MAIN', 6),
+    error_attribution: readPositiveInteger('LEARNING_ASSISTANT_REACT_MAX_TURNS_ERROR_ATTRIBUTION', 4),
+    socratic_tutor: readPositiveInteger('LEARNING_ASSISTANT_REACT_MAX_TURNS_SOCRATIC_TUTOR', 4),
+  };
+}
+
 /** 读取正整数环境变量；缺失或非法时回退默认值。 */
 function readPositiveInteger(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();

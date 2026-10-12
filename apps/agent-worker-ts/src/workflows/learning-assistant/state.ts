@@ -13,6 +13,11 @@ export interface ChildState {
   toolBatchStep: number;
   result: Attribution | SocraticResponse | null;
 }
+export interface ReactTurnCounts {
+  main: number;
+  error_attribution: number;
+  socratic_tutor: number;
+}
 export interface TrustedContext {
   facts: Record<string, unknown>; evidence: Evidence[];
 }
@@ -29,6 +34,11 @@ export function mergeMessages(left: readonly ConversationMessage[], right: reado
   const result = new Map(left.map((item) => [item.id, item]));
   for (const item of right) result.set(item.id, item);
   return [...result.values()];
+}
+
+/** 为一个 Agent 递增本次运行的 ReAct 轮数；计数写入 Checkpoint。 */
+export function incrementReactTurns(counts: ReactTurnCounts, actor: keyof ReactTurnCounts): ReactTurnCounts {
+  return { ...counts, [actor]: counts[actor] + 1 };
 }
 
 export const LearningAssistantState = Annotation.Root({
@@ -53,6 +63,7 @@ export const LearningAssistantState = Annotation.Root({
   repairMessages: Annotation<ModelMessage[]>({ default: () => [], reducer: (_left, right) => right }),
   response: Annotation<MainResponse | null>({ default: () => null, reducer: (_left, right) => right }),
   modelStep: Annotation<number>({ default: () => 0, reducer: (_left, right) => right }),
+  reactTurns: Annotation<ReactTurnCounts>({ default: () => ({ main: 0, error_attribution: 0, socratic_tutor: 0 }), reducer: (_left, right) => right }),
   memoryWritten: Annotation<boolean>({ default: () => false, reducer: (_left, right) => right }),
 });
 export type AssistantState = typeof LearningAssistantState.State;

@@ -51,14 +51,14 @@ describe.skipIf(!databaseUrl)('学习助手 PostgreSQL 图与轨迹', () => {
     return run;
   }
 
-  /** 验证数据库预算为原子计数，重建存储后仍不能追加第21次。 */
-  it('并发预占只有20次成功，跨实例恢复保持预算', async () => {
+  /** 验证数据库计数是原子累加，跨实例恢复后仍可继续记录；ReAct 上限由图控制。 */
+  it('并发预占全部成功，跨实例恢复保持计数', async () => {
     const run = await input();
     const results = await Promise.allSettled(Array.from({ length: 24 }, () => store.reserveModelAttempt(run)));
-    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(20);
-    await expect(new PgLearningAssistantRuntimeStore(pool).reserveModelAttempt(run)).rejects.toMatchObject({ code: 'LEARNING_ASSISTANT_MODEL_BUDGET_EXCEEDED' });
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(24);
+    await expect(new PgLearningAssistantRuntimeStore(pool).reserveModelAttempt(run)).resolves.toBe(25);
     const count = await pool.query('SELECT model_call_count FROM learning_assistant_runs WHERE id = $1', [run.run_id]);
-    expect(count.rows[0]?.model_call_count).toBe(20);
+    expect(count.rows[0]?.model_call_count).toBe(25);
   });
 
   /** PostgreSQL 重建图后从子模型节点恢复，已保存的子工具结果不重复执行。 */
@@ -76,6 +76,7 @@ describe.skipIf(!databaseUrl)('学习助手 PostgreSQL 图与轨迹', () => {
     const deps: LearningAssistantDependencies = {
       checkpointer: saver, trace: store,
       connection: { ownerId, connectionId: run.connection_id, modelId: run.model_id, baseUrl: 'https://example.invalid', apiKey: 'never-checkpoint-this' },
+      reactLimits: { main: 6, error_attribution: 4, socratic_tutor: 4 },
       /** 原子持久化共享预算。 */ reserveModelAttempt: (value) => store.reserveModelAttempt(value),
       model: { /** 模拟实际网关事件与预算钩子。 */ async complete(request) {
         await request.beforeModelAttempt?.();

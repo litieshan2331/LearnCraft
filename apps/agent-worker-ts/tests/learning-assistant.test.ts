@@ -8,7 +8,6 @@ import { describe, expect, it } from 'vitest';
 import type { AgentTraceEventInput } from '../src/application/services/trace-writer.js';
 import type { ModelCompletionRequest, ModelMessage } from '../src/infrastructure/llm/model-gateway.js';
 import { createLearningAssistantGraph, runLearningAssistant } from '../src/workflows/learning-assistant/graph.js';
-import { modelBudgetExceeded } from '../src/workflows/learning-assistant/agents/index.js';
 import type { LearningAssistantDependencies, MemoryCandidate } from '../src/workflows/learning-assistant/ports.js';
 import { MainResponseSchema, type RunInput } from '../src/workflows/learning-assistant/schemas/index.js';
 import { recentModelMessages, type ConversationMessage } from '../src/workflows/learning-assistant/state.js';
@@ -37,10 +36,10 @@ function fixture(script: Array<ModelMessage | Error>) {
   const deps: LearningAssistantDependencies = {
     checkpointer: new MemorySaver(),
     connection: { ownerId: input.owner_id, connectionId: input.connection_id, modelId: input.model_id, apiKey: 'secret-not-in-checkpoint', baseUrl: 'https://example.com' },
+    reactLimits: { main: 6, error_attribution: 4, socratic_tutor: 4 },
     trace: { /** 收集完整事件。 */ async append(event) { events.push(event); } },
-    /** 按 run 持久模拟实际请求预算。 */ async reserveModelAttempt(run) {
+    /** 按 run 持久模拟实际请求计数，不设置统一业务上限。 */ async reserveModelAttempt(run) {
       const count = budget.get(run.run_id) ?? 0;
-      if (count >= 20) throw modelBudgetExceeded();
       budget.set(run.run_id, count + 1); return count + 1;
     },
     model: { /** 模拟实际网关钩子、轨迹与结构化返回。 */ async complete(request) {
@@ -182,11 +181,11 @@ describe('学习助手 LangGraph', () => {
     const messages: ConversationMessage[] = [{ id: 'a', turnNo: 3, ...tool('get_user_profile', {}, 'c') }, { id: 'b', turnNo: 3, role: 'tool', toolCallId: 'c', name: 'get_user_profile', content: '{}' }];
     expect(recentModelMessages(messages, 3)).toHaveLength(2);
   });
-  /** 运行最多20次，频繁工具循环仍由实际模型请求预算终止。 */
-  it('第21次请求前停止，不给业务工具添加次数上限', async () => {
+  /** 主 Agent 由自身 ReAct 上限终止，数据库只记录请求且不添加统一工具次数上限。 */
+  it('达到主 Agent ReAct 上限后停止，不依赖数据库统一预算', async () => {
     const f = fixture(Array.from({ length: 21 }, () => tool('get_user_profile')));
-    await expect(runLearningAssistant(f.graph, f.deps, f.input)).rejects.toThrow('20 次');
-    expect(f.calls).toHaveLength(20); expect(f.toolNames).toHaveLength(20);
+    await expect(runLearningAssistant(f.graph, f.deps, f.input)).rejects.toThrow('ReAct 轮数上限 6');
+    expect(f.calls).toHaveLength(6); expect(f.toolNames).toHaveLength(6);
   });
   /** 结构字段可空；不允许在 explanation 偷塞另外的问题。 */
   it('主问题可空，解释里的额外问句不能通过', () => {

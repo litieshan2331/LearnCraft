@@ -8,11 +8,25 @@ import { ModelGatewayError, type ModelMessage } from '../../../infrastructure/ll
 import type { TraceWriter } from '../../../application/services/trace-writer.js';
 import type { LearningAssistantDependencies } from '../ports.js';
 import { validateEvidenceReferences, type Actor, type Attribution, type SocraticResponse } from '../schemas/index.js';
-import type { AssistantState, ConversationMessage } from '../state.js';
+import { incrementReactTurns, type AssistantState, type ConversationMessage } from '../state.js';
 import { buildValidationFeedback } from '../prompts/validation-feedback.js';
 import { toolsForActor } from '../tools/index.js';
 
 type AgentPromptBuilder = (state: AssistantState, skillSummaries: readonly { id: string; title: string; summary: string }[]) => string;
+
+/** 返回当前角色的 ReAct 上限；上限由服务端装配，模型和用户不能修改。 */
+export function reactLimitFor(deps: LearningAssistantDependencies, actor: Actor): number {
+  return deps.reactLimits[actor];
+}
+
+/** 生成稳定的 Agent ReAct 上限错误，供图节点和测试识别。 */
+export function reactLimitExceeded(actor: Actor, limit: number): ModelGatewayError {
+  return new ModelGatewayError(
+    'LEARNING_ASSISTANT_REACT_LIMIT_EXCEEDED',
+    '学习助手 Agent ' + actor + ' 已达到本次运行的 ReAct 轮数上限 ' + String(limit) + '。',
+    false,
+  );
+}
 
 /** 稳定 UUID 用于轨迹父子关联、消息幂等及恢复后的结果复用。 */
 export function stableId(value: string): string {
@@ -30,8 +44,10 @@ export function conversationMessage(state: AssistantState, suffix: string, messa
   return { ...message, id: stableId(state.input.run_id + ':' + suffix), turnNo: state.input.message.turn_no };
 }
 
-/** 主子 Agent 共用模型请求和预算，连接密钥只停留在依赖对象中。 */
+/** 主子 Agent 共用模型请求和轨迹记录，连接密钥只停留在依赖对象中。 */
 export async function callModel(deps: LearningAssistantDependencies, state: AssistantState, actor: Actor, messages: ModelMessage[], repairing: boolean, buildPrompt: AgentPromptBuilder) {
+  const reactLimit = reactLimitFor(deps, actor);
+  if (state.reactTurns[actor] >= reactLimit) throw reactLimitExceeded(actor, reactLimit);
   const step = state.modelStep + 1;
   const parentSpan = actor === 'main' ? stableId(state.input.run_id) : state.child?.spanId ?? null;
   const span = stableId(state.input.run_id + ':model:' + step);
@@ -39,9 +55,10 @@ export async function callModel(deps: LearningAssistantDependencies, state: Assi
   const response = await deps.model.complete({
     agentRunId: state.input.run_id, turnNo: state.input.message.turn_no,
     connection: deps.connection,
-    messages: [{ role: 'system', content: buildPrompt(state, deps.skills.listSkills().filter(/** 只暴露对话助手可用的 Skill。 */ (skill) => skill.workflows.includes('learning_assistant'))) }, ...messages],
+    messages: [{ role: 'system', content: buildPrompt(state, deps.skills.listSkills().filter(/** 只暴露对话助手可用的 Skill。 */ (skill) => skill.workflows.includes('learning_assistant')))
+      + '\n\n#运行控制\n当前是 ' + actor + ' 的第 ' + String(state.reactTurns[actor] + 1) + ' 轮，本次最多 ' + String(reactLimit) + ' 轮。请在达到上限前输出最终结构化 JSON；需要时仍可调用已提供工具，不要等待额外轮次。' }, ...messages],
     tools, responseFormat: 'json_object',
-    /** 每次实际尝试在数据库原子预占，重试和备用也消耗同一预算。 */
+    /** 每次实际尝试在数据库原子记录，重试和备用也进入统一观测计数。 */
     beforeModelAttempt: async () => { await deps.reserveModelAttempt(state.input); },
     traceWriter: scopedTrace(deps, actor, span, parentSpan),
   });
@@ -65,20 +82,20 @@ export async function runChildModel(
   const { response, step } = await callModel(deps, state, actor, child.messages, child.repairUsed, buildPrompt);
   const messages = [...child.messages, response.message];
   const pending = [...(response.message.toolCalls ?? [])];
-  if (pending.length > 0) return { modelStep: step, child: { ...child, messages, pending, index: 0, toolBatchStep: step } };
+  if (pending.length > 0) return { modelStep: step, reactTurns: incrementReactTurns(state.reactTurns, actor), child: { ...child, messages, pending, index: 0, toolBatchStep: step } };
   try {
     const raw: unknown = JSON.parse(response.message.content ?? '');
     const output = parseOutput(raw, state);
     const recentTurns = new Set([...new Set(state.messages.map(/** 提取证据所属轮次。 */ (message) => message.turnNo))].sort(/** 轮次升序。 */ (a, b) => a - b).slice(-20));
     validateEvidenceReferences(output, state.context.evidence.filter(/** 仅校验近期及业务证据。 */ (item) => item.turn_no === null || recentTurns.has(item.turn_no)));
-    return { modelStep: step, child: { ...child, messages, pending: [], result: output } };
+    return { modelStep: step, reactTurns: incrementReactTurns(state.reactTurns, actor), child: { ...child, messages, pending: [], result: output } };
   } catch (error) {
     if (child.repairUsed) throw new Error('LEARNING_ASSISTANT_OUTPUT_INVALID：子 Agent 一次修复后仍非法', { cause: error });
-    return { modelStep: step, child: { ...child, messages: [...messages, { role: 'user', content: buildValidationFeedback(error) }], pending: [], repairUsed: true } };
+    return { modelStep: step, reactTurns: incrementReactTurns(state.reactTurns, actor), child: { ...child, messages: [...messages, { role: 'user', content: buildValidationFeedback(error) }], pending: [], repairUsed: true } };
   }
 }
 
-/** 确定预算错误，供持久化端口和测试复用；阻止第 21 次实际出网。 */
+/** 保留旧端口测试可复用的预算错误构造器；学习助手运行时不再调用它。 */
 export function modelBudgetExceeded(): ModelGatewayError {
-  return new ModelGatewayError('LEARNING_ASSISTANT_MODEL_BUDGET_EXCEEDED', '本次运行已用完 20 次模型请求预算。', false);
+  return new ModelGatewayError('LEARNING_ASSISTANT_MODEL_BUDGET_EXCEEDED', '模型请求预算已用完。', false);
 }

@@ -1,6 +1,6 @@
 /**
  * 学习助手运行时依赖端口；图通过注入的接口复用网关与业务应用服务。
- * 调用顺序：装配固定连接和持久化预算 → 取可信业务事实 → 模型/工具观测 → 校验证据 → 幂等保存。
+ * 调用顺序：装配固定连接和调用计数 → 取可信业务事实 → 模型/工具观测 → 校验证据 → 幂等保存。
  */
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import type { FileLearningSkills } from '../../application/services/learning-skills.js';
@@ -9,6 +9,12 @@ import type { ModelCompletionRequest, ModelCompletionResponse, ModelProviderConn
 import type { ToolGatewayPort } from '../../application/services/tool-aware-generator.js';
 import type { AssistantState, ConversationMessage } from './state.js';
 import type { BusinessResult, BusinessToolName, Evidence, RunInput, Verification } from './schemas/index.js';
+
+export interface LearningAssistantReactLimits {
+  main: number;
+  error_attribution: number;
+  socratic_tutor: number;
+}
 
 export interface ModelPort { complete(request: ModelCompletionRequest): Promise<ModelCompletionResponse> }
 export interface MemoryCandidate {
@@ -21,8 +27,10 @@ export interface LearningAssistantDependencies {
   /** 运行开始选择并固定；恢复时按已保存 connection_id 读取，禁止换成新的默认连接。 */
   connection: ModelProviderConnection;
   trace: TraceWriter;
-  /** 必须持久化原子预占；返回本 run 已消耗次数，超过 20 抛错。 */
+  /** 记录一次实际模型尝试；返回本 run 已累计次数，不承担 ReAct 上限判断。 */
   reserveModelAttempt(input: RunInput): Promise<number>;
+  /** 每个 Agent 一次运行内的 ReAct 模型轮数上限；不由用户请求覆盖。 */
+  reactLimits: LearningAssistantReactLimits;
   skills: Pick<FileLearningSkills, 'listSkills' | 'loadSkill'>;
   tavily: ToolGatewayPort;
   /** 身份、题目 ID 由服务端 input 注入；模型参数不能参与身份选取。 */

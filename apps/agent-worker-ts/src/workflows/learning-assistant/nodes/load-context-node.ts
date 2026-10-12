@@ -28,6 +28,6 @@ export async function prepareAgent(deps: LearningAssistantDependencies, state: A
     pendingQuestion: changedQuestion ? null : state.pendingQuestion,
     verificationTarget: changedQuestion ? null : state.verificationTarget,
     intent: null, stage: changedQuestion ? 'context_loaded' : state.stage,
-    pending: [], toolIndex: 0, toolBatchStep: 0, child: null, mainRepairUsed: false, repairMessages: [], response: null, modelStep: 0, memoryWritten: false,
+    pending: [], toolIndex: 0, toolBatchStep: 0, child: null, mainRepairUsed: false, repairMessages: [], response: null, modelStep: 0, reactTurns: { main: 0, error_attribution: 0, socratic_tutor: 0 }, memoryWritten: false,
   };
 }

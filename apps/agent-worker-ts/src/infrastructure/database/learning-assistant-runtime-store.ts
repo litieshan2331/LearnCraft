@@ -1,31 +1,29 @@
 /**
- * 学习助手独立轨迹与实际模型请求预算的 PostgreSQL 实现。
- * 调用顺序：reserveModelAttempt 原子预占运行预算 → append 事务写嵌套事件及用量 → listOwnedEvents 内部查询。
+ * 学习助手独立轨迹与实际模型请求计数的 PostgreSQL 实现。
+ * 调用顺序：reserveModelAttempt 原子记录模型尝试 → append 事务写嵌套事件及用量 → listOwnedEvents 内部查询。
  * 不访问旧四工作流 agent_runs，不保存连接密钥；连接池由装配方统一关闭。
  */
 import type { AgentTraceEventInput, TraceWriter } from '../../application/services/trace-writer.js';
 import type { TracePool } from './agent-trace-writer.js';
 import type { RunInput } from '../../workflows/learning-assistant/schemas/index.js';
-import { modelBudgetExceeded } from '../../workflows/learning-assistant/agents/shared.js';
 
-/** 学习助手运行存储；预算保存在业务运行记录，Checkpoint 回滚也不会恢复已消耗次数。 */
+/** 学习助手运行存储；调用计数保存在业务运行记录，Checkpoint 回滚也不会抹掉观测数据。 */
 export class PgLearningAssistantRuntimeStore implements TraceWriter {
   /** 使用现有连接池，所有身份来自服务端运行参数。 */
   constructor(private readonly pool: TracePool) {}
 
-  /** 最多 20 次实际请求；预占后崩溃保守计数，不退回预算。 */
+  /** 原子记录一次实际请求；ReAct 上限由图的 Agent 状态控制，此处不设置统一业务上限。 */
   async reserveModelAttempt(input: RunInput): Promise<number> {
     const client = await this.pool.connect();
     try {
       const result = await client.query(`UPDATE public.learning_assistant_runs
         SET model_call_count = model_call_count + 1, updated_at = now()
         WHERE id = $1 AND owner_id = $2 AND conversation_id = $3
-          AND status = 'running' AND model_call_count < 20
+          AND status = 'running'
         RETURNING model_call_count`, [input.run_id, input.owner_id, input.conversation_id]);
       if (result.rows.length > 0) return Number(result.rows[0]?.model_call_count);
       const run = await client.query(`SELECT model_call_count, status FROM public.learning_assistant_runs
         WHERE id = $1 AND owner_id = $2 AND conversation_id = $3`, [input.run_id, input.owner_id, input.conversation_id]);
-      if (Number(run.rows[0]?.model_call_count) >= 20) throw modelBudgetExceeded();
       throw new Error('学习助手运行不存在、身份不匹配或尚未处于 running 状态');
     } finally { client.release(); }
   }

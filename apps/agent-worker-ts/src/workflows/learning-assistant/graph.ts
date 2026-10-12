@@ -69,7 +69,8 @@ export type LearningAssistantGraph = ReturnType<typeof createLearningAssistantGr
 export async function runLearningAssistant(graph: LearningAssistantGraph, deps: LearningAssistantDependencies, rawInput: RunInput): Promise<AssistantState> {
   const input = RunInputSchema.parse(rawInput);
   if (deps.connection.ownerId !== input.owner_id || deps.connection.connectionId !== input.connection_id || deps.connection.modelId !== input.model_id) throw new Error('运行连接与服务端绑定身份不一致');
-  const config = { ...createLearningAssistantThreadConfig(input.conversation_id), recursionLimit: Number.MAX_SAFE_INTEGER, durability: 'sync' as const };
+  // Agent 自身的 ReAct 上限负责正常收束；这里仅作为图节点异常回环的最后熔断。
+  const config = { ...createLearningAssistantThreadConfig(input.conversation_id), recursionLimit: 512, durability: 'sync' as const };
   const saved = await graph.getState(config);
   const prior = saved.values as Partial<AssistantState>;
   if (prior.input !== undefined) {

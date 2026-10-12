@@ -17,7 +17,7 @@
 - `prompts/main-agent-prompt.ts`、`error-attribution-prompt.ts`、`socratic-tutor-prompt.ts`：每个 Agent 各自完整维护七节提示词、可信上下文、输出合同和示例。
 - `prompts/validation-feedback.ts`：主 Agent 和子 Agent 共用的一次性结构化输出修复反馈。
 - `schemas/index.ts`：运行输入、输出、证据、主要问题等 Zod 合同。
-- `../../infrastructure/database/learning-assistant-runtime-store.ts`：独立轨迹、原子模型预算、内部分页查询。
+- `../../infrastructure/database/learning-assistant-runtime-store.ts`：独立轨迹、原子模型调用计数、内部分页查询。
 
 ```text
 START → prepare → main
@@ -34,7 +34,7 @@ START → prepare → main
 
 先创建 `createLearningAssistantCheckpointer(databaseUrl)` 和 `PgLearningAssistantRuntimeStore(pool)`，再注入 `LearningAssistantDependencies`，调用 `createLearningAssistantGraph(deps)`、`runLearningAssistant(graph, deps, input)`。
 
-`connection` 必须是该用户本次运行确定的有效默认连接；`input` 只保存连接 ID、模型 ID，不保存密钥。恢复时按本次运行保存的连接快照重新装配，不能重新选择用户此刻的默认连接。网关通过请求级 `traceWriter` 使用学习助手轨迹，避免写到旧 `agent_runs` 外键。调用网关的 `beforeModelAttempt` 在每次实际尝试之前预占数据库预算，主模型、子模型、修复、重试、备用请求合计最多 20 次。预占后崩溃保守计数，不退还。
+`connection` 必须是该用户本次运行确定的有效默认连接；`input` 只保存连接 ID、模型 ID，不保存密钥。恢复时按本次运行保存的连接快照重新装配，不能重新选择用户此刻的默认连接。网关通过请求级 `traceWriter` 使用学习助手轨迹，避免写到旧 `agent_runs` 外键。调用网关的 `beforeModelAttempt` 在每次实际尝试之前原子记录调用计数。主 Agent、归因子 Agent、导师子 Agent 分别使用服务端装配的 ReAct 轮数上限（默认 6/4/4），上限保存在 Checkpoint；工具不会因为接近上限而被主动撤掉，提示词负责引导模型输出最终结构，图条件边负责停止回环。
 
 `loadInitialMessages` 仅在没有已初始化的 Checkpoint 时读取业务历史。之后模型消息来源为 Checkpoint，每次只取最近 20 个用户轮，包含当前轮并保留该轮完整工具链。业务消息表和页面分页仍保留全部历史。内部输出修复反馈不作为真实用户消息落库，也不会在后续轮次的模型上下文中重复出现。
 
@@ -50,7 +50,7 @@ Checkpoint 无法保证模型只收费一次：模型返回后、Checkpoint 保�
 
 ## 验收与当前边界
 
-单元测试使用真实 LangGraph + 假模型，覆盖自主工具路由、串行双子 Agent、子工具权限、证据伪造、单问题检查、一次修复、20 轮窗口、提示升级、换题重置、幂等记忆及节点恢复。网关测试覆盖实际重试和备用请求计入预算。真实 PostgreSQL 用例覆盖重建图恢复、并发预算、嵌套轨迹、全部业务消息及级联删除，不请求付费模型。
+单元测试使用真实 LangGraph + 假模型，覆盖自主工具路由、串行双子 Agent、子工具权限、证据伪造、单问题检查、一次修复、20 轮窗口、提示升级、换题重置、幂等记忆及节点恢复。真实 PostgreSQL 用例覆盖重建图恢复、并发调用计数、嵌套轨迹、全部业务消息及级联删除，不请求付费模型。
 
 主要问题的结构、问号与常见并列子问可程序检查；自然语言中所有语义复合问题不能仅靠 Zod 保证，需结合七节提示词与实际对话验收。
 
