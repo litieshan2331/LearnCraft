@@ -67,6 +67,8 @@ export class ModelEgressRequestError extends Error {
 }
 
 export interface PinnedRequestOptions {
+  /** 分布式许可失效时终止建连、请求与流式读取。 */
+  signal?: AbortSignal;
   pinnedIp: string;
   port: number;
   /** TLS SNI 与证书校验使用的域名；绝不能省略，否则 Node 会退化为按对端地址校验证书。 */
@@ -91,9 +93,9 @@ export interface PinnedRequester {
 }
 
 /** 打开到目标（或代理）的 TCP 连接，超时或失败统一抛错。 */
-function openTcpSocket(port: number, host: string, timeoutMs: number): Promise<Socket> {
+function openTcpSocket(port: number, host: string, timeoutMs: number, signal?: AbortSignal): Promise<Socket> {
   return new Promise((resolve, reject) => {
-    const socket = netConnect({ port, host });
+    const socket = netConnect({ port, host, signal });
     const timer = setTimeout(() => {
       socket.destroy();
       reject(new Error('连接超时'));
@@ -110,11 +112,11 @@ function openTcpSocket(port: number, host: string, timeoutMs: number): Promise<S
 }
 
 /** 经 CONNECT 代理建立到「钉死 IP」的隧道；与 Python 现状一致：代理只看到 IP。 */
-function openConnectTunnel(proxyUrl: string, host: string, port: number, timeoutMs: number): Promise<Socket> {
+function openConnectTunnel(proxyUrl: string, host: string, port: number, timeoutMs: number, signal?: AbortSignal): Promise<Socket> {
   return new Promise((resolve, reject) => {
     const proxy = new URL(proxyUrl);
     const proxyPort = proxy.port === '' ? 80 : Number(proxy.port);
-    openTcpSocket(proxyPort, proxy.hostname, timeoutMs)
+    openTcpSocket(proxyPort, proxy.hostname, timeoutMs, signal)
       .then((socket) => {
         let buffer = '';
         const onData = (chunk: Buffer) => {
@@ -141,10 +143,11 @@ function openConnectTunnel(proxyUrl: string, host: string, port: number, timeout
 
 /** 建立已完成 TLS 握手、且按 servername 校验证书的 socket。 */
 async function openPinnedTlsSocket(options: PinnedRequestOptions): Promise<TLSSocket> {
+  options.signal?.throwIfAborted();
   const raw =
     options.proxyUrl === null
-      ? await openTcpSocket(options.port, options.pinnedIp, options.connectTimeoutMs)
-      : await openConnectTunnel(options.proxyUrl, options.pinnedIp, options.port, options.connectTimeoutMs);
+      ? await openTcpSocket(options.port, options.pinnedIp, options.connectTimeoutMs, options.signal)
+      : await openConnectTunnel(options.proxyUrl, options.pinnedIp, options.port, options.connectTimeoutMs, options.signal);
   return new Promise((resolve, reject) => {
     const tlsSocket = tlsConnect({
       socket: raw,
@@ -178,6 +181,7 @@ export function createNodePinnedRequester(): PinnedRequester {
             path: options.path,
             headers: options.headers,
             setHost: false,
+            signal: options.signal,
             // 不使用 Agent：只有 agent 为空时 Node 才会采用 createConnection。
             // 传 agent:false 会新建默认 Agent 并忽略这里的已连接 TLS socket（会误连 host 默认值）。
             createConnection: () => tlsSocket,
@@ -246,6 +250,8 @@ async function readBoundedBody(response: PinnedHttpResponse, maxBytes: number, e
 }
 
 export interface ModelEgressCallInput {
+  /** 从模型并发许可传入的中止信号，不改变出网安全策略。 */
+  signal?: AbortSignal;
   ownerId: string;
   modelConnectionId: string;
   agentRunId: string | null;
@@ -310,6 +316,7 @@ export class SafeModelEgressClient {
   }
 
   private async post(input: ModelEgressCallInput, accept: string): Promise<PinnedHttpResponse> {
+    input.signal?.throwIfAborted();
     if (!this.options.enabled) {
       throw new ModelEgressRequestError(MODEL_EGRESS_DISABLED, '模型受控出网未启用。', false);
     }
@@ -327,7 +334,9 @@ export class SafeModelEgressClient {
       throw error;
     }
     const pinnedUrl = ModelEgressPolicy.buildPinnedRequestUrl(endpoint, input.endpointSegments);
+    input.signal?.throwIfAborted();
     await this.recordOrBlock(input, endpoint);
+    input.signal?.throwIfAborted();
     const body = Buffer.from(JSON.stringify(input.payload), 'utf8');
     try {
       return await this.requester.request({
@@ -348,6 +357,7 @@ export class SafeModelEgressClient {
         connectTimeoutMs: this.options.connectTimeoutMs,
         readTimeoutMs: this.options.readTimeoutMs,
         proxyUrl: this.options.proxyUrl,
+        signal: input.signal,
         ...(input.ca === undefined ? {} : { ca: input.ca }),
       });
     } catch (error) {

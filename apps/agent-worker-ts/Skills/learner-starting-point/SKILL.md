@@ -22,6 +22,7 @@ layer: context
 
 ## 按工作流适配
 
+- `learning_assistant`：只根据服务端查询的必要画像调整对话表达，用户信息缺失时中性回应；不得推断不存在的经历。
 - `assessment_generate`：只调整题干、选项和解析的语言复杂度；题量、难度和考点范围由前测工作流决定。
 - `plan_generate`：只调整 `title`、`node_brief`、`learning_objective`、`rationale` 和 `completion_criteria` 的表达清晰度；章节数量、难度数值和依赖关系由路线工作流决定。
 - `card_content_generate`：只调整 `foundation`、示例说明和误区文案的解释深度；文件结构和代码范围由节点内容合同决定。

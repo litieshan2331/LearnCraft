@@ -22,7 +22,7 @@ import {
   ModelEgressRequestError,
   type ModelEgressCallInput,
 } from './safe-egress-client.js';
-import { ModelRateLimitError, type ModelRateLimiter } from '../redis/model-rate-limiter.js';
+import { ModelRateLimitError, type ModelRateLimiter, type ModelRateLimitLease } from '../redis/model-rate-limiter.js';
 import type { FallbackTokenBudget } from '../redis/fallback-budget.js';
 import type { TraceWriter } from '../../application/services/trace-writer.js';
 
@@ -84,6 +84,10 @@ export interface ModelCompletionRequest {
    * 用于「边生成边展示思考过程」。回调失败会被忽略，不影响本次调用与聚合结果。
    */
   onReasoningDelta?: (text: string) => void;
+  /** 每次实际出网前预占共享预算；含重试和备用请求，失败必须阻止出网。 */
+  beforeModelAttempt?: () => Promise<void>;
+  /** 请求级观测端口；学习助手使用独立运行表，不改变旧工作流的默认观测。 */
+  traceWriter?: TraceWriter;
 }
 
 export interface ModelCompletionResponse {
@@ -181,7 +185,7 @@ export class OpenAiCompatibleModelGateway {
       try {
         await this.fallbackBudget.allow();
       } catch {
-        await this.traceWriter?.append({
+        await (request.traceWriter ?? this.traceWriter)?.append({
           runId: request.agentRunId,
           eventType: 'llm.fallback',
           turnNo: request.turnNo,
@@ -196,7 +200,7 @@ export class OpenAiCompatibleModelGateway {
         throw new ModelGatewayError('MODEL_FALLBACK_BUDGET_UNAVAILABLE', '备用模型预算不可用或已达上限。', false);
       }
     }
-    await this.traceWriter?.append({
+    await (request.traceWriter ?? this.traceWriter)?.append({
       runId: request.agentRunId,
       eventType: 'llm.fallback',
       turnNo: request.turnNo,
@@ -226,7 +230,7 @@ export class OpenAiCompatibleModelGateway {
     const payload = this.buildPayload({ ...request, connection });
     let lastError: ModelGatewayError | null = null;
     for (let attempt = 0; attempt <= this.requestMaxRetries; attempt += 1) {
-      let lease: { release(): Promise<void> } | null = null;
+      let lease: ModelRateLimitLease | null = null;
       const attemptNo = attempt + 1;
       const startedAt = new Date();
       try {
@@ -237,7 +241,8 @@ export class OpenAiCompatibleModelGateway {
             apiKey: connection.apiKey,
           });
         }
-        await this.traceWriter?.append({
+        await request.beforeModelAttempt?.();
+        await (request.traceWriter ?? this.traceWriter)?.append({
           runId: request.agentRunId,
           eventType: 'llm.request.started',
           turnNo: request.turnNo,
@@ -250,6 +255,9 @@ export class OpenAiCompatibleModelGateway {
             payload,
           },
         });
+        // 审计或预算等待后重新确认许可；失效信号同时传递到真实传输层。
+        await lease?.renew?.();
+        lease?.signal?.throwIfAborted();
         const response = await this.egressClient.postOpenAiCompatibleSse({
           ownerId: connection.ownerId,
           modelConnectionId: connection.connectionId,
@@ -258,14 +266,17 @@ export class OpenAiCompatibleModelGateway {
           apiKey: connection.apiKey,
           endpointSegments: ['chat', 'completions'],
           payload,
+          signal: lease?.signal,
         });
         const accumulator = new ModelCompletionAccumulator(request.onReasoningDelta);
         for await (const event of response.events) {
+          lease?.signal?.throwIfAborted();
           accumulator.accept(event);
         }
+        lease?.signal?.throwIfAborted();
         const completed = accumulator.finish();
         const finishedAt = new Date();
-        await this.traceWriter?.append({
+        await (request.traceWriter ?? this.traceWriter)?.append({
           runId: request.agentRunId,
           eventType: 'llm.attempt.completed',
           turnNo: request.turnNo,
@@ -283,6 +294,8 @@ export class OpenAiCompatibleModelGateway {
         });
         return completed;
       } catch (error) {
+        // 许可失效优先于网络错误分类，禁止借网络重试或备用模型继续出网。
+        if (lease?.signal?.aborted) error = lease.signal.reason;
         if (error instanceof ModelRateLimitError) {
           const mapped = new ModelGatewayError(error.code, error.message, true);
           await this.recordAttemptFailure(request, connection, route, attemptNo, startedAt, mapped);
@@ -295,7 +308,7 @@ export class OpenAiCompatibleModelGateway {
           if (!mapped.retryable || attempt === this.requestMaxRetries) {
             throw mapped;
           }
-          await this.traceWriter?.append({
+          await (request.traceWriter ?? this.traceWriter)?.append({
             runId: request.agentRunId,
             eventType: 'llm.retry',
             turnNo: request.turnNo,
@@ -311,6 +324,8 @@ export class OpenAiCompatibleModelGateway {
               errorCode: mapped.code,
             },
           });
+          await lease?.release();
+          lease = null;
           await this.sleep(500 * 2 ** attempt);
           continue;
         }
@@ -339,7 +354,7 @@ export class OpenAiCompatibleModelGateway {
     startedAt: Date,
     error: ModelGatewayError,
   ): Promise<void> {
-    await this.traceWriter?.append({
+    await (request.traceWriter ?? this.traceWriter)?.append({
       runId: request.agentRunId,
       eventType: 'llm.attempt.failed',
       turnNo: request.turnNo,

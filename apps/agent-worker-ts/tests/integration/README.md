@@ -4,6 +4,7 @@
 
 文件：
 
+- `learning-assistant-graph.test.ts`：真实 PostgreSQL Checkpoint 重建图恢复、20 次并发预算、学习助手独立嵌套轨迹与幂等消息。仅使用假模型，不产生模型费用。设置 `LEARNING_ASSISTANT_TEST_DATABASE_URL`，或显式设置 `LEARNING_ASSISTANT_TEST_USE_LOCAL_ENV=1` 从工程 `infra/.env`、根 `.env` 加载本地配置；测试完成清理其随机会话和用户。
 - `live-readonly.test.ts`：**只执行 SELECT**。核对 `agent` schema 的列与 Repository 使用的一致，
   并解密一条真实模型连接凭据（只输出长度与前缀，不输出明文）。
   需要 `AGENT_TS_TEST_DATABASE_URL`、`CREDENTIAL_ENCRYPTION_KEY`、`CREDENTIAL_ENCRYPTION_KEY_VERSION`。

@@ -28,6 +28,10 @@ export interface AgentTraceEventInput {
   finishedAt?: Date;
   inputTokens?: number;
   outputTokens?: number;
+  /** 可选嵌套定位；旧工作流继续使用原有事件结构。 */
+  spanId?: string;
+  parentSpanId?: string | null;
+  agentName?: string;
   payload: Record<string, unknown>;
 }
 

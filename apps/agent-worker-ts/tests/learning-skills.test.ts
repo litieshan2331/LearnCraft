@@ -21,18 +21,29 @@ function createLoader(): FileLearningSkills {
 }
 
 describe('FileLearningSkills', () => {
-  /** 验证第一层索引只暴露四个 Skill 的元数据。 */
-  it('只从索引层列出四个教学 Skill', () => {
+  /** 验证第一层索引暴露四个原有 Skill 和新增对话 Skill 的元数据。 */
+  it('只从索引层列出教学 Skill 摘要', () => {
     const entries = createLoader().listSkills();
 
-    expect(entries).toHaveLength(4);
+    expect(entries).toHaveLength(5);
     expect(entries.map((entry) => entry.id)).toEqual([
       'learner-starting-point',
       'concept-bridging',
       'example-guidance',
       'misconception-repair',
+      'socratic-tutoring',
     ]);
     expect(entries.every((entry) => !('content' in entry))).toBe(true);
+  });
+
+  /** 对话模式按ID渐进加载，旧工作流不自动加载新对话 Skill。 */
+  it('对话 Skill 可按需加载，拒绝模型指定任意路径', () => {
+    const loader = createLoader();
+    expect(loader.loadSkill('socratic-tutoring')).toContain('一个主要问题');
+    expect(() => loader.loadSkill('../../.env')).toThrow('未注册');
+    expect(() => loader.loadSkill('example-guidance', 'learning_assistant')).toThrow('不允许');
+    expect(loader.selectForWorkflow('learning_assistant').map((item) => item.id)).toEqual(['learner-starting-point', 'misconception-repair', 'socratic-tutoring']);
+    expect(loader.selectForWorkflow('assessment_generate').map((item) => item.id)).not.toContain('socratic-tutoring');
   });
 
   /** 验证不同工作流按固定层级选择不同 Skill，未选 Skill 不进入上下文。 */

@@ -16,6 +16,7 @@
 
 子目录：
 
+- `learning-assistant/`：独立 LangGraph.js 对话主图；主 Agent 通过工具调用两个子 Agent，使用 PostgreSQL Checkpoint 与独立轨迹。接入状态及装配合同见该目录 README。
 - `assessment-generate/`：`assessment_generate` 前测题集生成
   （读取输入快照 → 内部接口取连接 → 解密凭据 → 会话内生成与自纠 → 幂等持久化）。
 - `posttest-generate/`：`posttest_generate` 节点后测生成

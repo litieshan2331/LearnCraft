@@ -408,6 +408,51 @@ describe('错误分类与重试', () => {
 
 
 describe('模型限流接入', () => {
+  /** 出网前许可失效时拒绝请求，也不触发备用模型。 */
+  it('出网前续期失败阻止 Provider 和备用请求', async () => {
+    const controller = new AbortController();
+    const lost = new ModelRateLimitError('MODEL_RATE_LIMIT_LEASE_LOST', '许可失效');
+    let released = false;
+    const limiter: ModelRateLimiter = { acquire: async () => ({
+      signal: controller.signal,
+      /** 模拟独立许可已失效。 */
+      renew: async () => { controller.abort(lost); throw lost; },
+      /** 核对失败路径释放自己的许可。 */
+      release: async () => { released = true; },
+    }) };
+    const egress = new FakeEgress(() => [event({ content: '{}' })]);
+    const gateway = new OpenAiCompatibleModelGateway(egress, 2, undefined, limiter,
+      { ...CONNECTION, modelId: 'fallback' });
+    await expect(gateway.complete(request())).rejects.toMatchObject({ code: 'MODEL_RATE_LIMIT_LEASE_LOST' });
+    expect(egress.calls).toHaveLength(0);
+    expect(released).toBe(true);
+  });
+
+  /** 在阻塞流读取中失去许可，传输层收到中止信号并释放并发。 */
+  it('续期失效中断正在读取的模型流', async () => {
+    const controller = new AbortController();
+    let released = false;
+    const limiter: ModelRateLimiter = { acquire: async () => ({ signal: controller.signal,
+      /** 模拟网关出网前成功续期。 */ renew: async () => undefined,
+      /** 检查流中断后的释放。 */ release: async () => { released = true; },
+    }) };
+    const egress: ModelEgressPort = {
+      /** 通过实际传入的 signal 中断一次阻塞读取。 */
+      postOpenAiCompatibleSse: async (input) => ({ statusCode: 200,
+        events: (async function* blockedStream() {
+          await new Promise<void>((_resolve, reject) => {
+            input.signal!.addEventListener('abort', () => reject(input.signal!.reason), { once: true });
+            controller.abort(new ModelRateLimitError('MODEL_RATE_LIMIT_LEASE_LOST', '许可失效'));
+          });
+          yield event({ content: '{}' });
+        })(),
+      }),
+    };
+    await expect(new OpenAiCompatibleModelGateway(egress, 0, undefined, limiter).complete(request()))
+      .rejects.toMatchObject({ code: 'MODEL_RATE_LIMIT_LEASE_LOST' });
+    expect(released).toBe(true);
+  });
+
   it('每次 Provider 尝试前获取租约，结束后释放租约', async () => {
     const calls: string[] = [];
     const limiter: ModelRateLimiter = {
@@ -452,5 +497,39 @@ describe('模型限流接入', () => {
       retryable: true,
     });
     expect(providerCalls).toBe(0);
+  });
+});
+
+describe('请求级模型预算与独立轨迹', () => {
+  /** 一次 complete 的主连接重试与备用请求都必须预占同一运行预算。 */
+  it('重试和备用请求均计入预算，并覆盖构造器默认轨迹', async () => {
+    const original = new FakeTraceWriter();
+    const scoped = new FakeTraceWriter();
+    const egress = new FakeEgress((input) => input.modelConnectionId === CONNECTION.connectionId
+      ? new ModelEgressRequestError('MODEL_PROVIDER_HTTP_503', '不可用', true)
+      : [event({ content: '{}' })]);
+    const gateway = new OpenAiCompatibleModelGateway(egress, 1, async () => undefined, null,
+      { ...CONNECTION, connectionId: 'fallback', modelId: 'fallback-model' }, null, original);
+    let attempts = 0;
+    await gateway.complete(request({ traceWriter: scoped,
+      /** 统计每次实际请求。 */ beforeModelAttempt: async () => { attempts += 1; } }));
+    expect(attempts).toBe(3); expect(egress.calls).toHaveLength(3);
+    expect(original.events).toHaveLength(0);
+    expect(scoped.events.some((item) => item.eventType === 'llm.fallback')).toBe(true);
+  });
+
+  /** 预占失败阻止下一次出网，预算错误不得触发备用模型。 */
+  it('共享预算已达20次，阻止重试和备用请求', async () => {
+    const egress = new FakeEgress(() => new ModelEgressRequestError('MODEL_PROVIDER_HTTP_503', '不可用', true));
+    const gateway = new OpenAiCompatibleModelGateway(egress, 2, async () => undefined, null,
+      { ...CONNECTION, connectionId: 'fallback' });
+    let attempts = 19;
+    await expect(gateway.complete(request({
+      /** 最多预占20次。 */ beforeModelAttempt: async () => {
+        if (attempts >= 20) throw new ModelGatewayError('LEARNING_ASSISTANT_MODEL_BUDGET_EXCEEDED', '20 次', false);
+        attempts += 1;
+      },
+    }))).rejects.toMatchObject({ code: 'LEARNING_ASSISTANT_MODEL_BUDGET_EXCEEDED' });
+    expect(attempts).toBe(20); expect(egress.calls).toHaveLength(1);
   });
 });

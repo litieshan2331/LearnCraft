@@ -204,6 +204,11 @@ export class RespRedisClient {
         socket.off('error', onError);
         socket.off('close', onClose);
         if (error !== null) {
+          // 超时后不能复用连接：迟到的旧回复可能被误认为新许可续期成功。
+          this.ready = false;
+          if (this.socket === socket) this.socket = null;
+          this.buffer = Buffer.alloc(0);
+          socket.destroy();
           reject(error);
           return;
         }

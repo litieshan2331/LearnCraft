@@ -85,6 +85,13 @@
       "when": 1791602875407,
       "tag": "0011_langgraph_checkpointer",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791775250250,
+      "tag": "0012_learning_assistant_trace_events",
+      "breakpoints": true
     }
   ]
 }

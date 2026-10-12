@@ -1,8 +1,8 @@
 # 学习助手对话 MVP 方案
 
-> 文档状态：待评审方案，尚未进入代码实现
+> 文档状态：业务持久化/API 与 LangGraph 对话图已实现，队列、内部 API 与页面链路待接入
 >
-> 更新日期：2026-10-09
+> 更新日期：2026-10-12
 >
 > 适用范围：面向程序员的错题学习对话助手
 
@@ -56,9 +56,9 @@ MVP 只保证两个核心功能：
 - 判断当前请求属于错题分析、启发式追问、复盘还是普通编程问题；
 - 获取必要的画像、错题和掌握度数据；
 - 决定是否调用子 Agent；
-- 控制每轮只提出一个主要问题；
+- 控制每轮最多提出一个主要问题，不强制提问；
 - 将子 Agent 的结构化结果转成自然语言；
-- 在用户完成修复后调用记忆写入工具；“完成修复”指用户能够针对原错误给出正确解释、修正代码或正确完成相似验证题，并且归因子 Agent 返回足够的验证证据；如果用户只是表示“明白了”，不能直接判定为完成修复；
+- 在子 Agent 返回验证结论和证据后，由服务端验证并幂等写入学习经历；“完成修复”需要用户后续的正确推演或验证表现，“明白了”不能判定为修复；未执行代码只记录模型评估，首期不直接更新画像或掌握度；
 - 在需要核对外部事实时调用 Tavily。
 
 主 Agent 不负责自由规划长周期课程。MVP 的计划只表现为当前会话的下一步动作，例如“先回答这个追问”“再做一道相似题”。
@@ -293,8 +293,9 @@ new
 4. 安装并接入 LangGraph.js，创建主图，以及错题归因子 Agent、苏格拉底导师子 Agent 的结构化输入输出校验。
 5. 接入 `get_wrong_question`、画像与掌握度查询、`load_skill`、`record_learning_memory`、`mark_learning_step` 和受控 Tavily 调用。
 6. 增加对话运行的调用上限、权限校验、错误记录、幂等写入和学习经历记忆写入规则。
-7. 在“学习起点”中接入学习助手对话页面，支持刷新后恢复会话和最近消息。
-8. 用错题归因、连续追问、修复验证、工具失败和重复请求用例完成端到端验收。
+7. 接入对话运行的队列投递与 Worker 消费，并增加读取最近 20 轮及业务上下文、回写助手消息和运行结果的内部 API，打通“页面发送消息 → Worker 执行 LangGraph → 回复落库 → 页面读取回复”的完整链路。
+8. 在“学习起点”中接入学习助手对话页面，支持刷新后恢复会话和最近消息。
+9. 用错题归因、连续追问、修复验证、工具失败和重复请求用例完成端到端验收。
 
 ## 十二、LangGraph.js 实现目录
 
@@ -427,7 +428,7 @@ LangGraph 依赖只安装在 `apps/agent-worker-ts`，不安装到 Web 前端。
 
 ```text
 thread_id = conversation_id
-checkpoint_ns = learncraft.learning_assistant.v1
+checkpoint_ns = ""（根图使用 LangGraph 默认命名空间）
 ```
 
 `conversation_id` 由 Web 创建并传入 Worker。每次用户发送消息都在同一 `thread_id` 上继续图执行；`learning_assistant_run.id` 用于记录本次触发和幂等，不替代 `thread_id`。
@@ -460,4 +461,20 @@ Web API 写入用户消息和 learning_assistant_runs
 ```
 
 Checkpointer 只解决图执行恢复；它不改变用户消息落库、20 轮滑动窗口、长期学习经历记忆和用户画像的业务规则。
+
+## 十四、本次图实现与已确认约定
+
+本节及代码合同是本轮确认后的实现依据；前文目录与 JSON 示例为初期设计示例。实际入口为 `apps/agent-worker-ts/src/workflows/learning-assistant/index.ts`，细节见同目录 `README.md`。
+
+- 主 Agent 将 `analyze_wrong_answer` 和 `generate_socratic_question` 当作工具，可串行“归因 → 导师”，普通编程问题可直接回答。子 Agent 使用独立模型/工具节点，可调用业务工具、Skill、Tavily，禁止进一步委派。
+- `graph.ts` 编译主图；`state.ts` 保存图状态；`agents/main-agent.ts`、`error-attribution-agent.ts`、`socratic-tutor-agent.ts` 分别实现三个 Agent；`prompts/main-agent-prompt.ts`、`error-attribution-prompt.ts`、`socratic-tutor-prompt.ts` 分别维护各自七节提示词。共用模型循环与提示词边界放入各目录 `shared.ts`，`index.ts` 仅重新导出；`nodes/` 保存上下文、工具与持久化节点；`tools/index.ts` 定义工具；`schemas/index.ts` 校验主子输入输出。
+- 身份和题目由服务端绑定，模型不能指定用户。每个 run 固定有效默认模型连接，主子共用；密钥不进入 Checkpoint 或轨迹。
+- 模型以 Checkpoint 消息为来源，只发送最近 20 轮，包含当前轮，保留轮内完整工具链。业务消息表和页面历史不做 20 轮裁剪。
+- 主回复将 `explanation` 与可空的 `primary_question` 分开，每轮最多一个主要问题；证据不足归因返回 `insufficient_evidence`。置信度仅为模型自评，证据来源和后续表现才用于验证。
+- 正常对话在每轮 `END`，保存待回答问题和验证目标；提示 0～3 级，连续两次未推进后升级，换题重置相关状态。非法结构化输出仅修复一次。
+- 每次 run 共享 20 次实际模型请求预算，主子调用、输出修复、网关重试与备用请求均计入；预算原子写入运行记录，恢复不重置。不新增业务工具、Skill、Tavily 单次次数限制，保留共享每日 Tavily 配额。
+- `0012_learning_assistant_trace_events` 已执行，新增 `agent.learning_assistant_trace_events`。`span_id`、`parent_span_id` 与 `agent_name` 记录父工具、子模型与子工具的完整嵌套轨迹，独立关联学习助手 run，不混入旧四个工作流。
+- 消息使用固定 ID、记忆使用固定 run 标识幂等写入；恢复已保存的模型/工具结果。模型返回后、Checkpoint 保存前崩溃仍可能重复请求及收费。
+
+后续继续第十一节第 5～7 步的生产接入：实现业务取数与服务端记忆验证内部 API，装配固定模型连接、队列投递和 Worker 消费，再接入页面与观测界面。现有公开发送消息 API 尚未自动运行此图，完整页面回复链路尚未完成。
 

@@ -22,6 +22,7 @@ layer: repair
 
 ## 按工作流适配
 
+- `learning_assistant`：根据真实错题和用户解释提出错因假设，引用服务端证据；不足时返回 `insufficient_evidence`。只通过用户后续表现判断是否推进，不把自评置信度当作修复概率。
 - `card_content_generate`：把通用误区写入 `pitfalls_debug.title/cause/fix`，把简短错误模式写入 `teaching_memory.common_mistakes`；不声称某位学习者已经犯错。
 - `assessment_generate`：把已知误区转成可诊断的干扰项，并在 `explanation` 中说明选项为什么不成立；题量和字段由前测工作流决定。
 - `posttest_generate`：只根据节点内容和 `teaching_memory` 设计误区相关题目与解析；不生成个性化答题反馈。

@@ -30,6 +30,7 @@ import {
   updatedAtColumn,
 } from "./_common";
 import { users } from "./identity";
+import { learningAssistantRuns } from "./learning-assistant";
 import { learningGoals } from "./profile";
 import { userModelConnections } from "./model-connection";
 
@@ -159,6 +160,33 @@ export const agentTraceEvents = agentSchema.table("agent_trace_events", {
   check("ck_agent_trace_events_input_tokens", sql`${table.inputTokens} is null or ${table.inputTokens} >= 0`),
   check("ck_agent_trace_events_output_tokens", sql`${table.outputTokens} is null or ${table.outputTokens} >= 0`),
   index("idx_agent_trace_events_run_sequence").on(table.agentRunId, table.sequenceNo),
+]);
+
+/** 学习助手独立的完整轨迹；父工具 span 关联子 Agent 的模型与工具事件。 */
+export const learningAssistantTraceEvents = agentSchema.table("learning_assistant_trace_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  runId: uuid("run_id").notNull().references(() => learningAssistantRuns.id, { onDelete: "cascade" }),
+  sequenceNo: integer("sequence_no").notNull(),
+  eventType: varchar("event_type", { length: 80 }).notNull(),
+  spanId: uuid("span_id").notNull(),
+  parentSpanId: uuid("parent_span_id"),
+  agentName: varchar("agent_name", { length: 40 }).notNull(),
+  turnNo: integer("turn_no"),
+  attemptNo: integer("attempt_no"),
+  startedAt: nullableTimestampColumn("started_at"),
+  finishedAt: nullableTimestampColumn("finished_at"),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  payloadJson: jsonb("payload_json").notNull().default({}),
+  createdAt: createdAtColumn(),
+}, (table) => [
+  unique("uq_learning_assistant_trace_sequence").on(table.runId, table.sequenceNo),
+  check("ck_learning_assistant_trace_sequence", sql`${table.sequenceNo} >= 1`),
+  check("ck_learning_assistant_trace_actor", sql`${table.agentName} in ('main', 'error_attribution', 'socratic_tutor')`),
+  check("ck_learning_assistant_trace_input_tokens", sql`${table.inputTokens} is null or ${table.inputTokens} >= 0`),
+  check("ck_learning_assistant_trace_output_tokens", sql`${table.outputTokens} is null or ${table.outputTokens} >= 0`),
+  index("idx_learning_assistant_trace_span").on(table.runId, table.spanId),
+  index("idx_learning_assistant_trace_parent").on(table.runId, table.parentSpanId),
 ]);
 
 /** LangGraph Checkpoint 迁移版本；由应用迁移管理，不在 Worker 启动时调用 setup()。 */

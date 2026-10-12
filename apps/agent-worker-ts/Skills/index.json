@@ -8,7 +8,7 @@
       "layer": "context",
       "priority": 10,
       "summary": "在工作流确定的难度和字段范围内，调整面向学习者的表达深度与语言负担。",
-      "workflows": ["assessment_generate", "plan_generate", "card_content_generate", "posttest_generate"],
+      "workflows": ["assessment_generate", "plan_generate", "card_content_generate", "posttest_generate", "learning_assistant"],
       "path": "learner-starting-point/SKILL.md",
       "sources": [
         "https://github.com/unix2dos/skills/blob/main/learnlm-inspired-tutor/SKILL.md",
@@ -47,13 +47,23 @@
       "layer": "repair",
       "priority": 40,
       "summary": "在已有内容、题目或标准字段中，用具体克制的语言表达误区和修复依据。",
-      "workflows": ["assessment_generate", "plan_generate", "card_content_generate", "posttest_generate"],
+      "workflows": ["assessment_generate", "plan_generate", "card_content_generate", "posttest_generate", "learning_assistant"],
       "path": "misconception-repair/SKILL.md",
       "sources": [
         "https://github.com/GarethManning/education-agent-skills/blob/main/skills/ai-learning-science/ai-feedback-design-principles/SKILL.md",
         "https://github.com/GarethManning/education-agent-skills/blob/main/skills/self-regulated-learning/error-analysis-protocol/SKILL.md",
         "https://github.com/GarethManning/education-agent-skills/blob/main/skills/student-learning/stuck-and-error-diagnosis-coach/SKILL.md"
       ]
+    },
+    {
+      "id": "socratic-tutoring",
+      "title": "苏格拉底式引导",
+      "layer": "repair",
+      "priority": 50,
+      "summary": "面向程序员对话，根据用户推演证据提出一个主要问题，按 0～3 级渐进提示并检查后续表现。",
+      "workflows": ["learning_assistant"],
+      "path": "socratic-tutoring/SKILL.md",
+      "sources": []
     }
   ]
 }

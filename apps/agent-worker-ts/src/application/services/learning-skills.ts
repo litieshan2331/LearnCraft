@@ -9,7 +9,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { z } from 'zod';
 
 export const LEARNING_SKILL_WORKFLOWS = [
@@ -17,6 +17,7 @@ export const LEARNING_SKILL_WORKFLOWS = [
   'plan_generate',
   'card_content_generate',
   'posttest_generate',
+  'learning_assistant',
 ] as const;
 
 export type LearningSkillsWorkflow = (typeof LEARNING_SKILL_WORKFLOWS)[number];
@@ -101,6 +102,14 @@ export class FileLearningSkills implements LearningSkillsPort {
     return this.index.skills;
   }
 
+  /** 对话 Agent 按索引 ID 按需读取全文；拒绝任意文件路径。 */
+  loadSkill(id: string, workflow?: LearningSkillsWorkflow): string {
+    const entry = this.index.skills.find((item) => item.id === id);
+    if (entry === undefined) throw new Error('未注册的教学 Skill：' + id);
+    if (workflow !== undefined && !entry.workflows.includes(workflow)) throw new Error('当前工作流不允许使用教学 Skill：' + id);
+    return this.loadFullText(entry);
+  }
+
   /** 按固定层级和优先级选择当前工作流允许使用的 Skill。 */
   selectForWorkflow(workflow: LearningSkillsWorkflow): SkillIndexEntry[] {
     return this.index.skills
@@ -151,7 +160,11 @@ export class FileLearningSkills implements LearningSkillsPort {
     if (cached !== undefined) {
       return cached;
     }
-    const filePath = join(this.skillsRoot, entry.path);
+    const filePath = resolve(this.skillsRoot, entry.path);
+    const relativePath = relative(resolve(this.skillsRoot), filePath);
+    if (isAbsolute(relativePath) || relativePath === '..' || relativePath.startsWith('..\\') || relativePath.startsWith('../')) {
+      throw new Error('教学 Skill 路径必须位于 Skills 根目录。');
+    }
     let content: string;
     try {
       content = stripSkillFrontmatter(readFileSync(filePath, 'utf8'));
