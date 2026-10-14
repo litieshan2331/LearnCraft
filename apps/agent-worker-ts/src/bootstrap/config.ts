@@ -56,6 +56,21 @@ export interface OutboxDispatcherConfig {
   /** 本运行时负责的 run_type 集合；空集合表示不领取任何事件（可用于回滚）。 */
 }
 
+/** 学习助手使用独立队列与 Outbox 事件，但复用同一 Redis 和重试参数。 */
+export function readLearningAssistantQueueConfig(): AgentQueueConfig {
+  const shared = readAgentQueueConfig();
+  return {
+    ...shared,
+    prefix: process.env.LEARNING_ASSISTANT_QUEUE_PREFIX?.trim() || 'learncraft:learning-assistant-queue:',
+    queueName: process.env.LEARNING_ASSISTANT_QUEUE_NAME?.trim() || 'learning_assistant.run',
+    concurrency: numberEnv('LEARNING_ASSISTANT_WORKER_CONCURRENCY', 1),
+    lockDurationMs: numberEnv('LEARNING_ASSISTANT_JOB_LOCK_DURATION_MS', shared.lockDurationMs),
+    maxAttempts: numberEnv('LEARNING_ASSISTANT_JOB_MAX_ATTEMPTS', shared.maxAttempts),
+    backoffMs: numberEnv('LEARNING_ASSISTANT_JOB_BACKOFF_MS', shared.backoffMs),
+    backoffMaxMs: numberEnv('LEARNING_ASSISTANT_JOB_BACKOFF_MAX_MS', shared.backoffMaxMs),
+  };
+}
+
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (value === undefined || value.length === 0) {
@@ -338,5 +353,17 @@ export function readOutboxDispatcherConfig(): OutboxDispatcherConfig {
     lockTimeoutSeconds: numberEnv('OUTBOX_LOCK_TIMEOUT_SECONDS', 900),
     maxAttempts: numberEnv('OUTBOX_MAX_ATTEMPTS', 10),
     maxBackoffSeconds: numberEnv('OUTBOX_MAX_BACKOFF_SECONDS', 300),
+  };
+}
+
+/** 读取学习助手 Outbox Dispatcher 配置；默认使用独立 dispatcher 身份和事件类型。 */
+export function readLearningAssistantOutboxDispatcherConfig(): OutboxDispatcherConfig {
+  const base = readOutboxDispatcherConfig();
+  return {
+    ...base,
+    queuePrefix: process.env.LEARNING_ASSISTANT_QUEUE_PREFIX?.trim() || 'learncraft:learning-assistant-queue:',
+    queueName: process.env.LEARNING_ASSISTANT_QUEUE_NAME?.trim() || 'learning_assistant.run',
+    eventType: 'learning_assistant.run.requested',
+    dispatcherId: process.env.LEARNING_ASSISTANT_OUTBOX_DISPATCHER_ID?.trim() || `${base.dispatcherId}:learning-assistant`,
   };
 }

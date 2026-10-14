@@ -17,6 +17,7 @@ import {
   formatRedisConnection,
   readAgentQueuePoolConfigs,
   readAgentReactMaxTurns,
+  readLearningAssistantQueueConfig,
   readAgentToolMaxCalls,
   readCoreInternalClientOptions,
   readModelEgressAuditRetentionDays,
@@ -28,6 +29,7 @@ import {
   readModelFallbackSettings,
 } from '../bootstrap/config.js';
 import { PgAgentRunRepository } from '../infrastructure/database/agent-run-repository.js';
+import { PgLearningAssistantRunQueueRepository } from '../infrastructure/database/learning-assistant-run-queue-repository.js';
 import { PgTraceWriter } from '../infrastructure/database/agent-trace-writer.js';
 import { PgModelEgressAuditRepository } from '../infrastructure/database/model-egress-audit-repository.js';
 import { ModelCredentialDecryptor } from '../infrastructure/llm/credential-decryptor.js';
@@ -38,9 +40,10 @@ import {
   TavilyToolGateway,
   type DailyQuotaCounter,
 } from '../infrastructure/mcp/tavily-tool-gateway.js';
-import { createAgentRunWorker } from '../infrastructure/queue/bullmq-agent-queue.js';
+import { createAgentRunWorker, createLearningAssistantWorker } from '../infrastructure/queue/bullmq-agent-queue.js';
 import { createReadinessChecker, startHealthServer } from '../interfaces/http/health-server.js';
 import { createAgentRunProcessor } from '../interfaces/queue/agent-run-processor.js';
+import { createLearningAssistantRunProcessor } from '../interfaces/queue/learning-assistant-run-processor.js';
 import { RespRedisClient } from '../infrastructure/redis/resp-client.js';
 import { RedisAgentProgressPublisher } from '../infrastructure/redis/agent-progress-publisher.js';
 import { RedisToolCircuitBreaker } from '../infrastructure/redis/tool-circuit-breaker.js';
@@ -63,9 +66,11 @@ async function main(): Promise<void> {
   // Worker 启动时先校验索引；生成任务只会在工作流执行时读取选中的 Skill 正文。
   const learningSkills = createLearningSkillsLoader();
   const queueConfigs = readAgentQueuePoolConfigs();
+  const learningAssistantQueueConfig = readLearningAssistantQueueConfig();
   const pool = new pg.Pool({ connectionString: requireDatabaseUrl(), max: 12 });
   const traceWriter = new PgTraceWriter(pool);
   const repository = new PgAgentRunRepository(pool, traceWriter);
+  const learningAssistantRunRepository = new PgLearningAssistantRunQueueRepository(pool);
 
   const internalClient = new CoreInternalClient(readCoreInternalClientOptions());
   const decryptor = ModelCredentialDecryptor.fromEnvironment();
@@ -177,6 +182,10 @@ async function main(): Promise<void> {
       queueConfigs.long,
       createAgentRunProcessor({ repository, workflows, maxRetries: queueConfigs.long.maxAttempts }),
     ),
+    learningAssistant: createLearningAssistantWorker(
+      learningAssistantQueueConfig,
+      createLearningAssistantRunProcessor({ repository: learningAssistantRunRepository }),
+    ),
   };
 
   // 健康与就绪端点：Python 侧 agent-api 下线后，运维与 compose healthcheck 依赖它判断 Agent 侧状态。
@@ -186,9 +195,17 @@ async function main(): Promise<void> {
     port: Number(process.env.AGENT_HTTP_PORT ?? 8080),
     host: process.env.AGENT_HTTP_HOST ?? '0.0.0.0',
     details: () => ({
-      queues: { short: queueConfigs.short.queueName, long: queueConfigs.long.queueName },
+      queues: {
+        short: queueConfigs.short.queueName,
+        long: queueConfigs.long.queueName,
+        learning_assistant: learningAssistantQueueConfig.queueName,
+      },
       queue_prefix: queueConfigs.short.prefix,
-      concurrency: { short: queueConfigs.short.concurrency, long: queueConfigs.long.concurrency },
+      concurrency: {
+        short: queueConfigs.short.concurrency,
+        long: queueConfigs.long.concurrency,
+        learning_assistant: learningAssistantQueueConfig.concurrency,
+      },
       registered_run_types: workflows.registeredRunTypes(),
       tavily_configured: tavilySettings.apiKey !== null,
       tavily_quota_configured: redisQuota !== null,
@@ -221,7 +238,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     console.log('[worker] 收到 ' + signal + '，等待在飞任务结束');
     await health.close();
-    await Promise.all([workers.short.close(), workers.long.close()]);
+    await Promise.all([workers.short.close(), workers.long.close(), workers.learningAssistant.close()]);
     await pool.end();
     await readinessRedis.close();
     await rateLimitRedis.close();
@@ -237,6 +254,7 @@ async function main(): Promise<void> {
     '[worker] 启动：短队列=' + queueConfigs.short.queueName + '，长队列=' + queueConfigs.long.queueName +
       '，前缀=' + queueConfigs.short.prefix +
       '，并发=' + String(queueConfigs.short.concurrency) + '/' + String(queueConfigs.long.concurrency) +
+      '/' + String(learningAssistantQueueConfig.concurrency) +
       '，已注册工作流=' + JSON.stringify(workflows.registeredRunTypes()) +
       '，联网工具=' + (tavilySettings.apiKey === null ? '未配置' : '已配置') +
       '，配额 Redis=' + (redisQuota === null ? '未配置' : '已配置') +

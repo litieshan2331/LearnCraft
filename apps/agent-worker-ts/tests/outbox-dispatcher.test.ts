@@ -9,7 +9,12 @@ import { describe, expect, it } from 'vitest';
 import type { AgentRunTask } from '../src/application/commands/execute-agent-run.js';
 import type { OutboxDispatcherConfig } from '../src/bootstrap/config.js';
 import type { PoolClientLike, PoolLike, QueryResultLike } from '../src/infrastructure/database/agent-run-repository.js';
-import { OutboxDispatcher, type AgentRunPublisher } from '../src/infrastructure/queue/outbox-dispatcher.js';
+import {
+  LEARNING_ASSISTANT_REQUESTED_EVENT_TYPE,
+  OutboxDispatcher,
+  type AgentRunPublisher,
+  type LearningAssistantPublisher,
+} from '../src/infrastructure/queue/outbox-dispatcher.js';
 import type { WorkflowPool } from '../src/infrastructure/queue/workflow-pool.js';
 
 const RUN_ID = '11111111-2222-4333-8444-555555555555';
@@ -219,5 +224,37 @@ describe('优雅关闭', () => {
     expect(releases).toHaveLength(1);
     expect(releases[0]?.values?.[3]).toContain('关闭时释放未投递事件');
     expect(claimed).toBe(1);
+  });
+});
+
+describe('学习助手 Outbox 路由', () => {
+  it('校验学习助手事件并投递带身份关联的 Job', async () => {
+    const client = new FakeClient([{
+      id: 'learning-event-1',
+      aggregate_id: RUN_ID,
+      event_version: 1,
+      payload_json: {
+        run_id: RUN_ID,
+        conversation_id: '22222222-2222-4333-8444-555555555555',
+        owner_id: '33333333-2222-4333-8444-555555555555',
+        trigger_message_id: '44444444-2222-4333-8444-555555555555',
+        connection_id: null,
+        model_id: null,
+        trace_id: 'trace-learning',
+        task_version: 1,
+      },
+      attempt_count: 1,
+      run_type: null,
+    }]);
+    const published: unknown[] = [];
+    const publisher: LearningAssistantPublisher = {
+      publishLearningAssistant: async (task) => { published.push(task); },
+    };
+    const config = { ...CONFIG, eventType: LEARNING_ASSISTANT_REQUESTED_EVENT_TYPE };
+    const dispatcher = new OutboxDispatcher(new FakePool(client), publisher, config);
+    await expect(dispatcher.dispatchOnce()).resolves.toBe(1);
+    expect(published).toEqual([expect.objectContaining({ runId: RUN_ID, traceId: 'trace-learning' })]);
+    expect(client.find("SET status = 'published'")).toBeDefined();
+    expect(client.find('JOIN public.learning_assistant_runs')).toBeDefined();
   });
 });

@@ -8,6 +8,7 @@
  */
 
 import { isDeepStrictEqual } from "node:util";
+import { randomUUID } from "node:crypto";
 
 import { and, asc, desc, eq, gt, inArray, max } from "drizzle-orm";
 import { z } from "zod";
@@ -22,6 +23,7 @@ import {
   learningAssistantRuns as runs,
   learningExperienceMemories as memories,
   learningGoals,
+  outboxEvents,
 } from "../../../lib/db/schema";
 
 import {
@@ -63,6 +65,8 @@ const conversationStage = z.enum([
 const runStatus = z.enum(["queued", "running", "succeeded", "failed", "cancelled"]);
 const memoryType = z.enum(["error_pattern", "concept_gap", "learning_preference", "intervention_result"]);
 const repairStatus = z.enum(["unverified", "improving", "repaired", "needs_more_practice", "unresolved"]);
+const LEARNING_ASSISTANT_RUN_REQUESTED_EVENT_TYPE = "learning_assistant.run.requested";
+const LEARNING_ASSISTANT_RUN_REQUESTED_EVENT_VERSION = 1;
 const conversationUpdateSchema = z.object({
   status: conversationStatus.optional(),
   stage: conversationStage.optional(),
@@ -211,6 +215,24 @@ export class DrizzleLearningAssistantRepository implements
         inputSummaryJson: value.inputSummaryJson ?? {},
       }).returning();
       if (!run) throw new Error("创建学习助手对话运行后未返回记录。");
+      const traceId = randomUUID();
+      await transaction.insert(outboxEvents).values({
+        aggregateType: "learning_assistant_run",
+        aggregateId: run.id,
+        eventType: LEARNING_ASSISTANT_RUN_REQUESTED_EVENT_TYPE,
+        eventVersion: LEARNING_ASSISTANT_RUN_REQUESTED_EVENT_VERSION,
+        payloadJson: {
+          run_id: run.id,
+          conversation_id: value.conversationId,
+          owner_id: value.ownerId,
+          trigger_message_id: message.id,
+          connection_id: null,
+          model_id: null,
+          trace_id: traceId,
+          task_version: 1,
+        },
+        traceId,
+      });
       await touchConversation(transaction, value.conversationId, now);
       return { run: toRunSnapshot(run), message: toMessageSnapshot(message), created: true };
     });

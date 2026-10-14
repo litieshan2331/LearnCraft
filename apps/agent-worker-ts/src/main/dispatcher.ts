@@ -11,19 +11,39 @@
 
 import pg from 'pg';
 
-import { formatRedisConnection, readAgentQueuePoolConfigs, readOutboxDispatcherConfig } from '../bootstrap/config.js';
-import { closeAgentQueue, createAgentQueue, createBullMqPublisher } from '../infrastructure/queue/bullmq-agent-queue.js';
+import {
+  formatRedisConnection,
+  readAgentQueuePoolConfigs,
+  readLearningAssistantOutboxDispatcherConfig,
+  readLearningAssistantQueueConfig,
+  readOutboxDispatcherConfig,
+} from '../bootstrap/config.js';
+import {
+  closeAgentQueue,
+  createAgentQueue,
+  createBullMqLearningAssistantPublisher,
+  createBullMqPublisher,
+  createLearningAssistantQueue,
+} from '../infrastructure/queue/bullmq-agent-queue.js';
 import { OutboxDispatcher } from '../infrastructure/queue/outbox-dispatcher.js';
 import { RespRedisClient } from '../infrastructure/redis/resp-client.js';
 import { createReadinessChecker, startHealthServer } from '../interfaces/http/health-server.js';
 
 async function main(): Promise<void> {
   const dispatcherConfig = readOutboxDispatcherConfig();
+  const learningAssistantDispatcherConfig = readLearningAssistantOutboxDispatcherConfig();
   const queueConfigs = readAgentQueuePoolConfigs();
+  const learningAssistantQueueConfig = readLearningAssistantQueueConfig();
 
   const pool = new pg.Pool({ connectionString: dispatcherConfig.databaseUrl, max: 4 });
   const queues = { short: createAgentQueue(queueConfigs.short), long: createAgentQueue(queueConfigs.long) };
+  const learningAssistantQueue = createLearningAssistantQueue(learningAssistantQueueConfig);
   const dispatcher = new OutboxDispatcher(pool, createBullMqPublisher(queues, queueConfigs), dispatcherConfig);
+  const learningAssistantDispatcher = new OutboxDispatcher(
+    pool,
+    createBullMqLearningAssistantPublisher(learningAssistantQueue, learningAssistantQueueConfig),
+    learningAssistantDispatcherConfig,
+  );
 
   const readinessRedis = new RespRedisClient({ url: formatRedisConnection(queueConfigs.short.connection) });
   const health = await startHealthServer({
@@ -32,7 +52,11 @@ async function main(): Promise<void> {
     host: process.env.AGENT_HTTP_HOST ?? '0.0.0.0',
     details: () => ({
       dispatcher_id: dispatcherConfig.dispatcherId,
-      queues: { short: queueConfigs.short.queueName, long: queueConfigs.long.queueName },
+      queues: {
+        short: queueConfigs.short.queueName,
+        long: queueConfigs.long.queueName,
+        learning_assistant: learningAssistantQueueConfig.queueName,
+      },
       queue_prefix: dispatcherConfig.queuePrefix,
       claims_all_run_types: true,
     }),
@@ -57,8 +81,12 @@ async function main(): Promise<void> {
     shuttingDown = true;
     console.log('[dispatcher] 收到 ' + signal + '，开始优雅关闭');
     await health.close();
-    await dispatcher.stop();
-    await Promise.all([closeAgentQueue(queues.short), closeAgentQueue(queues.long)]);
+    await Promise.all([dispatcher.stop(), learningAssistantDispatcher.stop()]);
+    await Promise.all([
+      closeAgentQueue(queues.short),
+      closeAgentQueue(queues.long),
+      closeAgentQueue(learningAssistantQueue),
+    ]);
     await pool.end();
     await readinessRedis.close();
     console.log('[dispatcher] 已关闭');
@@ -74,7 +102,7 @@ async function main(): Promise<void> {
       '，领取范围=全部 run_type' +
       '，健康端点=:' + String(health.port),
   );
-  await dispatcher.run();
+  await Promise.all([dispatcher.run(), learningAssistantDispatcher.run()]);
 }
 
 main().catch((error: unknown) => {

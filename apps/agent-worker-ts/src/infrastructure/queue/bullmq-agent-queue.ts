@@ -10,7 +10,9 @@
  * 导出：
  * - AGENT_RUN_JOB_NAME：业务队列中的任务名。
  * - AgentRunJobPayload / toJobPayload：队列载荷契约（snake_case，最小字段）。
+ * - LEARNING_ASSISTANT_JOB_NAME / LearningAssistantJobPayload：学习助手队列载荷契约。
  * - createAgentQueue / publishAgentRun / closeAgentQueue：发布侧。
+ * - createLearningAssistantQueue / publishLearningAssistantRun：学习助手发布侧。
  * - createAgentRunWorker：消费侧。
  * - agentJobBackoffDelayMs：队列退避（与数据库记录的退避使用同一公式）。
  */
@@ -24,9 +26,32 @@ import type { AgentRunPublisher } from './outbox-dispatcher.js';
 import type { WorkflowPool } from './workflow-pool.js';
 
 export const AGENT_RUN_JOB_NAME = 'agent.run';
+export const LEARNING_ASSISTANT_JOB_NAME = 'learning_assistant.run';
 
 export interface AgentRunJobPayload {
   agent_run_id: string;
+  trace_id: string;
+  task_version: 1;
+}
+
+export interface LearningAssistantRunTask {
+  runId: string;
+  conversationId: string;
+  ownerId: string;
+  triggerMessageId: string | null;
+  connectionId: string | null;
+  modelId: string | null;
+  traceId: string;
+  taskVersion: 1;
+}
+
+export interface LearningAssistantJobPayload {
+  run_id: string;
+  conversation_id: string;
+  owner_id: string;
+  trigger_message_id: string | null;
+  connection_id: string | null;
+  model_id: string | null;
   trace_id: string;
   task_version: 1;
 }
@@ -36,6 +61,20 @@ export function toJobPayload(task: AgentRunTask): AgentRunJobPayload {
   return { agent_run_id: task.agentRunId, trace_id: task.traceId, task_version: task.taskVersion };
 }
 
+/** 把学习助手任务转换为不携带凭据的 snake_case BullMQ 载荷。 */
+export function toLearningAssistantJobPayload(task: LearningAssistantRunTask): LearningAssistantJobPayload {
+  return {
+    run_id: task.runId,
+    conversation_id: task.conversationId,
+    owner_id: task.ownerId,
+    trigger_message_id: task.triggerMessageId,
+    connection_id: task.connectionId,
+    model_id: task.modelId,
+    trace_id: task.traceId,
+    task_version: task.taskVersion,
+  };
+}
+
 /** 队列退避：与 handleAgentRunFailure 写入数据库的延迟使用同一公式。 */
 export function agentJobBackoffDelayMs(attemptsMade: number, config: AgentQueueConfig): number {
   return calculateRetryDelaySeconds(attemptsMade, config.backoffMs / 1000, config.backoffMaxMs / 1000) * 1000;
@@ -43,6 +82,14 @@ export function agentJobBackoffDelayMs(attemptsMade: number, config: AgentQueueC
 
 export function createAgentQueue(config: AgentQueueConfig): Queue<AgentRunJobPayload> {
   return new Queue<AgentRunJobPayload>(config.queueName, {
+    connection: config.connection,
+    prefix: config.prefix,
+  });
+}
+
+/** 创建学习助手专用 BullMQ 队列，与旧四类工作流使用不同队列键空间。 */
+export function createLearningAssistantQueue(config: AgentQueueConfig): Queue<LearningAssistantJobPayload> {
+  return new Queue<LearningAssistantJobPayload>(config.queueName, {
     connection: config.connection,
     prefix: config.prefix,
   });
@@ -63,7 +110,22 @@ export async function publishAgentRun(
   });
 }
 
-export async function closeAgentQueue(queue: Queue<AgentRunJobPayload>): Promise<void> {
+/** 发布学习助手运行；run_id 同时作为 BullMQ jobId，重复投递不会产生并行任务。 */
+export async function publishLearningAssistantRun(
+  queue: Queue<LearningAssistantJobPayload>,
+  task: LearningAssistantRunTask,
+  config: AgentQueueConfig,
+): Promise<Job<LearningAssistantJobPayload>> {
+  return queue.add(LEARNING_ASSISTANT_JOB_NAME, toLearningAssistantJobPayload(task), {
+    jobId: task.runId,
+    attempts: config.maxAttempts + 1,
+    backoff: { type: 'custom' },
+    removeOnComplete: { count: 1_000 },
+    removeOnFail: { count: 5_000 },
+  });
+}
+
+export async function closeAgentQueue<T>(queue: Queue<T>): Promise<void> {
   await queue.close();
 }
 
@@ -80,12 +142,41 @@ export function createBullMqPublisher(
   };
 }
 
+/** 把学习助手队列适配为 Outbox Dispatcher 的专用投递端口。 */
+export function createBullMqLearningAssistantPublisher(
+  queue: Queue<LearningAssistantJobPayload>,
+  config: AgentQueueConfig,
+): { publishLearningAssistant(task: LearningAssistantRunTask): Promise<void> } {
+  return {
+    publishLearningAssistant: async (task) => {
+      await publishLearningAssistantRun(queue, task, config);
+    },
+  };
+}
+
 /** 创建消费端；处理器抛出的普通错误会按自定义退避重投，UnrecoverableError 则直接失败。 */
 export function createAgentRunWorker(
   config: AgentQueueConfig,
   processor: Processor<AgentRunJobPayload>,
 ): Worker<AgentRunJobPayload> {
   return new Worker<AgentRunJobPayload>(config.queueName, processor, {
+    connection: config.connection,
+    prefix: config.prefix,
+    concurrency: config.concurrency,
+    lockDuration: config.lockDurationMs,
+    settings: {
+      backoffStrategy: (attemptsMade: number) =>
+        agentJobBackoffDelayMs(Math.max(1, attemptsMade), config),
+    },
+  });
+}
+
+/** 创建学习助手消费端；处理器抛出的普通错误会按同一退避策略重试。 */
+export function createLearningAssistantWorker(
+  config: AgentQueueConfig,
+  processor: Processor<LearningAssistantJobPayload>,
+): Worker<LearningAssistantJobPayload> {
+  return new Worker<LearningAssistantJobPayload>(config.queueName, processor, {
     connection: config.connection,
     prefix: config.prefix,
     concurrency: config.concurrency,

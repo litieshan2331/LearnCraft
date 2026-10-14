@@ -21,6 +21,7 @@ import { z } from 'zod';
 import { calculateRetryDelaySeconds, type AgentRunTask } from '../../application/commands/execute-agent-run.js';
 import type { OutboxDispatcherConfig } from '../../bootstrap/config.js';
 import type { PoolClientLike, PoolLike } from '../database/agent-run-repository.js';
+import type { LearningAssistantRunTask } from './bullmq-agent-queue.js';
 import { UnknownWorkflowPoolError, workflowPoolForRunType, type WorkflowPool } from './workflow-pool.js';
 
 export const AgentRunTaskSchema = z
@@ -31,8 +32,25 @@ export const AgentRunTaskSchema = z
   })
   .strict();
 
+export const LearningAssistantTaskSchema = z.object({
+  run_id: z.uuid(),
+  conversation_id: z.uuid(),
+  owner_id: z.uuid(),
+  trigger_message_id: z.uuid().nullable(),
+  connection_id: z.uuid().nullable(),
+  model_id: z.string().min(1).max(255).nullable(),
+  trace_id: z.string().min(1).max(128),
+  task_version: z.literal(1),
+}).strict();
+
+export const LEARNING_ASSISTANT_REQUESTED_EVENT_TYPE = 'learning_assistant.run.requested';
+
 export interface AgentRunPublisher {
   publish(task: AgentRunTask, pool: WorkflowPool): Promise<void>;
+}
+
+export interface LearningAssistantPublisher {
+  publishLearningAssistant(task: LearningAssistantRunTask): Promise<void>;
 }
 
 export interface ClaimedOutboxEvent {
@@ -40,9 +58,34 @@ export interface ClaimedOutboxEvent {
   aggregateId: string;
   eventVersion: number;
   payloadJson: unknown;
-  runType: string;
+  runType: string | null;
   attemptCount: number;
 }
+
+/** 学习助手 Outbox 只锁事件行，不锁业务运行行，避免与 Worker 领取产生锁冲突。 */
+export const SQL_CLAIM_LEARNING_ASSISTANT_EVENTS = [
+  'WITH candidate AS (',
+  '  SELECT o.id',
+  '  FROM public.outbox_events o',
+  '  JOIN public.learning_assistant_runs r ON r.id = o.aggregate_id',
+  '  WHERE o.aggregate_type = \'learning_assistant_run\'',
+  '    AND o.event_type = $1',
+  '    AND (',
+  "      (o.status IN ('pending', 'failed') AND o.available_at <= now())",
+  "      OR (o.status = 'processing' AND o.locked_at < now() - ($2::int * interval '1 second'))",
+  '    )',
+  '  ORDER BY o.created_at',
+  '  FOR UPDATE OF o SKIP LOCKED',
+  '  LIMIT $3',
+  ')',
+  'UPDATE public.outbox_events AS e',
+  "SET status = 'processing', locked_by = $4, locked_at = now(),",
+  '    attempt_count = e.attempt_count + 1, last_error = NULL',
+  'FROM candidate',
+  'WHERE e.id = candidate.id',
+  'RETURNING e.id, e.aggregate_id, e.event_version, e.payload_json, e.attempt_count,',
+  '  NULL::text AS run_type',
+].join('\n');
 
 /** 契约错误：事件永远无法投递，直接转 dead 等待人工处理。 */
 export class OutboxContractError extends Error {
@@ -104,7 +147,7 @@ export class OutboxDispatcher {
 
   constructor(
     private readonly pool: PoolLike,
-    private readonly publisher: AgentRunPublisher,
+    private readonly publisher: AgentRunPublisher | LearningAssistantPublisher,
     private readonly config: OutboxDispatcherConfig,
   ) {}
 
@@ -167,7 +210,10 @@ export class OutboxDispatcher {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      const result = await client.query(SQL_CLAIM_EVENTS, [
+      const claimSql = this.config.eventType === LEARNING_ASSISTANT_REQUESTED_EVENT_TYPE
+        ? SQL_CLAIM_LEARNING_ASSISTANT_EVENTS
+        : SQL_CLAIM_EVENTS;
+      const result = await client.query(claimSql, [
         this.config.eventType,
         this.config.lockTimeoutSeconds,
         this.config.batchSize,
@@ -179,7 +225,7 @@ export class OutboxDispatcher {
         aggregateId: String(row.aggregate_id),
         eventVersion: Number(row.event_version),
         payloadJson: row.payload_json,
-        runType: String(row.run_type),
+        runType: row.run_type === null || row.run_type === undefined ? null : String(row.run_type),
         attemptCount: Number(row.attempt_count),
       }));
     } catch (error) {
@@ -191,6 +237,10 @@ export class OutboxDispatcher {
   }
 
   private async dispatchEvent(event: ClaimedOutboxEvent): Promise<void> {
+    if (this.config.eventType === LEARNING_ASSISTANT_REQUESTED_EVENT_TYPE) {
+      await this.dispatchLearningAssistantEvent(event);
+      return;
+    }
     let task: AgentRunTask;
     try {
       task = this.parseTask(event);
@@ -204,7 +254,7 @@ export class OutboxDispatcher {
 
     let pool: WorkflowPool;
     try {
-      pool = workflowPoolForRunType(event.runType);
+      pool = workflowPoolForRunType(event.runType ?? '');
     } catch (error) {
       if (!(error instanceof UnknownWorkflowPoolError)) {
         throw error;
@@ -214,7 +264,53 @@ export class OutboxDispatcher {
     }
 
     try {
-      await this.publisher.publish(task, pool);
+      await (this.publisher as AgentRunPublisher).publish(task, pool);
+    } catch {
+      await this.markRetryableFailure(event);
+      return;
+    }
+    await this.markPublished(event);
+  }
+
+  /** 校验并投递一条学习助手运行事件；run_id 作为发布 job 的幂等标识。 */
+  private async dispatchLearningAssistantEvent(event: ClaimedOutboxEvent): Promise<void> {
+    let task: LearningAssistantRunTask;
+    try {
+      if (event.eventVersion !== 1) {
+        throw new OutboxContractError('不支持的学习助手 Outbox 事件版本：' + String(event.eventVersion));
+      }
+      const parsed = LearningAssistantTaskSchema.safeParse(event.payloadJson);
+      if (!parsed.success) {
+        throw new OutboxContractError('学习助手 Outbox 事件载荷不符合契约。');
+      }
+      if (parsed.data.run_id !== event.aggregateId) {
+        throw new OutboxContractError('学习助手 Outbox aggregate_id 与 run_id 不一致。');
+      }
+      task = {
+        runId: parsed.data.run_id,
+        conversationId: parsed.data.conversation_id,
+        ownerId: parsed.data.owner_id,
+        triggerMessageId: parsed.data.trigger_message_id,
+        connectionId: parsed.data.connection_id,
+        modelId: parsed.data.model_id,
+        traceId: parsed.data.trace_id,
+        taskVersion: 1,
+      };
+    } catch (error) {
+      if (error instanceof OutboxContractError) {
+        await this.markDead(event, error.message);
+        return;
+      }
+      throw error;
+    }
+
+    const publisher = this.publisher as Partial<LearningAssistantPublisher>;
+    if (publisher.publishLearningAssistant === undefined) {
+      await this.markDead(event, '未配置学习助手队列发布器');
+      return;
+    }
+    try {
+      await publisher.publishLearningAssistant(task);
     } catch {
       await this.markRetryableFailure(event);
       return;
