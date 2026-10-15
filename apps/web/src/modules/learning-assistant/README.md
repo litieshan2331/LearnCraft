@@ -1,6 +1,17 @@
 # 学习助手持久化模块
 
-当前实现会话、消息、对话运行和学习经历记忆四个领域端口，共用 `DrizzleLearningAssistantRepository`，通过 `getLearningAssistantRepository()` 装配。应用服务由 `getLearningAssistantService()` 装配，HTTP API 负责会话、消息和运行状态的生命周期；队列、Agent 图和前端仍在后续阶段接入。
+当前实现会话、消息、对话运行和学习经历记忆四个领域端口，共用 `DrizzleLearningAssistantRepository`，通过 `getLearningAssistantRepository()` 装配。应用服务由 `getLearningAssistantService()` 装配，HTTP API 负责公开会话和运行状态生命周期；Worker 通过下方内部接口执行上下文读取和结果回写，前端真实链路仍在后续阶段接入。
+
+## Worker 内部接口
+
+以下接口只接受 `x-learncraft-internal-secret`，不使用浏览器 Session，也不接受 Worker/模型传入的用户身份：
+
+- `GET /internal/v1/learning-assistant-runs/{run_id}/context`：按运行反查用户和会话，返回最近 20 轮消息、现有测评错题、用户画像、最近掌握度摘要和长期学习经历。
+- `POST /internal/v1/learning-assistant-runs/{run_id}/messages`：幂等保存助手与工具消息。
+- `POST /internal/v1/learning-assistant-runs/{run_id}/result`：幂等回写模型统计、会话状态、成功/失败终态和安全错误摘要。
+- `POST /internal/v1/learning-assistant-runs/{run_id}/learning-memory`：分别执行服务端验证或写入经过证据检查的学习经历；证据不足只返回 `accepted=false`。
+
+这些接口的原始模型和工具轨迹不进入公开消息响应，轨迹由 Agent Worker 的独立观测表保存。
 
 ## 当前 API
 

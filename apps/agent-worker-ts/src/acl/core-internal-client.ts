@@ -17,11 +17,17 @@ import {
   DefaultModelConnectionEnvelopeSchema,
   PersistedAssessmentEnvelopeSchema,
   PersistedCardContentEnvelopeSchema,
+  LearningAssistantContextEnvelopeSchema,
+  LearningAssistantWriteEnvelopeSchema,
+  LearningAssistantMemoryEnvelopeSchema,
   PersistedLearningPlanEnvelopeSchema,
   type CardContentContextEnvelope,
   type DefaultModelConnectionEnvelope,
   type PersistedAssessmentEnvelope,
   type PersistedCardContentEnvelope,
+  type LearningAssistantContextEnvelope,
+  type LearningAssistantWriteEnvelope,
+  type LearningAssistantMemoryEnvelope,
   type PersistedLearningPlanEnvelope,
 } from '../schemas/core-internal.js';
 
@@ -79,6 +85,55 @@ export class CoreInternalClient {
       notFoundCode: 'DEFAULT_MODEL_CONNECTION_NOT_FOUND', notFoundMessage: '当前账户没有可用的默认模型连接。',
       rejectedCode: 'CORE_INTERNAL_RESPONSE_INVALID', rejectedMessage: 'Web 内部服务返回了不受支持的响应。',
       schema: DefaultModelConnectionEnvelopeSchema, invalidMessage: 'Web 内部服务返回了不符合契约的数据。',
+    });
+  }
+
+  /** 读取学习助手运行的可信画像、错题、掌握度、经历和最近 20 轮上下文。 */
+  async getLearningAssistantContext(runId: string): Promise<LearningAssistantContextEnvelope> {
+    return this.request({
+      method: 'GET', path: '/learning-assistant-runs/' + runId + '/context', timeoutMs: 15_000,
+      notFoundCode: 'LEARNING_ASSISTANT_CONTEXT_NOT_FOUND', notFoundMessage: '学习助手运行上下文不存在。',
+      rejectedCode: 'LEARNING_ASSISTANT_CONTEXT_INVALID', rejectedMessage: 'Web 拒绝了学习助手上下文读取。',
+      schema: LearningAssistantContextEnvelopeSchema, invalidMessage: '学习助手上下文契约不合法。',
+    });
+  }
+
+  /** 通过 Web 内部边界幂等保存学习助手助手/工具消息。 */
+  async appendLearningAssistantMessages(
+    runId: string,
+    payload: Record<string, unknown>,
+  ): Promise<LearningAssistantWriteEnvelope> {
+    return this.request({
+      method: 'POST', path: '/learning-assistant-runs/' + runId + '/messages', body: payload, timeoutMs: 15_000,
+      notFoundCode: 'LEARNING_ASSISTANT_RUN_NOT_FOUND', notFoundMessage: '学习助手运行不存在。',
+      rejectedCode: 'LEARNING_ASSISTANT_MESSAGE_WRITE_REJECTED', rejectedMessage: 'Web 拒绝了学习助手消息写入。',
+      schema: LearningAssistantWriteEnvelopeSchema, invalidMessage: '学习助手消息写入响应契约不合法。',
+    });
+  }
+
+  /** 通过 Web 内部边界幂等提交学习助手运行结果和状态。 */
+  async finishLearningAssistantRun(
+    runId: string,
+    payload: Record<string, unknown>,
+  ): Promise<LearningAssistantWriteEnvelope> {
+    return this.request({
+      method: 'POST', path: '/learning-assistant-runs/' + runId + '/result', body: payload, timeoutMs: 20_000,
+      notFoundCode: 'LEARNING_ASSISTANT_RUN_NOT_FOUND', notFoundMessage: '学习助手运行不存在。',
+      rejectedCode: 'LEARNING_ASSISTANT_RESULT_REJECTED', rejectedMessage: 'Web 拒绝了学习助手运行结果。',
+      schema: LearningAssistantWriteEnvelopeSchema, invalidMessage: '学习助手运行结果响应契约不合法。',
+    });
+  }
+
+  /** 请求服务端验证或幂等写入学习经历；模型只提供候选，最终规则由 Web 执行。 */
+  async persistLearningAssistantMemory(
+    runId: string,
+    payload: Record<string, unknown>,
+  ): Promise<LearningAssistantMemoryEnvelope> {
+    return this.request({
+      method: 'POST', path: '/learning-assistant-runs/' + runId + '/learning-memory', body: payload, timeoutMs: 15_000,
+      notFoundCode: 'LEARNING_ASSISTANT_RUN_NOT_FOUND', notFoundMessage: '学习助手运行不存在。',
+      rejectedCode: 'LEARNING_ASSISTANT_MEMORY_REJECTED', rejectedMessage: 'Web 拒绝了学习经历写入。',
+      schema: LearningAssistantMemoryEnvelopeSchema, invalidMessage: '学习经历响应契约不合法。',
     });
   }
 

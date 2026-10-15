@@ -5,8 +5,8 @@
 
 文件：
 
-- `core-internal-client.ts`：`CoreInternalClient`，覆盖 5 个内部端点
-  （默认模型连接、节点内容上下文、题集回写、路线回写、节点内容回写），
+- `core-internal-client.ts`：`CoreInternalClient`，覆盖现有工作流和学习助手内部端点
+  （默认模型连接、节点内容上下文、题集回写、路线回写、节点内容回写、学习助手上下文读取、消息/结果/学习经历回写），
   统一超时、`x-learncraft-internal-secret` 鉴权、错误分类与响应契约校验。
 
 实现约定：错误分类与 Python 的 `WebCoreInternalClient` 完全一致 —— 网络异常与 5xx 可重试；

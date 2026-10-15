@@ -12,6 +12,7 @@
  * - EncryptedModelCredentialSchema / DefaultModelConnectionEnvelopeSchema
  * - PersistedAssessmentEnvelopeSchema / PersistedLearningPlanEnvelopeSchema
  * - CardContentContextEnvelopeSchema / CardContentPitfallDebugSchema / PersistedCardContentEnvelopeSchema
+ * - LearningAssistantContextEnvelopeSchema / LearningAssistantWriteEnvelopeSchema / LearningAssistantMemoryEnvelopeSchema
  */
 
 import { z } from 'zod';
@@ -77,8 +78,61 @@ export const PersistedCardContentEnvelopeSchema = z
   })
   .strict();
 
+const LearningAssistantToolCallSchema = z.object({
+  id: z.string().min(1).max(150),
+  name: z.string().min(1).max(100),
+  arguments_json: z.string().max(20_000),
+}).strict();
+
+const LearningAssistantContextMessageSchema = z.object({
+  id: z.uuid(),
+  turn_no: z.number().int().positive(),
+  role: z.enum(['user', 'assistant', 'tool']),
+  content: z.string().nullable(),
+  tool_call_id: z.string().max(150).nullable(),
+  name: z.string().max(100).nullable(),
+  tool_calls: z.array(LearningAssistantToolCallSchema),
+}).strict();
+
+const LearningAssistantEvidenceSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(['user_message', 'assessment_answer', 'tool_result', 'external_source']),
+  source_id: z.string().min(1),
+  content: z.string().min(1).max(20_000),
+  turn_no: z.number().int().positive().nullable(),
+  executed: z.boolean(),
+}).strict();
+
+export const LearningAssistantContextEnvelopeSchema = z.object({
+  run_id: z.uuid(),
+  conversation_id: z.uuid(),
+  owner_id: z.uuid(),
+  question_id: z.uuid().nullable(),
+  recent_messages: z.array(LearningAssistantContextMessageSchema),
+  wrong_question: z.record(z.string(), z.unknown()).nullable(),
+  user_profile: z.record(z.string(), z.unknown()).nullable(),
+  mastery_state: z.record(z.string(), z.unknown()).nullable(),
+  learning_context: z.record(z.string(), z.unknown()).nullable(),
+  evidence: z.array(LearningAssistantEvidenceSchema),
+}).strict();
+
+export const LearningAssistantWriteEnvelopeSchema = z.object({
+  run_id: z.uuid(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  message_ids: z.array(z.uuid()),
+}).strict();
+
+export const LearningAssistantMemoryEnvelopeSchema = z.object({
+  accepted: z.boolean(),
+  memory_id: z.uuid().nullable(),
+  created: z.boolean(),
+}).strict();
+
 export type DefaultModelConnectionEnvelope = z.infer<typeof DefaultModelConnectionEnvelopeSchema>;
 export type PersistedAssessmentEnvelope = z.infer<typeof PersistedAssessmentEnvelopeSchema>;
 export type PersistedLearningPlanEnvelope = z.infer<typeof PersistedLearningPlanEnvelopeSchema>;
 export type CardContentContextEnvelope = z.infer<typeof CardContentContextEnvelopeSchema>;
 export type PersistedCardContentEnvelope = z.infer<typeof PersistedCardContentEnvelopeSchema>;
+export type LearningAssistantContextEnvelope = z.infer<typeof LearningAssistantContextEnvelopeSchema>;
+export type LearningAssistantWriteEnvelope = z.infer<typeof LearningAssistantWriteEnvelopeSchema>;
+export type LearningAssistantMemoryEnvelope = z.infer<typeof LearningAssistantMemoryEnvelopeSchema>;

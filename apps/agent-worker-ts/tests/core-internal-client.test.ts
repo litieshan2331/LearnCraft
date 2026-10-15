@@ -51,6 +51,19 @@ const VALID_ENVELOPE = {
   },
 };
 
+const VALID_LEARNING_CONTEXT = {
+  run_id: '11111111-2222-4333-8444-555555555555',
+  conversation_id: '22222222-2222-4333-8444-555555555555',
+  owner_id: '33333333-2222-4333-8444-555555555555',
+  question_id: null,
+  recent_messages: [],
+  wrong_question: null,
+  user_profile: null,
+  mastery_state: null,
+  learning_context: null,
+  evidence: [],
+};
+
 function client(fetchImpl: typeof fetch, secret: string | null = SECRET): CoreInternalClient {
   return new CoreInternalClient({
     baseUrl: 'http://127.0.0.1:3000/internal/v1/',
@@ -142,5 +155,26 @@ describe('CoreInternalClient', () => {
     const { fetchImpl, calls } = fakeFetch(() => jsonResponse(200, VALID_ENVELOPE));
     await client(fetchImpl).getDefaultModelConnection('run-1');
     expect(calls[0]?.init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('调用学习助手上下文和结果内部端点并校验响应合同', async () => {
+    const { fetchImpl, calls } = fakeFetch((captured) => {
+      if (captured.url.endsWith('/context')) return jsonResponse(200, VALID_LEARNING_CONTEXT);
+      if (captured.url.endsWith('/learning-memory')) return jsonResponse(200, { accepted: true, memory_id: null, created: false });
+      return jsonResponse(200, { run_id: VALID_LEARNING_CONTEXT.run_id, status: captured.url.endsWith('/messages') ? 'running' : 'succeeded', message_ids: [] });
+    });
+    const workerClient = client(fetchImpl);
+    await expect(workerClient.getLearningAssistantContext(VALID_LEARNING_CONTEXT.run_id)).resolves.toMatchObject({
+      conversation_id: VALID_LEARNING_CONTEXT.conversation_id,
+    });
+    await workerClient.appendLearningAssistantMessages(VALID_LEARNING_CONTEXT.run_id, { messages: [] });
+    await workerClient.finishLearningAssistantRun(VALID_LEARNING_CONTEXT.run_id, { status: 'succeeded' });
+    await workerClient.persistLearningAssistantMemory(VALID_LEARNING_CONTEXT.run_id, { operation: 'validate' });
+    expect(calls.map((call) => call.url)).toEqual([
+      'http://127.0.0.1:3000/internal/v1/learning-assistant-runs/' + VALID_LEARNING_CONTEXT.run_id + '/context',
+      'http://127.0.0.1:3000/internal/v1/learning-assistant-runs/' + VALID_LEARNING_CONTEXT.run_id + '/messages',
+      'http://127.0.0.1:3000/internal/v1/learning-assistant-runs/' + VALID_LEARNING_CONTEXT.run_id + '/result',
+      'http://127.0.0.1:3000/internal/v1/learning-assistant-runs/' + VALID_LEARNING_CONTEXT.run_id + '/learning-memory',
+    ]);
   });
 });
