@@ -81,33 +81,53 @@ describe('学习助手 Job 载荷', () => {
 describe('学习助手 Job 处理器', () => {
   it('领取成功后只返回，不在第一阶段执行 LangGraph', async () => {
     const beginExecution = vi.fn().mockResolvedValue({ runId: TASK.runId, status: 'running', shouldExecute: true });
-    const processor = createLearningAssistantRunProcessor({ repository: { beginExecution } });
+    const acquireExecutionLock = vi.fn().mockResolvedValue({ release: vi.fn().mockResolvedValue(undefined) });
+    const processor = createLearningAssistantRunProcessor({ repository: { acquireExecutionLock, beginExecution } });
     await processor({ data: toLearningAssistantJobPayload(TASK) } as never);
     expect(beginExecution).toHaveBeenCalledWith(TASK);
   });
 
   it('重复领取已终态运行时不再次执行', async () => {
     const beginExecution = vi.fn().mockResolvedValue({ runId: TASK.runId, status: 'succeeded', shouldExecute: false });
-    const processor = createLearningAssistantRunProcessor({ repository: { beginExecution } });
+    const acquireExecutionLock = vi.fn().mockResolvedValue({ release: vi.fn().mockResolvedValue(undefined) });
+    const processor = createLearningAssistantRunProcessor({ repository: { acquireExecutionLock, beginExecution } });
     await expect(processor({ data: toLearningAssistantJobPayload(TASK) } as never)).resolves.toBeUndefined();
   });
 
-  it('重复领取 running 运行时允许从 Checkpoint 恢复执行', async () => {
+  it('运行锁未取得时不读取状态或启动第二个 Agent', async () => {
     const beginExecution = vi.fn().mockResolvedValue({ runId: TASK.runId, status: 'running', shouldExecute: true });
-    const processor = createLearningAssistantRunProcessor({ repository: { beginExecution } });
-    await processor({ data: toLearningAssistantJobPayload(TASK) } as never);
-    expect(beginExecution).toHaveBeenCalledWith(TASK);
+    const acquireExecutionLock = vi.fn().mockRejectedValue(new Error('锁连接未建立'));
+    const processor = createLearningAssistantRunProcessor({ repository: { acquireExecutionLock, beginExecution } });
+    await expect(processor({ data: toLearningAssistantJobPayload(TASK) } as never)).rejects.toThrow();
+    expect(beginExecution).not.toHaveBeenCalled();
   });
 
   it('拒绝修改过的载荷', async () => {
     const beginExecution = vi.fn();
-    const processor = createLearningAssistantRunProcessor({ repository: { beginExecution } });
+    const acquireExecutionLock = vi.fn();
+    const processor = createLearningAssistantRunProcessor({ repository: { acquireExecutionLock, beginExecution } });
     await expect(processor({ data: { ...toLearningAssistantJobPayload(TASK), owner_id: 'not-uuid' } } as never)).rejects.toThrow();
     expect(beginExecution).not.toHaveBeenCalled();
   });
 });
 
 describe('学习助手 queued 运行领取', () => {
+  it('使用 session advisory lock 串行化同一 run_id，并在释放时归还连接', async () => {
+    const client = {
+      query: vi.fn(async () => ({ rows: [] })),
+      release: vi.fn(),
+    };
+    const repository = new PgLearningAssistantRunQueueRepository({ connect: async () => client });
+    const lock = await repository.acquireExecutionLock(TASK.runId);
+    expect(lock).not.toBeNull();
+    expect(client.query).toHaveBeenCalledWith(
+      'SELECT pg_advisory_lock(hashtextextended($1, 0))',
+      ['learning-assistant:' + TASK.runId],
+    );
+    await lock!.release();
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
   it('将 queued 原子推进到 running，并在重复领取时返回 shouldExecute=false', async () => {
     const rows = [{
       id: TASK.runId,

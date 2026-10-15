@@ -1,7 +1,7 @@
 /**
  * 学习助手 BullMQ 消费适配器。
  *
- * 调用顺序：校验学习助手 Job 载荷 → 调用 PostgreSQL Repository 原子领取 queued 运行
+ * 调用顺序：校验学习助手 Job 载荷 → 取得 run_id 级 PostgreSQL advisory lock → 调用 Repository 原子领取 queued/running 运行
  * → 已领取运行读取服务端模型连接、恢复 Checkpoint 并执行 LangGraph → 幂等回写消息与终态。
  * 载荷契约错误和归属错误直接终止重试，数据库或临时依赖错误交给 BullMQ 重试。
  */
@@ -11,6 +11,7 @@ import { z } from 'zod';
 
 import {
   LearningAssistantRunContractError,
+  type LearningAssistantExecutionLock,
   type PgLearningAssistantRunQueueRepository,
 } from '../../infrastructure/database/learning-assistant-run-queue-repository.js';
 import type { LearningAssistantJobPayload } from '../../infrastructure/queue/bullmq-agent-queue.js';
@@ -38,7 +39,7 @@ export const LearningAssistantJobPayloadSchema = z.object({
 }).strict();
 
 export interface LearningAssistantRunProcessorDeps {
-  repository: Pick<PgLearningAssistantRunQueueRepository, 'beginExecution'> & Partial<Pick<PgLearningAssistantRunQueueRepository, 'pool' | 'bindModel' | 'loadRunInput'>>;
+  repository: Pick<PgLearningAssistantRunQueueRepository, 'acquireExecutionLock' | 'beginExecution'> & Partial<Pick<PgLearningAssistantRunQueueRepository, 'pool' | 'bindModel' | 'loadRunInput'>>;
   internalClient?: Pick<CoreInternalClient, 'getLearningAssistantDefaultModelConnection' | 'getLearningAssistantContext' | 'appendLearningAssistantMessages' | 'finishLearningAssistantRun' | 'persistLearningAssistantMemory'>;
   decryptor?: Pick<ModelCredentialDecryptor, 'decrypt'>;
   model?: ModelPort;
@@ -60,7 +61,10 @@ export function createLearningAssistantRunProcessor(
       throw new UnrecoverableError('学习助手队列载荷不符合契约。');
     }
     let shouldExecute = false;
+    let executionLock: LearningAssistantExecutionLock | null = null;
     try {
+      // 同一个 run_id 只允许一个执行者；重复 Job 在锁处等待，前一执行者结束后再检查状态。
+      executionLock = await deps.repository.acquireExecutionLock(parsed.data.run_id);
       const state = await deps.repository.beginExecution({
         runId: parsed.data.run_id,
         conversationId: parsed.data.conversation_id,
@@ -132,6 +136,8 @@ export function createLearningAssistantRunProcessor(
         throw new UnrecoverableError('学习助手运行已写入终态失败。');
       }
       throw error;
+    } finally {
+      await executionLock?.release();
     }
   };
 }

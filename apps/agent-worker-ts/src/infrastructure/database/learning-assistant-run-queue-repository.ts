@@ -1,8 +1,9 @@
 /**
  * 学习助手队列运行领取的 PostgreSQL 适配器。
  *
- * 调用顺序：BullMQ Processor 校验任务载荷 → beginExecution 按 run_id 加锁读取运行和会话
- * → 校验服务端注入的身份与关联字段 → 将 queued 原子更新为 running；重复投递只返回 shouldExecute=false。
+ * 调用顺序：BullMQ Processor 校验任务载荷 → acquireExecutionLock 取得 run_id 级 session advisory lock
+ * → beginExecution 按 run_id 加锁读取运行和会话 → 校验服务端注入的身份与关联字段
+ * → 将 queued 原子更新为 running；终态不再执行，锁释放后 running 才允许恢复。
  * 本文件同时提供 Worker 所需的运行输入、消息、业务事实和终态回写端口；不保存模型密钥。
  */
 
@@ -35,6 +36,11 @@ export interface LearningAssistantRunExecutionState {
   shouldExecute: boolean;
 }
 
+export interface LearningAssistantExecutionLock {
+  /** 释放运行级互斥锁并归还专用 PostgreSQL 连接。 */
+  release(): Promise<void>;
+}
+
 /** 任务不存在或载荷与数据库关联不一致时抛出的永久契约错误。 */
 export class LearningAssistantRunContractError extends Error {
   /** 创建不会通过重试修复的运行契约错误。 */
@@ -48,13 +54,39 @@ export class PgLearningAssistantRunQueueRepository {
   /** 注入共享 PostgreSQL 连接池；连接密钥只存在于 Worker 进程。 */
   constructor(public readonly pool: PoolLike) {}
 
+  /** 等待并持有 PostgreSQL session advisory lock；锁释放前不会让第二个 Agent 进入执行。 */
+  async acquireExecutionLock(runId: string): Promise<LearningAssistantExecutionLock> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        'SELECT pg_advisory_lock(hashtextextended($1, 0))',
+        ['learning-assistant:' + runId],
+      );
+      return {
+        release: async () => {
+          try {
+            await client.query(
+              'SELECT pg_advisory_unlock(hashtextextended($1, 0))',
+              ['learning-assistant:' + runId],
+            );
+          } finally {
+            client.release();
+          }
+        },
+      };
+    } catch (error) {
+      client.release();
+      throw error;
+    }
+  }
+
   /** 使用最小连接池端口执行单条查询，兼容测试替身和 pg.Pool。 */
   private async query(text: string, values: readonly unknown[] = []): Promise<{ rows: Array<Record<string, unknown>> }> {
     const client = await this.pool.connect();
     try { return await client.query(text, values); } finally { client.release(); }
   }
 
-  /** 锁定运行并将 queued 原子推进到 running，终态或重复领取不再次执行。 */
+  /** 在已持有运行级 advisory lock 的前提下领取运行；running 仅允许当前唯一执行者恢复。 */
   async beginExecution(task: LearningAssistantRunTask): Promise<LearningAssistantRunExecutionState> {
     const client = await this.pool.connect();
     try {
