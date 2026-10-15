@@ -27,6 +27,7 @@ import {
   readTavilyCircuitBreakerSettings,
   readModelGatewayRequestMaxRetries,
   readModelFallbackSettings,
+  readLearningAssistantReactLimits,
 } from '../bootstrap/config.js';
 import { PgAgentRunRepository } from '../infrastructure/database/agent-run-repository.js';
 import { PgLearningAssistantRunQueueRepository } from '../infrastructure/database/learning-assistant-run-queue-repository.js';
@@ -53,6 +54,7 @@ import { createAssessmentGenerateWorkflow } from '../workflows/assessment-genera
 import { createCardContentGenerateWorkflow } from '../workflows/card-content-generate/index.js';
 import { createPlanGenerateWorkflow } from '../workflows/plan-generate/index.js';
 import { createPosttestGenerateWorkflow } from '../workflows/posttest-generate/index.js';
+import { createLearningAssistantCheckpointer, closeLearningAssistantCheckpointer } from '../infrastructure/langgraph/learning-assistant-checkpointer.js';
 
 function requireDatabaseUrl(): string {
   const url = process.env.DATABASE_URL?.trim();
@@ -71,6 +73,8 @@ async function main(): Promise<void> {
   const traceWriter = new PgTraceWriter(pool);
   const repository = new PgAgentRunRepository(pool, traceWriter);
   const learningAssistantRunRepository = new PgLearningAssistantRunQueueRepository(pool);
+  const learningAssistantCheckpointer = createLearningAssistantCheckpointer(requireDatabaseUrl());
+  const learningAssistantReactLimits = readLearningAssistantReactLimits();
 
   const internalClient = new CoreInternalClient(readCoreInternalClientOptions());
   const decryptor = ModelCredentialDecryptor.fromEnvironment();
@@ -184,7 +188,16 @@ async function main(): Promise<void> {
     ),
     learningAssistant: createLearningAssistantWorker(
       learningAssistantQueueConfig,
-      createLearningAssistantRunProcessor({ repository: learningAssistantRunRepository }),
+      createLearningAssistantRunProcessor({
+        repository: learningAssistantRunRepository,
+        internalClient,
+        decryptor,
+        model: gateway,
+        skills: learningSkills,
+        createTavily: createToolGateway,
+        reactLimits: learningAssistantReactLimits,
+        checkpointer: learningAssistantCheckpointer,
+      }),
     ),
   };
 
@@ -239,6 +252,7 @@ async function main(): Promise<void> {
     console.log('[worker] 收到 ' + signal + '，等待在飞任务结束');
     await health.close();
     await Promise.all([workers.short.close(), workers.long.close(), workers.learningAssistant.close()]);
+    await closeLearningAssistantCheckpointer(learningAssistantCheckpointer);
     await pool.end();
     await readinessRedis.close();
     await rateLimitRedis.close();
@@ -260,6 +274,7 @@ async function main(): Promise<void> {
       '，配额 Redis=' + (redisQuota === null ? '未配置' : '已配置') +
       '，工具上限=' + String(maxToolCalls) +
       '，ReAct 轮数=' + JSON.stringify(reactMaxTurns) +
+      '，学习助手 ReAct 轮数=' + JSON.stringify(learningAssistantReactLimits) +
       '，实时进度=已启用' +
       '，健康端点=:' + String(health.port),
   );

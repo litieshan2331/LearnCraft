@@ -72,6 +72,16 @@ export class CoreInternalClient {
     });
   }
 
+  /** 读取学习助手运行绑定的当前默认模型连接；仅返回加密凭据。 */
+  async getLearningAssistantDefaultModelConnection(runId: string): Promise<DefaultModelConnectionEnvelope> {
+    return this.request({
+      method: 'GET', path: '/learning-assistant-runs/' + runId + '/default-model-connection', timeoutMs: 10_000,
+      notFoundCode: 'DEFAULT_MODEL_CONNECTION_NOT_FOUND', notFoundMessage: '当前账户没有可用的默认模型连接。',
+      rejectedCode: 'CORE_INTERNAL_RESPONSE_INVALID', rejectedMessage: 'Web 内部服务返回了不受支持的响应。',
+      schema: DefaultModelConnectionEnvelopeSchema, invalidMessage: 'Web 内部服务返回了不符合契约的数据。',
+    });
+  }
+
   /** 读取节点后测所需的固定内容上下文。 */
   async getCardContentContext(agentRunId: string): Promise<CardContentContextEnvelope> {
     return this.request({
