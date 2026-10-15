@@ -197,6 +197,7 @@ async function main(): Promise<void> {
         createTavily: createToolGateway,
         reactLimits: learningAssistantReactLimits,
         checkpointer: learningAssistantCheckpointer,
+        maxRetries: learningAssistantQueueConfig.maxAttempts,
       }),
     ),
   };

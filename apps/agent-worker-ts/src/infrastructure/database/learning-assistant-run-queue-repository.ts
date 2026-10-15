@@ -78,6 +78,12 @@ export class PgLearningAssistantRunQueueRepository {
           : String(row.trigger_message_id) !== task.triggerMessageId)) {
         throw new LearningAssistantRunContractError('学习助手队列载荷与运行归属不一致。');
       }
+      // queued 是首次领取；running 可能来自 Worker 崩溃或 BullMQ 重试，
+      // 允许同一 run 重新进入图并由 Checkpoint 决定恢复位置。
+      if (row.status === 'running') {
+        await client.query('COMMIT');
+        return { runId: task.runId, status: row.status, shouldExecute: true };
+      }
       if (row.status !== 'queued') {
         await client.query('COMMIT');
         return { runId: task.runId, status: row.status, shouldExecute: false };

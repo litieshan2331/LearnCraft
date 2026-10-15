@@ -92,6 +92,13 @@ describe('学习助手 Job 处理器', () => {
     await expect(processor({ data: toLearningAssistantJobPayload(TASK) } as never)).resolves.toBeUndefined();
   });
 
+  it('重复领取 running 运行时允许从 Checkpoint 恢复执行', async () => {
+    const beginExecution = vi.fn().mockResolvedValue({ runId: TASK.runId, status: 'running', shouldExecute: true });
+    const processor = createLearningAssistantRunProcessor({ repository: { beginExecution } });
+    await processor({ data: toLearningAssistantJobPayload(TASK) } as never);
+    expect(beginExecution).toHaveBeenCalledWith(TASK);
+  });
+
   it('拒绝修改过的载荷', async () => {
     const beginExecution = vi.fn();
     const processor = createLearningAssistantRunProcessor({ repository: { beginExecution } });
@@ -121,6 +128,12 @@ describe('学习助手 queued 运行领取', () => {
     const repository = new PgLearningAssistantRunQueueRepository({
       connect: async () => client,
     });
+    await expect(repository.beginExecution(TASK)).resolves.toEqual({
+      runId: TASK.runId,
+      status: 'running',
+      shouldExecute: true,
+    });
+    rows[0]!.status = 'running';
     await expect(repository.beginExecution(TASK)).resolves.toEqual({
       runId: TASK.runId,
       status: 'running',

@@ -46,6 +46,8 @@ export interface LearningAssistantRunProcessorDeps {
   createTavily?: (ownerId: string) => ToolGatewayPort;
   reactLimits?: LearningAssistantReactLimits;
   checkpointer?: LearningAssistantCheckpointer;
+  /** BullMQ 允许的额外重试次数；最后一次尝试才把运行写为 failed。 */
+  maxRetries?: number;
 }
 
 /** 创建学习助手 Job 处理器；同一 run_id 的重复投递不会重复领取。 */
@@ -116,15 +118,28 @@ export function createLearningAssistantRunProcessor(
         });
       }
     } catch (error) {
-      if (shouldExecute && deps.internalClient) await deps.internalClient.finishLearningAssistantRun(parsed.data.run_id, {
-        status: 'failed', error_code: 'LEARNING_ASSISTANT_EXECUTION_FAILED', error_summary: error instanceof Error ? error.message.slice(0, 500) : '学习助手运行失败。',
+      const retryable = isRetryableLearningAssistantError(error);
+      const maxRetries = deps.maxRetries ?? Math.max(0, Number((job.opts as { attempts?: number } | undefined)?.attempts ?? 1) - 1);
+      const retriesRemain = job.attemptsMade < maxRetries;
+      // 临时故障保持 running，下一次领取会从同一 Checkpoint 恢复；只有不可重试或耗尽时才落失败终态。
+      if (shouldExecute && deps.internalClient && (!retryable || !retriesRemain)) await deps.internalClient.finishLearningAssistantRun(parsed.data.run_id, {
+        status: 'failed', error_code: 'LEARNING_ASSISTANT_EXECUTION_FAILED', error_summary: '本次学习助手运行失败。',
       }).catch(() => undefined);
       if (error instanceof LearningAssistantRunContractError) {
         throw new UnrecoverableError(error.message);
       }
+      if (!retryable || !retriesRemain) {
+        throw new UnrecoverableError('学习助手运行已写入终态失败。');
+      }
       throw error;
     }
   };
+}
+
+/** 仅把明确标记为可重试的依赖错误交给 BullMQ；模型和内部 API 都提供该标记。 */
+function isRetryableLearningAssistantError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null
+    && 'retryable' in error && (error as { retryable?: unknown }).retryable === true;
 }
 
 /** 将内部上下文消息转换成图使用的模型消息，并保留稳定消息 ID。 */
