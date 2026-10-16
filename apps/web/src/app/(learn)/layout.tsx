@@ -10,6 +10,7 @@ import Link from "next/link";
 
 import { LogoutButton } from "@/modules/identity/presentation/components/logout-button";
 import { SessionGate } from "@/modules/identity/presentation/components/session-gate";
+import { LearningAssistantPanel } from "@/modules/learning-assistant/presentation/components/learning-assistant-panel";
 import { Brand } from "@/shared/ui/brand";
 
 const navigationItems = [
@@ -31,6 +32,7 @@ export default function LearnLayout({ children }: Readonly<{ children: React.Rea
           <div className="mx-auto flex min-h-[4.5rem] max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-8 lg:px-10">
             <Brand />
             <div className="flex items-center gap-3 sm:gap-5">
+              <LearningAssistantPanel />
               <nav aria-label="学习工作台导航" className="flex max-w-[min(100%,19rem)] items-center gap-1 overflow-x-auto rounded-full border border-border/80 bg-card/75 p-1 text-sm shadow-sm sm:max-w-none">
                 {navigationItems.map(({ href, label, icon: Icon }) => (
                   <Link className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 sm:px-3.5" href={href} key={href}>
