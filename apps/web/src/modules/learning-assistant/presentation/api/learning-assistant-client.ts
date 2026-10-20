@@ -105,16 +105,17 @@ export function listLearningAssistantMessages(
   );
 }
 
-/** 发送用户消息并创建或复用一次对话运行。 */
+/** 发送用户消息并创建或复用一次对话运行；重试时必须复用调用方持有的幂等键。 */
 export function sendLearningAssistantMessage(
   conversationId: string,
   content: string,
+  idempotencyKey: string,
 ): Promise<SendLearningAssistantMessageResult> {
   return requestJson<SendLearningAssistantMessageResult>(
     `/api/v1/learning-assistant/conversations/${conversationId}/messages`,
     {
       method: "POST",
-      headers: { "Idempotency-Key": crypto.randomUUID() },
+      headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify({ content }),
     },
   );

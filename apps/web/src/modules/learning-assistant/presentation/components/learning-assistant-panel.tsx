@@ -14,6 +14,7 @@ import {
   CircleAlert,
   LoaderCircle,
   MessageCircle,
+  RefreshCw,
   Send,
   X,
 } from "lucide-react";
@@ -34,6 +35,8 @@ import {
 import { Button } from "@/shared/ui/primitives/button";
 
 const CONVERSATION_STORAGE_KEY = "learncraft.learning-assistant.conversation-id";
+const MAX_STATUS_POLL_RETRIES = 5;
+const STATUS_POLL_DELAY_MS = 1500;
 
 /** 在学习区顶部渲染入口，并控制对话面板的显示状态。 */
 export function LearningAssistantPanel() {
@@ -67,7 +70,13 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pollingFailed, setPollingFailed] = useState(false);
+  const [pollRetryToken, setPollRetryToken] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const pendingMessageRef = useRef<{ content: string; idempotencyKey: string } | null>(null);
+  const activeRunId = activeRun?.id;
+  const activeRunStatus = activeRun?.status;
+  const conversationId = conversation?.id;
 
   const loadMessages = useCallback(async (conversationId: string): Promise<void> => {
     const loaded: LearningAssistantMessage[] = [];
@@ -136,23 +145,34 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   }, [loadMessages, refreshConversation, resolveConversation]);
 
   useEffect(() => {
-    if (!activeRun || (activeRun.status !== "queued" && activeRun.status !== "running")) return;
+    if (!activeRunId || (activeRunStatus !== "queued" && activeRunStatus !== "running")) return;
     let cancelled = false;
     let timer: number | undefined;
+    let retryCount = 0;
 
     const poll = async (): Promise<void> => {
       try {
-        const nextRun = await getLearningAssistantRun(activeRun.id);
+        const nextRun = await getLearningAssistantRun(activeRunId);
         if (cancelled) return;
+        retryCount = 0;
+        setPollingFailed(false);
         setActiveRun(nextRun);
         if (nextRun.status === "queued" || nextRun.status === "running") {
-          timer = window.setTimeout(() => void poll(), 1500);
+          timer = window.setTimeout(() => void poll(), STATUS_POLL_DELAY_MS);
           return;
         }
-        if (conversation) await loadMessages(conversation.id);
+        if (conversationId) await loadMessages(conversationId);
         if (nextRun.status === "failed") setError(nextRun.error_summary ?? "本次回复生成失败，请稍后重试。");
       } catch (pollError) {
-        if (!cancelled) setError(toDisplayError(pollError, "暂时无法读取回复状态，请稍后重试。"));
+        if (cancelled) return;
+        retryCount += 1;
+        if (retryCount <= MAX_STATUS_POLL_RETRIES) {
+          const delay = Math.min(STATUS_POLL_DELAY_MS * (2 ** (retryCount - 1)), 10_000);
+          timer = window.setTimeout(() => void poll(), delay);
+          return;
+        }
+        setPollingFailed(true);
+        setError(toDisplayError(pollError, "暂时无法读取回复状态，请稍后重试。"));
       }
     };
 
@@ -161,7 +181,7 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [activeRun, conversation, loadMessages]);
+  }, [activeRunId, activeRunStatus, conversationId, loadMessages, pollRetryToken]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -175,11 +195,18 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
 
     setIsSending(true);
     setError(null);
+    setPollingFailed(false);
+    const pendingMessage = pendingMessageRef.current;
+    const idempotencyKey = pendingMessage?.content === content
+      ? pendingMessage.idempotencyKey
+      : crypto.randomUUID();
+    pendingMessageRef.current = { content, idempotencyKey };
     try {
-      const result = await sendLearningAssistantMessage(conversation.id, content);
+      const result = await sendLearningAssistantMessage(conversation.id, content, idempotencyKey);
       setMessages((current) => current.some((item) => item.id === result.message.id) ? current : [...current, result.message]);
       setActiveRun(result.run);
       setDraft("");
+      pendingMessageRef.current = null;
     } catch (sendError) {
       setError(toDisplayError(sendError, "消息发送失败，请稍后重试。"));
     } finally {
@@ -225,7 +252,25 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
       </div>
 
       <footer className="shrink-0 border-t border-border/80 p-3">
-        {error && messages.length > 0 ? <p className="mb-2 text-xs text-destructive">{error}</p> : null}
+        {error && messages.length > 0 ? (
+          <div className="mb-2 flex items-center justify-between gap-3 text-xs text-destructive">
+            <p>{error}</p>
+            {pollingFailed ? (
+              <button
+                className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-medium hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                onClick={() => {
+                  setError(null);
+                  setPollingFailed(false);
+                  setPollRetryToken((token) => token + 1);
+                }}
+                type="button"
+              >
+                <RefreshCw aria-hidden className="size-3" />
+                重试查询
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <form className="flex items-end gap-2" onSubmit={(event) => void handleSend(event)}>
           <textarea
             aria-label="输入消息"
