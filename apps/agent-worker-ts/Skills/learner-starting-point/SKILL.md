@@ -1,7 +1,6 @@
 ---
 name: learner-starting-point
-description: 在工作流既定的输入、字段和难度范围内，调整面向学习者的表达深度与语言负担。
-layer: context
+description: 当需要依据已提供的学习者画像、目标或前测结果调整解释深度时使用；保持既定难度和输出字段。
 ---
 
 # 起点适配
@@ -27,3 +26,9 @@ layer: context
 - `plan_generate`：只调整 `title`、`node_brief`、`learning_objective`、`rationale` 和 `completion_criteria` 的表达清晰度；章节数量、难度数值和依赖关系由路线工作流决定。
 - `card_content_generate`：只调整 `foundation`、示例说明和误区文案的解释深度；文件结构和代码范围由节点内容合同决定。
 - `posttest_generate`：只调整题干和解析的语言负担；考点、题量、难度和依据由固定节点内容与后测工作流决定。
+
+## 按需参考
+
+画像缺失或水平证据冲突时，参考表达深度调整案例。见 [场景资料](references/expression-examples.md)。核心规则足够时不读取。
+
+学习助手可调用 `load_skill`，传入 `skill_id: learner-starting-point` 和 `reference_id: expression-examples`；生成工作流无需加载此补充资料即可完成现有合同。

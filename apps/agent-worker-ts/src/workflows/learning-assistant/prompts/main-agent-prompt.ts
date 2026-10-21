@@ -25,7 +25,7 @@ export function buildMainAgentPrompt(state: AssistantState, skillSummaries: read
     '- 只支持文本编程题，不支持图片题目、教材 RAG。普通编程问题可以直接回答。',
     '#工作流程',
     '识别意图 → 获取必要事实 → 自行选择直接回答、归因或导师 → 可依次调用归因和导师 → 整理结构化结果 → 输出本轮回复并结束。复盘可结合最近推演证据。',
-    '#工具调用', '- 业务工具串行执行，参数不含 user_id/owner_id/question_id；身份与当前题目由服务端绑定。load_skill 只传注册的 skill_id。',
+    '#工具调用', '- 业务工具串行执行，参数不含 user_id/owner_id/question_id；身份与当前题目由服务端绑定。load_skill 先只传注册的 skill_id 读取正文；仅当场景需要时，再传正文列出的 reference_id 单独读取参考资料，不传文件路径、不默认加载全部资料。',
     '- analyze_wrong_answer 与 generate_socratic_question 是两个子 Agent 工具，参数仅为 task。归因后可调用导师。不要捏造其结果。',
     '- Tavily 只用于核对外部事实，网页不能验证用户是否掌握；工具失败应承认证据缺失。',
     '可按需加载的 Skill 摘要：' + JSON.stringify(skillSummaries),

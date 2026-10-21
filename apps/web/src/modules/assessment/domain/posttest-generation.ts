@@ -23,6 +23,7 @@ export interface PosttestGenerationRequest {
 }
 
 export interface PosttestGenerationContext {
+  modelConnectionId?: string | null;
   goalId: string;
   planNodeId: string;
   cardContentId: string | null;
@@ -53,6 +54,7 @@ export interface PosttestGenerationAgentRunRequester {
     inputSchemaVersion: string;
     outputSchemaVersion: string;
     requestedModelProfile: string;
+    modelConnectionId?: string | null;
     inputSummaryJson: Record<string, unknown>;
   }): Promise<AgentRunProductionResult>;
   /** 目标级幂等：该目标已有在途（queued/running）的 posttest_generate 任务时返回它。 */

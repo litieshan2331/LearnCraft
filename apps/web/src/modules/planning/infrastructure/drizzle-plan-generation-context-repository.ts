@@ -38,9 +38,15 @@ export class DrizzlePlanGenerationContextRepository implements PlanGenerationCon
         currentLevel: learnerProfiles.currentLevel,
         weeklyMinutes: learnerProfiles.weeklyMinutes,
         backgroundSummary: learnerProfiles.backgroundSummary,
+        modelConnectionId: userModelConnections.id,
       })
       .from(learningGoals)
       .innerJoin(learnerProfiles, eq(learnerProfiles.userId, learningGoals.ownerId))
+      .leftJoin(userModelConnections, and(
+        eq(userModelConnections.ownerId, learningGoals.ownerId),
+        eq(userModelConnections.status, "active"),
+        eq(userModelConnections.isDefault, true),
+      ))
       .where(and(
         eq(learningGoals.id, goalId),
         eq(learningGoals.ownerId, ownerId),
@@ -86,6 +92,7 @@ export class DrizzlePlanGenerationContextRepository implements PlanGenerationCon
       currentLevel,
       weeklyMinutes: goal.weeklyMinutes,
       backgroundSummary: goal.backgroundSummary,
+      modelConnectionId: goal.modelConnectionId,
       assessmentId: assessment.assessmentId,
       assessmentScorePercent: Number(assessment.scorePercent),
       assessmentMasterySummary: toRecord(assessment.masterySummary),

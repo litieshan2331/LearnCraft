@@ -171,3 +171,5 @@ SSL: Disable
 ```
 
 连接成功后，在 `learncraft` 数据库的 `public` schema 下浏览 22 张业务/基础设施表（包含 `user_model_connections` 与 `model_connection_egress_audits`），并在 `agent` schema 下浏览 `agent_runs`、`agent_run_events`。首份 Drizzle 迁移文件位于 `apps/web/src/lib/db/migrations/0000_initial_p0_schema.sql`；开发 Compose 启动时由 `db-migrate` 自动执行，单独重跑可使用 `docker compose --env-file .env run --rm db-migrate`。
+
+docker compose --env-file infra/.env -f infra/compose.yaml up -d

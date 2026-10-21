@@ -1,7 +1,6 @@
 ---
 name: example-guidance
-description: 在节点内容工作流生成代码示例时，补充清晰、可读、可追踪的陪读表达。
-layer: content
+description: 当节点内容需要解释代码入口、调用和状态变化，或后测需要引用已有示例时使用；不额外生成文件或运行日志。
 ---
 
 # 示例陪读
@@ -24,3 +23,9 @@ layer: content
 - `card_content_generate`：服务于 `worked_example.explanation`、`files`、`entry_file`、`call_sequence` 和 `expected_output`；这些字段的结构和上限由 `card_content.v2` 决定。
 - `posttest_generate`：只在题干或解析需要时引用固定节点内容中的示例；不创建 `files`、`entry_file` 或新的调用顺序。
 - `assessment_generate` 与 `plan_generate` 未启用本 Skill；不向它们引入代码示例要求。
+
+## 按需参考
+
+多文件示例或预期输出容易歧义时，参考调用顺序核对案例。见 [场景资料](references/walkthrough-review.md)。核心规则足够时不读取。
+
+学习助手可调用 `load_skill`，传入 `skill_id: example-guidance` 和 `reference_id: walkthrough-review`；生成工作流无需加载此补充资料即可完成现有合同。

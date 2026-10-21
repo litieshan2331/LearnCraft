@@ -5,7 +5,7 @@
 
 import { timingSafeEqual } from 'node:crypto';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -45,7 +45,13 @@ export async function GET(request: Request, context: RouteContext): Promise<Next
     .innerJoin(userModelConnections, and(
       eq(userModelConnections.ownerId, agentRuns.ownerId),
       eq(userModelConnections.status, 'active'),
-      eq(userModelConnections.isDefault, true),
+      or(
+        and(isNull(agentRuns.modelConnectionId), eq(userModelConnections.isDefault, true)),
+        and(
+          // 新建运行会固化连接 ID；旧运行为空时回退到账户默认连接。
+          eq(userModelConnections.id, agentRuns.modelConnectionId),
+        ),
+      ),
     ))
     .where(eq(agentRuns.id, parsedAgentRunId.data))
     .limit(1);

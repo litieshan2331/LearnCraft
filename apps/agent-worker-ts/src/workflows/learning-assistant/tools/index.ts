@@ -16,7 +16,7 @@ const READ_TOOLS: ModelToolDefinition[] = [
   { name: 'get_user_profile', description: '读取当前用户必要画像；缺失字段保留为空。', parameters: EMPTY },
   { name: 'get_mastery_state', description: '读取当前目标或知识点的掌握度；不写入。', parameters: EMPTY },
   { name: 'get_learning_context', description: '读取当前会话相关的学习经历与验证记录。', parameters: EMPTY },
-  { name: 'load_skill', description: '按注册 ID 读取教学 Skill 全文，只影响本 Agent 的教学方式。', parameters: { type: 'object', properties: { skill_id: { type: 'string' } }, required: ['skill_id'], additionalProperties: false } },
+  { name: 'load_skill', description: '按注册 skill_id 读取教学 Skill 正文；需要其中链接的场景资料时，再传已登记的 reference_id 单独读取。只影响教学方式，不执行脚本。', parameters: { type: 'object', properties: { skill_id: { type: 'string' }, reference_id: { type: 'string', description: '可选，仅使用 Skill 正文列出的参考资料 ID，禁止文件路径。' } }, required: ['skill_id'], additionalProperties: false } },
   TAVILY_SEARCH_TOOL,
 ];
 const DELEGATE_TOOLS: ModelToolDefinition[] = DELEGATE_NAMES.map((name) => ({ name, description: name === 'analyze_wrong_answer' ? '委派错题归因子 Agent，返回假设、来源证据及验证方向。' : '委派苏格拉底导师子 Agent，返回一个主要问题、提示和验证目标。', parameters: { type: 'object', properties: { task: { type: 'string', minLength: 1, maxLength: 4000 } }, required: ['task'], additionalProperties: false } }));
@@ -43,12 +43,12 @@ export async function executeReadTool(deps: LearningAssistantDependencies, state
     return { result: output, context: mergeContext(state.context, call.name, output.data, output.evidence) };
   }
   if (call.name === 'load_skill') {
-    const { skill_id } = SkillArgumentsSchema.parse(args);
+    const { skill_id, reference_id } = SkillArgumentsSchema.parse(args);
     try {
-      const content = deps.skills.loadSkill(skill_id, 'learning_assistant');
-      return { result: { skill_id, content }, context: state.context };
+      const content = deps.skills.loadSkill(skill_id, 'learning_assistant', reference_id);
+      return { result: { skill_id, ...(reference_id === undefined ? {} : { reference_id }), content }, context: state.context };
     } catch {
-      return { result: { ok: false, code: 'SKILL_UNAVAILABLE', message: '该 Skill 未注册、不适用或正文不可读取' }, context: state.context };
+      return { result: { ok: false, code: 'SKILL_UNAVAILABLE', message: '该 Skill 或参考资料未注册、不适用或不可读取' }, context: state.context };
     }
   }
   if (call.name === 'tavily_search') {

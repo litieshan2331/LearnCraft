@@ -64,6 +64,7 @@ export class CardContentGenerationService {
       inputSchemaVersion: INPUT_SCHEMA_VERSION,
       outputSchemaVersion: OUTPUT_SCHEMA_VERSION,
       requestedModelProfile: REQUESTED_MODEL_PROFILE,
+      modelConnectionId: context.modelConnectionId ?? null,
       inputSummaryJson: {
         agent_role: "node_tutor",
         logical_session_key: "node:" + context.planNodeId,

@@ -76,6 +76,7 @@ export class PosttestGenerationService {
       inputSchemaVersion: INPUT_SCHEMA_VERSION,
       outputSchemaVersion: OUTPUT_SCHEMA_VERSION,
       requestedModelProfile: REQUESTED_MODEL_PROFILE,
+      modelConnectionId: context.modelConnectionId ?? null,
       inputSummaryJson: {
         topic: context.topic,
         question_count: input.questionCount,

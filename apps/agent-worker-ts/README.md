@@ -21,7 +21,7 @@
 | `src/acl/core-internal-client.ts` | Web 内部接口防腐层：5 个端点、统一超时与鉴权、错误分类、响应契约校验 |
 | `src/schemas/*.ts` | zod 运行时契约：内部接口响应与题集业务合同 |
 | `src/application/services/tool-aware-generator.ts` | ReAct 会话循环：一次运行一个会话，工具成功/失败都回传同一会话，校验失败把字段路径回灌自纠，轮数与工具调用数双上限；可选进度上报 |
-| `Skills/` | 学习教学 Skill：索引层、按工作流分层选择和四个中文化教学规则；Worker 只在选中时读取对应 `SKILL.md` 全文 |
+| `Skills/` | 学习教学 Skill：索引层、按工作流分层选择和五个中文化教学规则；Worker 按渐进式披露策略读取对应 `SKILL.md` |
 | `src/application/services/agent-progress.ts` | 实时进度事件契约（步骤级 + 工具级，**不含模型原文**），配合 `infrastructure/redis/agent-progress-publisher.ts` 发布到 `learncraft:agent-progress:{run_id}` 临时频道，不落库 |
 | `src/workflows/` | 四个 P0 业务工作流（每个工作流一个子目录：`assessment-generate/`、`posttest-generate/`、`plan-generate/`、`card-content-generate/`，目录内按 `schema/`、`prompts/`、`recovery/` 职责分文件夹；`shared/` 放跨工作流复用模块）。**每个工作流是单一 persona 的 ReAct 会话**；后续替换为 LangGraph.js 图为可选项 |
 | `src/application/commands/execute-agent-run.ts` | 命令层：领取 → 取消检查 → 路由 → 执行 → 回写（含真实 token 用量）；错误归类与重试策略 |
@@ -34,6 +34,20 @@
 
 共享包 `packages/security-primitives` 提供 Web 与 Worker 共用的 AES-256-GCM 实现；Web 侧
 `apps/web/src/lib/security/credential-crypto.ts` 已改为转出该包，对外行为不变。
+
+### 教学 Skill
+
+教学 Skill 只改变讲解、示例、误区反馈和提示方式，不改变工作流角色、事实边界、工具权限或结构化输出合同。每个 Skill 的 `SKILL.md` 使用必需的 `name`、`description` frontmatter；`layer` 是索引中的项目调度配置；注册信息和适用工作流维护在 [`Skills/index.json`](./Skills/index.json)，完整的渐进式披露规则见 [`Skills/README.md`](./Skills/README.md)。
+
+| name | description | layer |
+| --- | --- | --- |
+| `learner-starting-point` | 在既定字段和难度范围内调整学习者可理解的表达深度与语言负担。 | `context` |
+| `concept-bridging` | 用具体问题、概念关系和边界说明提升理解清晰度。 | `content` |
+| `example-guidance` | 为代码示例补充清晰、可读、可追踪的陪读表达。 | `content` |
+| `misconception-repair` | 用具体、克制的语言表达常见误区和修复依据。 | `repair` |
+| `socratic-tutoring` | 根据用户推演证据给出一个主要问题、渐进提示和验证目标。 | `repair` |
+
+渐进式披露分为“名称与描述 → SKILL.md 正文 → 支持资源”三层。Worker 初始化时只读 `index.json`；四个生成工作流继续按 `context → content → repair` 选择正文，不加载额外资料。`learning_assistant` 先接收摘要，通过 `load_skill({skill_id})` 读取正文，必要时再传入正文列出的 `reference_id` 单独读取 `references/` 案例。保留现有 ReAct 轮数与工具预算，不增加脚本执行能力；教学规则目前不需要 Python 脚本。README 是集合说明，可加载入口仍为各目录的 `SKILL.md`。
 
 ## 尚未实现
 

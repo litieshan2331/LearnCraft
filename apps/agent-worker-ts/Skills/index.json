@@ -7,9 +7,16 @@
       "title": "起点适配",
       "layer": "context",
       "priority": 10,
-      "summary": "在工作流确定的难度和字段范围内，调整面向学习者的表达深度与语言负担。",
+      "summary": "当需要依据已提供的学习者画像、目标或前测结果调整解释深度时使用；保持既定难度和输出字段。",
       "workflows": ["assessment_generate", "plan_generate", "card_content_generate", "posttest_generate", "learning_assistant"],
       "path": "learner-starting-point/SKILL.md",
+      "references": [
+        {
+          "id": "expression-examples",
+          "path": "references/expression-examples.md",
+          "description": "画像缺失或水平证据冲突时，参考表达深度调整案例。"
+        }
+      ],
       "sources": [
         "https://github.com/unix2dos/skills/blob/main/learnlm-inspired-tutor/SKILL.md",
         "https://github.com/GarethManning/education-agent-skills/blob/main/skills/ai-learning-science/adaptive-hint-sequence-designer/SKILL.md"
@@ -20,9 +27,16 @@
       "title": "概念搭桥",
       "layer": "content",
       "priority": 20,
-      "summary": "在工作流已有字段中组织具体问题、概念关系和适用边界，提升理解清晰度。",
+      "summary": "当已有文本字段需要连接具体编程问题与抽象概念、解释类比边界时使用；适用于前测、路线和节点内容。",
       "workflows": ["assessment_generate", "plan_generate", "card_content_generate"],
       "path": "concept-bridging/SKILL.md",
+      "references": [
+        {
+          "id": "bridge-examples",
+          "path": "references/bridge-examples.md",
+          "description": "需要解释类比边界或将概念改写为完成标准时，参考搭桥案例。"
+        }
+      ],
       "sources": [
         "https://github.com/lowwwbank/anything-to-course",
         "https://github.com/GarethManning/education-agent-skills/blob/main/skills/student-learning/transfer-bridge/SKILL.md"
@@ -33,9 +47,16 @@
       "title": "示例陪读",
       "layer": "content",
       "priority": 30,
-      "summary": "只在节点内容工作流允许时补充入口、调用顺序、状态变化和结果的陪读表达。",
+      "summary": "当节点内容需要解释代码入口、调用和状态变化，或后测需要引用已有示例时使用；不额外生成文件或运行日志。",
       "workflows": ["card_content_generate", "posttest_generate"],
       "path": "example-guidance/SKILL.md",
+      "references": [
+        {
+          "id": "walkthrough-review",
+          "path": "references/walkthrough-review.md",
+          "description": "多文件示例或预期输出容易歧义时，参考调用顺序核对案例。"
+        }
+      ],
       "sources": [
         "https://github.com/GarethManning/education-agent-skills/blob/main/skills/ai-learning-science/digital-worked-example-sequence/SKILL.md",
         "https://github.com/bstellato/ai-teaching-skills"
@@ -46,9 +67,16 @@
       "title": "误区修复",
       "layer": "repair",
       "priority": 40,
-      "summary": "在已有内容、题目或标准字段中，用具体克制的语言表达误区和修复依据。",
+      "summary": "当需要分析真实作答的错因，或在内容、题目和完成标准中表达常见误区及修复依据时使用。",
       "workflows": ["assessment_generate", "plan_generate", "card_content_generate", "posttest_generate", "learning_assistant"],
       "path": "misconception-repair/SKILL.md",
+      "references": [
+        {
+          "id": "evidence-examples",
+          "path": "references/evidence-examples.md",
+          "description": "错因证据不足或需要区分假设与修复验证时，参考证据分级案例。"
+        }
+      ],
       "sources": [
         "https://github.com/GarethManning/education-agent-skills/blob/main/skills/ai-learning-science/ai-feedback-design-principles/SKILL.md",
         "https://github.com/GarethManning/education-agent-skills/blob/main/skills/self-regulated-learning/error-analysis-protocol/SKILL.md",
@@ -60,9 +88,16 @@
       "title": "苏格拉底式引导",
       "layer": "repair",
       "priority": 50,
-      "summary": "面向程序员对话，根据用户推演证据提出一个主要问题，按 0～3 级渐进提示并检查后续表现。",
+      "summary": "当学习助手需要围绕用户推演提出一个主要问题、按服务端等级给出渐进提示并验证后续表现时使用。",
       "workflows": ["learning_assistant"],
       "path": "socratic-tutoring/SKILL.md",
+      "references": [
+        {
+          "id": "hint-ladder",
+          "path": "references/hint-ladder.md",
+          "description": "需要为一个验证目标选择提示强度或响应明确求答案时，参考提示阶梯案例。"
+        }
+      ],
       "sources": []
     }
   ]

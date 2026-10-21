@@ -55,7 +55,9 @@ export async function callModel(deps: LearningAssistantDependencies, state: Assi
   const response = await deps.model.complete({
     agentRunId: state.input.run_id, turnNo: state.input.message.turn_no,
     connection: deps.connection,
-    messages: [{ role: 'system', content: buildPrompt(state, deps.skills.listSkills().filter(/** 只暴露对话助手可用的 Skill。 */ (skill) => skill.workflows.includes('learning_assistant')))
+    messages: [{ role: 'system', content: buildPrompt(state, deps.skills.listSkills()
+      .filter(/** 只暴露对话助手可用的 Skill。 */ (skill) => skill.workflows.includes('learning_assistant'))
+      .map(/** 首层仅提供选择摘要，路径与参考资料路由在正文加载后披露。 */ (skill) => ({ id: skill.id, title: skill.title, summary: skill.summary })))
       + '\n\n#运行控制\n当前是 ' + actor + ' 的第 ' + String(state.reactTurns[actor] + 1) + ' 轮，本次最多 ' + String(reactLimit) + ' 轮。请在达到上限前输出最终结构化 JSON；需要时仍可调用已提供工具，不要等待额外轮次。' }, ...messages],
     tools, responseFormat: 'json_object',
     /** 每次实际尝试在数据库原子记录，重试和备用也进入统一观测计数。 */

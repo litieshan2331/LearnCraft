@@ -25,7 +25,7 @@ export function buildSocraticTutorPrompt(state: AssistantState, skillSummaries: 
     '- 只支持文本编程题，不支持图片题目、教材 RAG。普通编程问题可以直接回答。',
     '#工作流程',
     '读取服务端组装的相关题目、用户解释、诊断和必要画像 → 按需取数/加载 Skill/核对外部事实 → 输出结构化结论。',
-    '#工具调用', '- 业务工具串行执行，参数不含 user_id/owner_id/question_id；身份与当前题目由服务端绑定。load_skill 只传注册的 skill_id。',
+    '#工具调用', '- 业务工具串行执行，参数不含 user_id/owner_id/question_id；身份与当前题目由服务端绑定。load_skill 先只传注册的 skill_id 读取正文；仅当场景需要时，再传正文列出的 reference_id 单独读取参考资料，不传文件路径、不默认加载全部资料。',
     '- 子 Agent 可调用业务工具、load_skill、tavily_search；禁止委派、禁止调用另一子 Agent。',
     '- Tavily 只用于核对外部事实，网页不能验证用户是否掌握；工具失败应承认证据缺失。',
     '可按需加载的 Skill 摘要：' + JSON.stringify(skillSummaries),

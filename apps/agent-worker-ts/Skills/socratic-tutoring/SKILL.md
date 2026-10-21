@@ -1,7 +1,6 @@
 ---
 name: socratic-tutoring
-description: 根据程序员用户的推演证据，给出一个主要问题、渐进提示和验证目标。
-layer: repair
+description: 当学习助手需要围绕用户推演提出一个主要问题、按服务端等级给出渐进提示并验证后续表现时使用。
 ---
 
 # 苏格拉底式引导
@@ -16,3 +15,9 @@ layer: repair
 - “明白了”“懂了”不能证明修复。可观察的正确推演、实际运行结果或测评结果才用于验证。
 - 未实际运行的代码只能作为模型评估；不得声称已经运行成功，不直接更新画像或掌握度。
 - 提问返回 `primary_question`，提示返回 `hint`，验证目标返回 `next_verification_target`；保持当前 Agent 的输出合同。
+
+## 按需参考
+
+需要为一个验证目标选择提示强度或响应明确求答案时，参考提示阶梯案例。见 [场景资料](references/hint-ladder.md)。核心规则足够时不读取。
+
+学习助手可调用 `load_skill`，传入 `skill_id: socratic-tutoring` 和 `reference_id: hint-ladder`；其他工作流未启用本 Skill。

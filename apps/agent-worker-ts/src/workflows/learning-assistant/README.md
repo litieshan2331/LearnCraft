@@ -38,7 +38,7 @@ START → prepare → main
 
 `loadInitialMessages` 仅在没有已初始化的 Checkpoint 时读取业务历史。之后模型消息来源为 Checkpoint，每次只取最近 20 个用户轮，包含当前轮并保留该轮完整工具链。业务消息表和页面分页仍保留全部历史。内部输出修复反馈不作为真实用户消息落库，也不会在后续轮次的模型上下文中重复出现。
 
-业务读端口只接收服务端绑定的运行输入，模型只能传空参数；子 Agent 工具只传任务描述。`readBusinessTool` 的实现必须鉴权、按会话关联题目取数，并过滤不必要字段。Skill 首层仅摘要，`load_skill` 才读取注册 ID 的全文。Tavily 复用每日配额，不增加本次运行的工具次数上限。
+业务读端口只接收服务端绑定的运行输入，模型只能传空参数；子 Agent 工具只传任务描述。`readBusinessTool` 的实现必须鉴权、按会话关联题目取数，并过滤不必要字段。Skill 首层仅摘要，`load_skill({skill_id})` 才读取注册 ID 的正文；需要正文链接的场景案例时，可传 `reference_id` 单独读取已登记资料。资料沿用 Skill 工作流权限与既有 ReAct 预算，不支持任意路径、远程读取或脚本执行。Tavily 复用每日配额，不增加本次运行的工具次数上限。
 
 `persistMessages` 必须调用已有消息 Repository，按图生成的固定 UUID 幂等写入；用户消息已在发送 API 落库，不重复写。`persistLearningMemory` 使用本 run 的固定幂等标识。`validateLearningMemory` 必须在服务端重新核对证据来源与用户后续表现，不可只相信子模型返回的 `verified`。口头确认不能写入，未实际运行代码只能保存为模型评估，不直接改画像或掌握度。正式运行完成由后续消费处理器调用已有 RunRepository，不可覆盖数据库已累计的请求次数和 token。
 

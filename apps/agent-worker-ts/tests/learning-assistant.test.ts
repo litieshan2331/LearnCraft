@@ -3,9 +3,12 @@
  * 调用顺序：fixture 装配 → 普通回复/串行委派 → 子工具权限 → 输出修复 → 20轮窗口 → 崩溃恢复/幂等。
  */
 import { randomUUID } from 'node:crypto';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it } from 'vitest';
 import type { AgentTraceEventInput } from '../src/application/services/trace-writer.js';
+import { FileLearningSkills } from '../src/application/services/learning-skills.js';
 import type { ModelCompletionRequest, ModelMessage } from '../src/infrastructure/llm/model-gateway.js';
 import { createLearningAssistantGraph, runLearningAssistant } from '../src/workflows/learning-assistant/graph.js';
 import type { LearningAssistantDependencies, MemoryCandidate } from '../src/workflows/learning-assistant/ports.js';
@@ -67,6 +70,46 @@ function fixture(script: Array<ModelMessage | Error>) {
 }
 
 describe('学习助手 LangGraph', () => {
+  /** 主 Agent 和子 Agent 均可分两次读正文与资料，沿用原有轮数、消息和证据边界。 */
+  it('按需读取真实参考资料，正文不会自动展开案例', async () => {
+    const f = fixture([
+      tool('analyze_wrong_answer', { task: '根据证据核对错因' }),
+      tool('load_skill', { skill_id: 'misconception-repair' }),
+      tool('load_skill', { skill_id: 'misconception-repair', reference_id: 'evidence-examples' }),
+      json(ATTRIBUTION),
+      tool('load_skill', { skill_id: 'socratic-tutoring', reference_id: 'hint-ladder' }),
+      json(MAIN),
+    ]);
+    f.deps.skills = new FileLearningSkills(resolve(dirname(fileURLToPath(import.meta.url)), '../Skills'));
+    const result = await runLearningAssistant(f.graph, f.deps, f.input);
+    expect(JSON.stringify(f.calls[0]?.messages)).not.toContain('同一错误的不同原因');
+    expect(JSON.stringify(f.calls[2]?.messages)).not.toContain('同一错误的不同原因');
+    expect(JSON.stringify(f.calls[3]?.messages)).toContain('同一错误的不同原因');
+    expect(JSON.stringify(f.calls[5]?.messages)).toContain('循环边界：按当前等级择一使用');
+    expect(f.calls).toHaveLength(6);
+    expect(f.budget.get(f.input.run_id)).toBe(6);
+    expect(result.reactTurns).toEqual({ main: 3, error_attribution: 3, socratic_tutor: 0 });
+    expect(result.context.evidence).toHaveLength(1); // 只有原始用户消息，没有将教学案例当作用户证据。
+    expect(result.context.facts).toEqual({});
+  });
+
+  /** 未登记、越权资料和文件路径作为工具错误返回，不泄漏本地异常细节。 */
+  it('拒绝未授权参考资料并允许模型继续完成回复', async () => {
+    const f = fixture([
+      tool('load_skill', { skill_id: 'example-guidance', reference_id: 'walkthrough-review' }),
+      tool('load_skill', { skill_id: 'socratic-tutoring', reference_id: 'unknown' }),
+      tool('load_skill', { skill_id: 'socratic-tutoring', reference_id: '../../secret' }),
+      json(MAIN),
+    ]);
+    f.deps.skills = new FileLearningSkills(resolve(dirname(fileURLToPath(import.meta.url)), '../Skills'));
+    await runLearningAssistant(f.graph, f.deps, f.input);
+    expect(JSON.stringify(f.calls[1]?.messages)).toContain('SKILL_UNAVAILABLE');
+    expect(JSON.stringify(f.calls[2]?.messages)).toContain('SKILL_UNAVAILABLE');
+    expect(JSON.stringify(f.calls[3]?.messages)).toContain('TOOL_ARGUMENTS_INVALID');
+    expect(JSON.stringify(f.calls[3]?.messages)).not.toContain('ENOENT');
+    expect(f.calls).toHaveLength(4);
+  });
+
   /** 普通编程允许直接回答，运行结束可复用且不泄露密钥。 */
   it('普通回复 END，同 run 重试不重复模型和消息', async () => {
     const f = fixture([json(MAIN)]);

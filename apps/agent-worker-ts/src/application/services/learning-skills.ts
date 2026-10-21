@@ -3,13 +3,14 @@
  *
  * 调用顺序：createLearningSkillsLoader 读取 Skills/index.json →
  * selectForWorkflow 按工作流选择 Skill → buildPromptSection 读取选中 Skill 的全文并拼装教学规则 →
- * appendLearningSkillsToToolSection 将规则插入现有提示词的“工具调用”区块。
+ * appendLearningSkillsToToolSection 将规则插入现有提示词的“工具调用”区块；
+ * loadSkill 可按注册的 referenceId 单独读取第三层参考资料，不自动展开链接。
  *
  * 本模块只读取本地 Markdown，不执行 Skill 中的代码、不提供 MCP 工具，也不改变业务输出合同。
  */
 
-import { readFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { z } from 'zod';
 
 export const LEARNING_SKILL_WORKFLOWS = [
@@ -31,6 +32,11 @@ const SkillIndexEntrySchema = z.object({
   workflows: z.array(z.enum(LEARNING_SKILL_WORKFLOWS)).min(1),
   path: z.string().min(1),
   sources: z.array(z.string().url()).default([]),
+  references: z.array(z.object({
+    id: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    path: z.string().regex(/^references\/[a-z0-9-]+\.md$/),
+    description: z.string().min(1),
+  }).strict()).optional(),
 }).strict();
 
 const SkillIndexSchema = z.object({
@@ -75,7 +81,8 @@ function stripSkillFrontmatter(content: string): string {
 
 /**
  * 读取本地 Skill 索引并提供按工作流渐进加载的实现。
- * 第一层只解析索引，第二层仅在 buildPromptSection 中读取选中的 SKILL.md。
+ * 第一层只解析索引，第二层由 buildPromptSection 或 loadSkill 读取 SKILL.md，
+ * 第三层由 loadSkill 的 referenceId 参数按需读取已登记资料。
  */
 export class FileLearningSkills implements LearningSkillsPort {
   private readonly index: z.infer<typeof SkillIndexSchema>;
@@ -102,12 +109,16 @@ export class FileLearningSkills implements LearningSkillsPort {
     return this.index.skills;
   }
 
-  /** 对话 Agent 按索引 ID 按需读取全文；拒绝任意文件路径。 */
-  loadSkill(id: string, workflow?: LearningSkillsWorkflow): string {
+  /** 按注册 ID 读取正文或单份参考资料；保留工作流检查并拒绝任意文件路径。 */
+  loadSkill(id: string, workflow?: LearningSkillsWorkflow, referenceId?: string): string {
     const entry = this.index.skills.find((item) => item.id === id);
     if (entry === undefined) throw new Error('未注册的教学 Skill：' + id);
     if (workflow !== undefined && !entry.workflows.includes(workflow)) throw new Error('当前工作流不允许使用教学 Skill：' + id);
-    return this.loadFullText(entry);
+    if (referenceId === undefined) return this.loadFullText(entry);
+    const reference = entry.references?.find((item) => item.id === referenceId);
+    if (reference === undefined) throw new Error('未注册的教学 Skill 参考资料：' + referenceId);
+    const skillDirectory = dirname(resolve(this.skillsRoot, entry.path));
+    return this.readLocalMarkdown(skillDirectory, reference.path);
   }
 
   /** 按固定层级和优先级选择当前工作流允许使用的 Skill。 */
@@ -122,7 +133,7 @@ export class FileLearningSkills implements LearningSkillsPort {
 
   /**
    * 读取当前工作流选中的 Skill 正文，并生成放入 SYSTEM_PROMPT 的教学规则片段。
-   * 只有这里会从第二层读取 SKILL.md，未选中的 Skill 不会进入上下文。
+   * 不展开 references，未选中的 Skill 不会进入上下文。
    */
   buildPromptSection(workflow: LearningSkillsWorkflow): string {
     const selected = this.selectForWorkflow(workflow);
@@ -160,21 +171,35 @@ export class FileLearningSkills implements LearningSkillsPort {
     if (cached !== undefined) {
       return cached;
     }
-    const filePath = resolve(this.skillsRoot, entry.path);
-    const relativePath = relative(resolve(this.skillsRoot), filePath);
-    if (isAbsolute(relativePath) || relativePath === '..' || relativePath.startsWith('..\\') || relativePath.startsWith('../')) {
-      throw new Error('教学 Skill 路径必须位于 Skills 根目录。');
-    }
+    const content = stripSkillFrontmatter(this.readLocalMarkdown(this.skillsRoot, entry.path));
+    if (content.length === 0) throw new Error('LearnCraft 教学 Skill 正文不能为空：' + entry.id);
+    this.fullTextCache.set(entry.id, content);
+    return content;
+  }
+
+  /** 校验真实路径与文件大小后读取单份资料，阻止路径穿越及符号链接越界。 */
+  private readLocalMarkdown(baseDirectory: string, fileName: string): string {
+    const filePath = resolve(baseDirectory, fileName);
     let content: string;
     try {
-      content = stripSkillFrontmatter(readFileSync(filePath, 'utf8'));
+      const root = realpathSync(this.skillsRoot);
+      const base = realpathSync(baseDirectory);
+      const target = realpathSync(filePath);
+      for (const [parent, child] of [[root, base], [base, target]] as const) {
+        const path = relative(parent, child);
+        if (isAbsolute(path) || path === '..' || path.startsWith('..\\') || path.startsWith('../')) {
+          throw new Error('教学 Skill 路径必须位于允许的本地目录。');
+        }
+      }
+      const stat = statSync(target);
+      if (!stat.isFile() || stat.size > 65_536) throw new Error('教学 Skill 资料必须为不超过 64 KiB 的文件。');
+      content = readFileSync(target, 'utf8').trim();
     } catch (error) {
       throw new Error('无法读取 LearnCraft 教学 Skill：' + filePath, { cause: error });
     }
     if (content.length === 0) {
       throw new Error('LearnCraft 教学 Skill 不能为空：' + filePath);
     }
-    this.fullTextCache.set(entry.id, content);
     return content;
   }
 }

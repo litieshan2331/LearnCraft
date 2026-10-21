@@ -26,6 +26,7 @@ export interface AssessmentGenerationRequest {
 }
 
 export interface AssessmentGenerationContext {
+  modelConnectionId?: string | null;
   topic: string;
   title: string;
   description: string;
@@ -52,6 +53,7 @@ export interface AssessmentGenerationAgentRunRequester {
     inputSchemaVersion: string;
     outputSchemaVersion: string;
     requestedModelProfile: string;
+    modelConnectionId?: string | null;
     inputSummaryJson: Record<string, unknown>;
   }): Promise<AgentRunProductionResult>;
   /** 目标级幂等：该目标已有在途（queued/running）的 assessment_generate 任务时返回它。 */

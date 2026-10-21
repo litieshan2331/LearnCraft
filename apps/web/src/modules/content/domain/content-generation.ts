@@ -17,6 +17,7 @@ export interface CardContentGenerationRequest {
 }
 
 export interface CardContentGenerationContext {
+  modelConnectionId?: string | null;
   goalId: string;
   planId: string;
   planNodeId: string;
@@ -65,6 +66,7 @@ export interface CardContentGenerationAgentRunRequester {
     inputSchemaVersion: string;
     outputSchemaVersion: string;
     requestedModelProfile: string;
+    modelConnectionId?: string | null;
     inputSummaryJson: Record<string, unknown>;
   }): Promise<AgentRunProductionResult>;
   /** 目标级幂等：该节点已有在途（queued/running）的 card_content_generate 任务时返回它。 */

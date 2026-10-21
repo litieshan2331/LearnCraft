@@ -23,6 +23,50 @@ LearnCraft 会根据学习者的背景、目标和前测结果组织学习路线
 
 四个 P0 生成工作流由 TypeScript Agent Worker 执行：`assessment_generate`（前测）、`plan_generate`（学习路线）、`card_content_generate`（节点内容）和 `posttest_generate`（节点后测）。联网检索通过受控的 Tavily 网关完成，并受工具次数、每日配额、熔断和模型出网策略限制。
 
+## 产品界面展示
+
+LearnCraft 将学习目标、学习路线、章节内容和 Agent 运行过程串成一个连续的学习体验。下面是当前 Web 界面的代表性截图。
+
+### 学习目标设置
+
+学习者先补充学习画像，再明确技术主题和希望完成的目标，系统据此组织后续诊断和路线生成。
+
+<p align="center">
+  <img src="./docs/assets/readme/01-learning-setup.png" alt="LearnCraft 学习目标设置界面" width="900">
+</p>
+
+### 学习路线总览
+
+路线页面展示学习目标、适用人群、画像版本、章节数量和整体学习进度。
+
+<p align="center">
+  <img src="./docs/assets/readme/02-learning-map.png" alt="LearnCraft 学习路线总览" width="900">
+</p>
+
+### 章节与完成标准
+
+每个章节包含学习目标、预计投入、难度、前置章节和可验证的完成标准，学习者可以从章节入口进入具体内容。
+
+<p align="center">
+  <img src="./docs/assets/readme/03-learning-chapters.png" alt="LearnCraft 章节列表与完成标准" width="900">
+</p>
+
+### 代码学习卡片
+
+学习卡片支持围绕代码示例进行阅读和练习，并展示文件结构与代码内容，帮助学习者把概念落实到可运行的项目上下文中。
+
+<p align="center">
+  <img src="./docs/assets/readme/04-code-learning-card.png" alt="LearnCraft 代码学习卡片" width="900">
+</p>
+
+### Agent 运行观测
+
+每次 Agent 生成都可以查看运行状态、模型调用、工具调用、轮次、耗时、Token 和事件轨迹，便于调试生成链路和评估运行质量。
+
+<p align="center">
+  <img src="./docs/assets/readme/05-agent-observability.png" alt="LearnCraft Agent 运行观测界面" width="900">
+</p>
+
 ## 系统架构
 
 ```mermaid

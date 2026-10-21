@@ -1,7 +1,6 @@
 ---
 name: concept-bridging
-description: 在工作流允许的字段中，用具体问题、概念关系和边界说明提升理解清晰度。
-layer: content
+description: 当已有文本字段需要连接具体编程问题与抽象概念、解释类比边界时使用；适用于前测、路线和节点内容。
 ---
 
 # 概念搭桥
@@ -26,3 +25,9 @@ layer: content
 - `plan_generate`：只改善 `node_brief`、`learning_objective`、`rationale` 和 `completion_criteria` 中的概念关系；不得生成知识正文、示例代码或题目。
 - `assessment_generate`：只改善题干、选项和 `explanation` 对概念关系的表达；不得额外生成示例或题目之外的教学段落。
 - `posttest_generate` 未启用本 Skill；后测只遵循固定节点内容和后测工作流。
+
+## 按需参考
+
+需要解释类比边界或将概念改写为完成标准时，参考搭桥案例。见 [场景资料](references/bridge-examples.md)。核心规则足够时不读取。
+
+学习助手可调用 `load_skill`，传入 `skill_id: concept-bridging` 和 `reference_id: bridge-examples`；生成工作流无需加载此补充资料即可完成现有合同。

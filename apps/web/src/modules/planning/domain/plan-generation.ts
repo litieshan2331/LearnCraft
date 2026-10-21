@@ -17,6 +17,7 @@ export interface PlanGenerationRequest {
 }
 
 export interface PlanGenerationContext {
+  modelConnectionId?: string | null;
   goalId: string;
   topic: string;
   title: string;
@@ -49,6 +50,7 @@ export interface PlanGenerationAgentRunRequester {
     inputSchemaVersion: string;
     outputSchemaVersion: string;
     requestedModelProfile: string;
+    modelConnectionId?: string | null;
     inputSummaryJson: Record<string, unknown>;
   }): Promise<AgentRunProductionResult>;
   /** 目标级幂等：该目标已有在途（queued/running）的 plan_generate 任务时返回它。 */

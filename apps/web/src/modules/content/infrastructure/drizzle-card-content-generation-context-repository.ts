@@ -49,6 +49,7 @@ export class DrizzleCardContentGenerationContextRepository implements CardConten
         estimatedMinutes: planNodes.estimatedMinutes,
         completionCriteria: planNodes.completionCriteria,
         contentStatus: planNodes.contentStatus,
+        modelConnectionId: userModelConnections.id,
       })
       .from(planNodes)
       .innerJoin(learningPlans, and(
@@ -61,6 +62,11 @@ export class DrizzleCardContentGenerationContextRepository implements CardConten
         eq(learningGoals.ownerId, ownerId),
       ))
       .innerJoin(learnerProfiles, eq(learnerProfiles.userId, ownerId))
+      .leftJoin(userModelConnections, and(
+        eq(userModelConnections.ownerId, learningGoals.ownerId),
+        eq(userModelConnections.status, "active"),
+        eq(userModelConnections.isDefault, true),
+      ))
       .where(and(
         eq(planNodes.id, planNodeId),
         eq(planNodes.ownerId, ownerId),
@@ -91,6 +97,7 @@ export class DrizzleCardContentGenerationContextRepository implements CardConten
       estimatedMinutes: record.estimatedMinutes,
       completionCriteria: toCriteria(record.completionCriteria),
       contentStatus: record.contentStatus,
+      modelConnectionId: record.modelConnectionId,
     };
   }
 

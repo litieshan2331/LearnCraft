@@ -1,7 +1,6 @@
 ---
 name: misconception-repair
-description: 在工作流已有的内容、题目或标准字段中，用具体、克制的语言表达常见误区和修复依据。
-layer: repair
+description: 当需要分析真实作答的错因，或在内容、题目和完成标准中表达常见误区及修复依据时使用。
 ---
 
 # 误区修复
@@ -27,3 +26,9 @@ layer: repair
 - `assessment_generate`：把已知误区转成可诊断的干扰项，并在 `explanation` 中说明选项为什么不成立；题量和字段由前测工作流决定。
 - `posttest_generate`：只根据节点内容和 `teaching_memory` 设计误区相关题目与解析；不生成个性化答题反馈。
 - `plan_generate`：只把稳定误区转译为可观察的 `completion_criteria` 或章节表述；不生成题目、反馈或知识正文。
+
+## 按需参考
+
+错因证据不足或需要区分假设与修复验证时，参考证据分级案例。见 [场景资料](references/evidence-examples.md)。核心规则足够时不读取。
+
+学习助手可调用 `load_skill`，传入 `skill_id: misconception-repair` 和 `reference_id: evidence-examples`；生成工作流无需加载此补充资料即可完成现有合同。

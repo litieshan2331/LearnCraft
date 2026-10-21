@@ -30,9 +30,15 @@ export class DrizzleAssessmentGenerationContextRepository implements AssessmentG
         desiredOutcome: learningGoals.desiredOutcome,
         backgroundSummary: learnerProfiles.backgroundSummary,
         overallExperience: learnerProfiles.currentLevel,
+        modelConnectionId: userModelConnections.id,
       })
       .from(learningGoals)
       .leftJoin(learnerProfiles, eq(learnerProfiles.userId, learningGoals.ownerId))
+      .leftJoin(userModelConnections, and(
+        eq(userModelConnections.ownerId, learningGoals.ownerId),
+        eq(userModelConnections.status, "active"),
+        eq(userModelConnections.isDefault, true),
+      ))
       .where(and(eq(learningGoals.id, goalId), eq(learningGoals.ownerId, ownerId)))
       .limit(1);
 

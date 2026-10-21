@@ -36,6 +36,7 @@ export class DrizzlePosttestGenerationContextRepository implements PosttestGener
         planNodeId: planNodes.id,
         cardContentId: cardContents.id,
         topic: learningGoals.topic,
+        modelConnectionId: userModelConnections.id,
       })
       .from(planNodes)
       .innerJoin(
@@ -53,6 +54,11 @@ export class DrizzlePosttestGenerationContextRepository implements PosttestGener
         eq(cardContents.planNodeId, planNodes.id),
         eq(cardContents.ownerId, ownerId),
         eq(cardContents.status, "ready"),
+      ))
+      .leftJoin(userModelConnections, and(
+        eq(userModelConnections.ownerId, learningGoals.ownerId),
+        eq(userModelConnections.status, "active"),
+        eq(userModelConnections.isDefault, true),
       ))
       .where(and(
         eq(planNodes.id, planNodeId),

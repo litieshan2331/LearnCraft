@@ -102,7 +102,10 @@ export const ChildAgentInputSchema = z.object({
 export const BusinessToolNameSchema = z.enum(['get_wrong_question', 'get_user_profile', 'get_mastery_state', 'get_learning_context']);
 export type BusinessToolName = z.infer<typeof BusinessToolNameSchema>;
 export const BusinessArgumentsSchema = z.object({}).strict();
-export const SkillArgumentsSchema = z.object({ skill_id: z.string().min(1).max(100) }).strict();
+export const SkillArgumentsSchema = z.object({
+  skill_id: z.string().min(1).max(100),
+  reference_id: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(100).optional(),
+}).strict();
 export const BusinessResultSchema = z.object({
   data: z.record(z.string(), z.unknown()), evidence: z.array(EvidenceSchema),
 }).strict();
