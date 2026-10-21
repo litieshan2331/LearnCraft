@@ -17,7 +17,7 @@ LearnCraft 会根据学习者的背景、目标和前测结果组织学习路线
 - **学习路线**：根据目标和前测结果生成 6–12 个章节，包含学习目标、难度、预计时长、前置依赖和完成标准。
 - **节点内容**：为路线节点生成结构化知识内容、代码示例和 worked example，并支持节点完成标记。
 - **节点后测**：围绕已经学习的节点生成 5–10 题后测，检验知识掌握和迁移能力。
-- **Agent 运行观测**：查看运行状态、事件序列、生成进度和错误信息；进度事件不包含模型原文。
+- **Agent 运行观测**：查看运行状态、实时生成进度、模型思考内容、事件序列和错误信息。
 - **模型连接管理**：保存 OpenAI-compatible Provider 的 Base URL、模型名和 API Key；凭据在服务端使用 AES-256-GCM 加密保存。
 - **学习助手（演进中）**：TypeScript Worker 中已经提供基于 LangGraph.js 的学习助手图、错题归因和苏格拉底导师子 Agent；公开对话链路仍在持续完善。
 
@@ -57,6 +57,14 @@ LearnCraft 将学习目标、学习路线、章节内容和 Agent 运行过程�
 
 <p align="center">
   <img src="./docs/assets/readme/04-code-learning-card.png" alt="LearnCraft 代码学习卡片" width="900">
+</p>
+
+### Agent 生成过程
+
+以章节后测生成为例，页面实时展示任务状态、当前思考轮次和流式模型思考内容，让学习者在等待结果时了解生成进展。
+
+<p align="center">
+  <img src="./docs/assets/readme/06-agent-generation-progress.png" alt="LearnCraft Agent 生成章节后测时的实时进度与模型思考内容" width="900">
 </p>
 
 ### Agent 运行观测
