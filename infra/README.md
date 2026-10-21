@@ -23,10 +23,13 @@ Copy-Item .env.example .env
 随后仍在 `infra/` 目录执行：
 
 ```powershell
-docker compose config
-docker compose up --build -d
-docker compose ps
+docker compose --env-file .env config
+docker compose --env-file .env up --build -d
+docker compose --env-file .env ps
+docker compose --env-file .env ps -a db-migrate
 ```
+
+`db-migrate` 是开发 Compose 的一次性迁移服务。它会在 PostgreSQL 健康后执行 Web 侧 Drizzle 迁移；只有迁移成功，Web 和 Agent 服务才会启动。已完成的迁移会由 Drizzle 跳过，因此可以安全地重复执行 `docker compose --env-file .env up --build -d`。如果迁移失败，先查看 `docker compose --env-file .env logs db-migrate`，修复原因后重新执行上面的启动命令。
 
 日常可在 Docker Desktop 的 LearnCraft Compose 应用中直接启动、停止或重启服务。首次启动，或 Dockerfile、依赖、`compose.yaml` 改动后，需要在 Docker Desktop 重新构建镜像，或执行 `docker compose up --build -d`。请勿随意删除 Compose 应用；停止服务不会移除数据库和 MinIO 的命名卷。
 
@@ -35,7 +38,7 @@ docker compose ps
 本地 `compose.yaml` 已直接采用开发模式：Web 使用 `next dev`，并挂载 `apps/web` 与 `packages/contracts`。日常开发只使用这一份 Compose 文件，不再使用 `compose.dev.yaml`；因此保存 `apps/web/src` 下的 `.ts`、`.tsx` 或 `.css` 文件后，Next.js 会执行 Fast Refresh。
 保存 `apps/agent-worker-ts/src` 中的 `.ts` 文件后，容器不会自动重启：两个 TS 服务的启动命令是「安装依赖（仅在链接缺失时）→ esbuild 打包 → 运行」，需要执行 `docker compose -f infra/compose.yaml restart agent-worker-ts agent-dispatcher-ts` 才会重新打包并生效。正在执行的 AgentRun 不会被强杀，关闭窗口内未完成的任务由 BullMQ 锁与 stalled 检测重投，数据库状态机保证结果不重复写入。
 
-`apps/agent-worker-ts/package.json`、`pnpm-lock.yaml`、Dockerfile、`compose.yaml` 或环境变量变更需执行 `docker compose up -d --force-recreate <服务>`（**注意：只 `restart` 不会重新读取 `.env`**）；数据库迁移继续由手动执行的 `pnpm db:migrate` 管理。
+`apps/agent-worker-ts/package.json`、`pnpm-lock.yaml`、Dockerfile、`compose.yaml` 或环境变量变更需执行 `docker compose --env-file .env up -d --force-recreate <服务>`（**注意：只 `restart` 不会重新读取 `.env`**）；数据库迁移由开发 Compose 中的 `db-migrate` 服务执行，需要单独重跑时可执行 `docker compose --env-file .env run --rm db-migrate`。
 
 
 在仓库根目录执行：
@@ -167,4 +170,4 @@ Password: infra/.env 中的 POSTGRES_PASSWORD
 SSL: Disable
 ```
 
-连接成功后，在 `learncraft` 数据库的 `public` schema 下浏览 22 张业务/基础设施表（包含 `user_model_connections` 与 `model_connection_egress_audits`），并在 `agent` schema 下浏览 `agent_runs`、`agent_run_events`。首份 Drizzle 迁移文件位于 `apps/web/src/lib/db/migrations/0000_initial_p0_schema.sql`；新环境执行 `pnpm db:migrate` 后会创建相同结构。
+连接成功后，在 `learncraft` 数据库的 `public` schema 下浏览 22 张业务/基础设施表（包含 `user_model_connections` 与 `model_connection_egress_audits`），并在 `agent` schema 下浏览 `agent_runs`、`agent_run_events`。首份 Drizzle 迁移文件位于 `apps/web/src/lib/db/migrations/0000_initial_p0_schema.sql`；开发 Compose 启动时由 `db-migrate` 自动执行，单独重跑可使用 `docker compose --env-file .env run --rm db-migrate`。

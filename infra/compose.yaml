@@ -88,6 +88,33 @@ services:
       - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
     networks: [private]
 
+  db-migrate:
+    # 开发环境数据库迁移：PostgreSQL 健康后执行 Drizzle 已提交的全部迁移。
+    # 这是一次性任务；迁移成功后退出，Web 服务通过 service_completed_successfully 等待它。
+    image: learncraft-web:dev
+    build:
+      context: ..
+      dockerfile: infra/docker/web.dev.Dockerfile
+    restart: "no"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - pnpm install --frozen-lockfile --filter @learncraft/web... && pnpm db:migrate
+    volumes:
+      - type: bind
+        source: ../apps/web
+        target: /app/apps/web
+      - type: volume
+        source: web-dev-node-modules
+        target: /app/apps/web/node_modules
+    networks: [private]
+
   web:
     # 本地开发默认运行 Next.js 开发服务器，支持保存后的 Fast Refresh。
     image: learncraft-web:dev
@@ -115,6 +142,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:${WEB_PORT:-3000}:3000"
     command:
@@ -230,6 +259,8 @@ services:
         condition: service_healthy
       queue-redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
       web:
         condition: service_healthy
     # 关闭窗口覆盖 600 秒硬超时，不中断在飞任务。
@@ -284,6 +315,8 @@ services:
         condition: service_healthy
       queue-redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     stop_grace_period: 30s
     volumes:
       - type: bind

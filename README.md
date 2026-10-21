@@ -84,15 +84,21 @@ Copy-Item infra/.env.example infra/.env
 启动 Compose：
 
 ```powershell
-docker compose -f infra/compose.yaml config
-docker compose -f infra/compose.yaml up --build -d
-docker compose -f infra/compose.yaml ps
+docker compose --env-file infra/.env -f infra/compose.yaml config
+docker compose --env-file infra/.env -f infra/compose.yaml up --build -d
+docker compose --env-file infra/.env -f infra/compose.yaml ps
 ```
 
-执行数据库迁移：
+查看数据库迁移服务：
 
 ```powershell
-docker compose -f infra/compose.yaml exec web pnpm db:migrate
+docker compose --env-file infra/.env -f infra/compose.yaml ps -a db-migrate
+```
+
+开发 Compose 启动时会先由一次性 `db-migrate` 服务执行全部 Drizzle 迁移，迁移成功后才启动 Web 和 Agent 服务。若需单独重跑迁移，可执行：
+
+```powershell
+docker compose --env-file infra/.env -f infra/compose.yaml run --rm db-migrate
 ```
 
 浏览器访问 <http://127.0.0.1:3000>。本地服务端口默认只绑定 `127.0.0.1`，完整的服务说明、端口表和生产编排说明见 [`infra/README.md`](./infra/README.md)。
