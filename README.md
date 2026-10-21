@@ -53,7 +53,7 @@ LearnCraft 将学习目标、学习路线、章节内容和 Agent 运行过程�
 
 ### 代码学习卡片
 
-学习卡片支持围绕代码示例进行阅读和练习，并展示文件结构与代码内容，帮助学习者把概念落实到可运行的项目上下文中。
+学习卡片支持围绕代码示例进行阅读和练习，并展示文件结构与代码内容。
 
 <p align="center">
   <img src="./docs/assets/readme/04-code-learning-card.png" alt="LearnCraft 代码学习卡片" width="900">
