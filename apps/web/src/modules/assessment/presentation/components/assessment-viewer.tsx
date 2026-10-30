@@ -32,6 +32,7 @@ import {
 import { PlanGenerationAction } from "@/modules/planning/presentation/components/plan-generation-action";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/primitives/alert";
 import { Button } from "@/shared/ui/primitives/button";
+import { MarkdownContent } from "@/shared/ui/markdown-content";
 
 export function AssessmentViewer({ assessmentId }: Readonly<{ assessmentId: string }>) {
   const [assessment, setAssessment] = useState<Assessment | null>(null);
@@ -331,7 +332,7 @@ function QuestionCard({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 gap-4">
           <span className="grid size-8 shrink-0 place-items-center rounded-xl border border-primary/35 bg-primary/10 text-xs font-medium text-primary">{String(item.ordinal).padStart(2, "0")}</span>
-          <AssessmentRichText className="min-w-0 flex-1 pt-0.5 leading-7" content={item.prompt} />
+          <MarkdownContent className="min-w-0 flex-1 space-y-3 pt-0.5 leading-7" content={item.prompt} />
         </div>
         <span className="shrink-0 text-xs text-muted-foreground">{item.max_score} 分</span>
       </div>
@@ -342,7 +343,7 @@ function QuestionCard({
           return (
             <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm leading-6 transition-all hover:-translate-y-0.5 focus-within:ring-3 focus-within:ring-ring/40 ${isSelected ? "border-primary bg-primary/[0.07] shadow-[0_14px_32px_-24px_rgba(36,122,128,0.65)]" : "border-border bg-card hover:border-primary/60"}`} key={option.key}>
               <input checked={isSelected} className="mt-1 accent-primary" name={`assessment-item-${item.id}`} onChange={() => onSelect(option.key)} type="radio" value={option.key} />
-              <div className="min-w-0 flex-1"><strong className="mr-2 font-medium text-primary">{option.key}.</strong><AssessmentRichText className="mt-0.5" content={option.text} /></div>
+              <div className="min-w-0 flex-1"><strong className="mr-2 font-medium text-primary">{option.key}.</strong><MarkdownContent className="mt-0.5 space-y-3" content={option.text} /></div>
             </label>
           );
         })}
@@ -359,7 +360,7 @@ function ResultQuestionCard({ item }: Readonly<{ item: AssessmentAttempt["items"
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 gap-4">
           <span className={`grid size-7 shrink-0 place-items-center border text-xs font-medium ${item.is_correct ? "border-primary text-primary" : "border-destructive/50 text-destructive"}`}>{String(item.ordinal).padStart(2, "0")}</span>
-          <AssessmentRichText className="min-w-0 flex-1 pt-0.5 leading-7" content={item.prompt} />
+          <MarkdownContent className="min-w-0 flex-1 space-y-3 pt-0.5 leading-7" content={item.prompt} />
         </div>
         <span className={`text-sm font-medium ${item.is_correct ? "text-primary" : "text-destructive"}`}>{item.is_correct ? "回答正确" : "需要复习"}</span>
       </div>
@@ -369,7 +370,7 @@ function ResultQuestionCard({ item }: Readonly<{ item: AssessmentAttempt["items"
       </div>
       <div className="mt-4 border-t border-current/15 pt-4 sm:pl-11">
         <p className="text-xs tracking-[0.13em] text-muted-foreground">解析</p>
-        <AssessmentRichText className="mt-2 text-sm leading-7" content={item.explanation} />
+        <MarkdownContent className="mt-2 space-y-3 text-sm leading-7" content={item.explanation} />
       </div>
     </article>
   );
@@ -409,90 +410,4 @@ function toDisplayError(error: unknown): string {
     return error.message;
   }
   return error instanceof Error ? error.message : "题集暂时无法读取，请稍后重试。";
-}
-
-function AssessmentRichText({
-  content,
-  className,
-}: Readonly<{ content: string; className?: string }>) {
-  const segments = normalizeAssessmentMarkdown(content).split(/```([a-zA-Z0-9_+-]*)\n([\s\S]*?)```/g);
-
-  return (
-    <div className={className}>
-      {segments.map((segment, index) => {
-        if (index % 3 === 0) {
-          return <AssessmentPlainText content={segment} key={`text-${index}`} />;
-        }
-        if (index % 3 === 1) {
-          const code = segments[index + 1] ?? "";
-          return (
-            <AssessmentCodeBlock
-              content={code}
-              key={`code-${index}`}
-              language={segment || null}
-            />
-          );
-        }
-        return null;
-      })}
-    </div>
-  );
-}
-
-function normalizeAssessmentMarkdown(content: string): string {
-  if (content.includes("\n") || !content.includes("\\n") || !content.includes("```")) {
-    return content;
-  }
-
-  let normalized = "";
-  for (let index = 0; index < content.length;) {
-    if (content.startsWith("\\r\\n", index)) {
-      normalized += "\n";
-      index += 4;
-      continue;
-    }
-    if (content.startsWith("\\n", index)) {
-      normalized += "\n";
-      index += 2;
-      continue;
-    }
-    if (content.startsWith("\\\\", index)) {
-      normalized += "\\";
-      index += 2;
-      continue;
-    }
-    normalized += content[index];
-    index += 1;
-  }
-  return normalized;
-}
-
-function AssessmentPlainText({ content }: Readonly<{ content: string }>) {
-  const trimmedContent = content.trim();
-  if (!trimmedContent) {
-    return null;
-  }
-
-  return (
-    <p>
-      {trimmedContent.split("\n").map((line, index) => (
-        <span key={`${index}-${line}`}>
-          {index > 0 ? <br /> : null}
-          {line}
-        </span>
-      ))}
-    </p>
-  );
-}
-
-function AssessmentCodeBlock({
-  content,
-  language,
-}: Readonly<{ content: string; language: string | null }>) {
-  return (
-    <div className="max-w-full overflow-hidden rounded-[1.25rem] border border-[#17353a] bg-[#17353a] text-[#eef7f6]">
-      {language ? <p className="border-b border-white/15 px-3 py-1.5 font-mono text-xs lowercase text-[#b7cfcd]">{language}</p> : null}
-      <pre className="max-w-full overflow-x-auto p-4 font-mono text-sm leading-6"><code>{content}</code></pre>
-    </div>
-  );
 }

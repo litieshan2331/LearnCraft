@@ -3,7 +3,7 @@
  * 调用顺序：prepare 初始化本轮 → 主模型/串行工具 → 子模型/串行工具 → 主回复 → 幂等持久化。
  */
 import { Annotation } from '@langchain/langgraph';
-import type { ModelMessage } from '../../infrastructure/llm/model-gateway.js';
+import type { ModelMessage, ModelToolCall } from '../../infrastructure/llm/model-gateway.js';
 import { IntentSchema, StageSchema, type Evidence, type Intent, type RunInput, type Stage } from './schemas/index.js';
 
 export interface ConversationMessage extends ModelMessage { id: string; turnNo: number }
@@ -15,9 +15,17 @@ export interface ReactTurnCounts {
 export interface TrustedContext {
   facts: Record<string, unknown>; evidence: Evidence[];
 }
+export interface DelegationState {
+  toolCallId: string;
+  target: 'error_attribution' | 'socratic_tutor';
+  task: string;
+  status: 'requested' | 'running' | 'succeeded' | 'failed';
+  resultText: string | null;
+  errorCode: string | null;
+}
 
 /** Checkpoint 的可序列化版本；未知版本必须显式阻止恢复。 */
-export const LEARNING_ASSISTANT_STATE_VERSION = 3;
+export const LEARNING_ASSISTANT_STATE_VERSION = 4;
 
 /** 校验 Checkpoint 版本；缺失版本也拒绝恢复，避免把旧结构静默当成新 State。 */
 export function assertSupportedStateVersion(value: unknown): asserts value is number {
@@ -25,13 +33,19 @@ export function assertSupportedStateVersion(value: unknown): asserts value is nu
 }
 
 /** 校验由服务端维护的窄控制状态，禁止从自然语言或越界 Checkpoint 继续执行。 */
-export function assertControlState(state: Pick<AssistantState, 'intent' | 'stage' | 'hintLevel' | 'stalledTurns' | 'pendingQuestion' | 'verificationTarget'>): void {
+export function assertControlState(state: Pick<AssistantState, 'intent' | 'stage' | 'hintLevel' | 'stalledTurns' | 'pendingQuestion' | 'verificationTarget' | 'delegation'>): void {
   if (state.intent !== null && !IntentSchema.safeParse(state.intent).success) throw new Error('学习助手意图状态不受支持');
   if (!StageSchema.safeParse(state.stage).success) throw new Error('学习助手阶段状态不受支持');
   if (!Number.isInteger(state.hintLevel) || state.hintLevel < 0 || state.hintLevel > 3) throw new Error('学习助手提示级别越界');
   if (!Number.isInteger(state.stalledTurns) || state.stalledTurns < 0) throw new Error('学习助手停滞轮数非法');
   if (state.pendingQuestion !== null && state.pendingQuestion.trim().length > 2_000) throw new Error('学习助手待回答问题过长');
   if (state.verificationTarget !== null && state.verificationTarget.trim().length > 3_000) throw new Error('学习助手验证目标过长');
+  if (state.delegation !== null) {
+    if (typeof state.delegation.toolCallId !== 'string' || state.delegation.toolCallId.trim().length === 0) throw new Error('学习助手委派缺少 tool_call_id');
+    if (state.delegation.target !== 'error_attribution' && state.delegation.target !== 'socratic_tutor') throw new Error('学习助手委派目标不受支持');
+    if (!['requested', 'running', 'succeeded', 'failed'].includes(state.delegation.status)) throw new Error('学习助手委派状态不受支持');
+    if (typeof state.delegation.task !== 'string' || state.delegation.task.length > 4_000) throw new Error('学习助手委派任务不受支持');
+  }
 }
 
 /** 显式序列化可恢复 State；连接密钥和运行时对象不属于 State，不能出现在结果中。 */
@@ -65,6 +79,8 @@ export const LearningAssistantState = Annotation.Root({
   input: Annotation<RunInput>(),
   activeRunId: Annotation<string>({ default: () => '', reducer: (_left, right) => right }),
   messages: Annotation<ConversationMessage[]>({ default: () => [], reducer: (_left, right) => right }),
+  pendingMainToolCalls: Annotation<ModelToolCall[]>({ default: () => [], reducer: (_left, right) => right }),
+  delegation: Annotation<DelegationState | null>({ default: () => null, reducer: (_left, right) => right }),
   context: Annotation<TrustedContext>({ default: () => ({ facts: {}, evidence: [] }), reducer: (_left, right) => right }),
   questionId: Annotation<string | null>({ default: () => null, reducer: (_left, right) => right }),
   intent: Annotation<Intent | null>({ default: () => null, reducer: (_left, right) => right }),

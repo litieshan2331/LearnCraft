@@ -12,7 +12,7 @@ import type { LearningAssistantDependencies } from '../src/workflows/learning-as
 import type { RunInput } from '../src/workflows/learning-assistant/schemas/index.js';
 import { assertControlState, serializeAssistantState, type ConversationMessage } from '../src/workflows/learning-assistant/state.js';
 
-function fixture(childFails = false, readToolFirst = false) {
+function fixture(childFails = false, readToolFirst = false, callBothChildren = false) {
   const input: RunInput = {
     run_id: randomUUID(), conversation_id: randomUUID(), owner_id: randomUUID(), connection_id: randomUUID(), model_id: 'test-model',
     question_id: null, message: { id: randomUUID(), turn_no: 1, content: '请分析这个错误' },
@@ -40,10 +40,14 @@ function fixture(childFails = false, readToolFirst = false) {
           if (childFails) throw new ModelGatewayError('TEST_CHILD_UNAVAILABLE', '内部敏感细节', true);
           return { message: { role: 'assistant', content: '错误来自循环边界判断，当前证据不足以确认是否已修正。' }, usage: { inputTokens: 1, outputTokens: 1 }, finishReason: 'stop' };
         }
+        if (system.includes('你是苏格拉底导师子 Agent')) {
+          return { message: { role: 'assistant', content: '先检查循环终止条件与数组长度的关系。' }, usage: { inputTokens: 1, outputTokens: 1 }, finishReason: 'stop' };
+        }
         mainTurn += 1;
         if (mainTurn === 1) return { message: { role: 'assistant', content: null, toolCalls: [readToolFirst
           ? { id: 'read-1', name: 'get_user_profile', argumentsJson: '{}' }
           : { id: 'delegate-1', name: 'analyze_wrong_answer', argumentsJson: JSON.stringify({ task: '分析错误来源' }) }] }, usage: { inputTokens: 1, outputTokens: 1 }, finishReason: 'tool_calls' };
+        if (callBothChildren && mainTurn === 2) return { message: { role: 'assistant', content: null, toolCalls: [{ id: 'delegate-2', name: 'generate_socratic_question', argumentsJson: JSON.stringify({ task: '根据归因结果提出引导问题' }) }] }, usage: { inputTokens: 1, outputTokens: 1 }, finishReason: 'tool_calls' };
         return { message: { role: 'assistant', content: childFails ? '子分析暂时不可用，我先根据已有信息给出初步建议。' : '循环条件应保证下标小于数组长度。' }, usage: { inputTokens: 1, outputTokens: 1 }, finishReason: 'stop' };
       },
     },
@@ -61,8 +65,13 @@ describe('学习助手 LangChain ReAct 委派', () => {
     expect(value.saved.at(-1)).toMatchObject({ role: 'assistant', content: result.responseText });
     expect(value.calls[1]?.tools?.map((item) => item.name)).not.toContain('analyze_wrong_answer');
     expect(value.calls[1]?.tools?.map((item) => item.name)).not.toContain('generate_socratic_question');
+    const resumedMessages = value.calls[2]?.messages ?? [];
+    const delegatedCall = resumedMessages.find((message) => message.role === 'assistant' && message.toolCalls?.some((call) => call.name === 'analyze_wrong_answer'))?.toolCalls?.[0];
+    const delegatedResult = resumedMessages.find((message) => message.role === 'tool' && message.name === 'analyze_wrong_answer');
+    expect(delegatedResult?.toolCallId).toBe(delegatedCall?.id);
+    expect(delegatedResult?.content).toContain('错误来自循环边界');
     const serialized = serializeAssistantState(result);
-    expect(JSON.parse(serialized)).toMatchObject({ stateVersion: 3, responseText: result.responseText });
+    expect(JSON.parse(serialized)).toMatchObject({ stateVersion: 4, responseText: result.responseText });
     expect(serialized).not.toContain('test-only');
   });
 
@@ -74,7 +83,29 @@ describe('学习助手 LangChain ReAct 委派', () => {
     const error = JSON.stringify(value.calls.map((call) => call.messages));
     expect(error).toContain('子 Agent error_attribution');
     expect(error).not.toContain('内部敏感细节');
-    expect(value.calls[2]?.messages.some((message) => message.role === 'tool' && message.content?.includes('TEST_CHILD_UNAVAILABLE'))).toBe(true);
+    const resumedMessages = value.calls[2]?.messages ?? [];
+    const delegatedCall = resumedMessages.find((message) => message.role === 'assistant' && message.toolCalls?.some((call) => call.name === 'analyze_wrong_answer'))?.toolCalls?.[0];
+    const delegatedResult = resumedMessages.find((message) => message.role === 'tool' && message.name === 'analyze_wrong_answer');
+    expect(delegatedResult?.toolCallId).toBe(delegatedCall?.id);
+    expect(delegatedResult?.content).toContain('TEST_CHILD_UNAVAILABLE');
+  });
+
+  it('主 Agent 可顺序调用两个独立子 Agent，结果各自绑定原工具调用 ID 后直返主 Agent', async () => {
+    const value = fixture(false, false, true);
+    const result = await runLearningAssistant(value.graph, value.deps, value.input);
+    expect(result.responseText).toContain('循环条件');
+    expect(result.diagnosisText).toContain('错误来自循环边界');
+    expect(result.tutorText).toContain('检查循环终止条件');
+    expect(value.calls).toHaveLength(5);
+    expect(value.calls[1]?.messages[0]?.content).toContain('你是错题归因子 Agent');
+    expect(value.calls[3]?.messages[0]?.content).toContain('你是苏格拉底导师子 Agent');
+    const resumedByMain = value.calls[4]?.messages ?? [];
+    const toolResults = resumedByMain.filter((message) => message.role === 'tool');
+    const allModelMessages = value.calls.flatMap((call) => call.messages);
+    for (const toolResult of toolResults) {
+      expect(allModelMessages.some((message) => message.role === 'assistant'
+        && message.toolCalls?.some((toolCall) => toolCall.id === toolResult.toolCallId))).toBe(true);
+    }
   });
 
   it('拒绝未知 Checkpoint 版本和越界服务端控制状态', async () => {
@@ -82,7 +113,7 @@ describe('学习助手 LangChain ReAct 委派', () => {
     const config = { configurable: { thread_id: value.input.conversation_id } };
     await value.graph.updateState(config, { stateVersion: 999, input: value.input });
     await expect(runLearningAssistant(value.graph, value.deps, value.input)).rejects.toThrow('Checkpoint 版本不受支持');
-    expect(() => assertControlState({ intent: null, stage: 'new', hintLevel: 4, stalledTurns: 0, pendingQuestion: null, verificationTarget: null })).toThrow('提示级别越界');
+    expect(() => assertControlState({ intent: null, stage: 'new', hintLevel: 4, stalledTurns: 0, pendingQuestion: null, verificationTarget: null, delegation: null })).toThrow('提示级别越界');
   });
 
   it('Checkpoint 恢复时不重放已完成工具或模型调用，消息 ID 保持幂等', async () => {
@@ -99,5 +130,66 @@ describe('学习助手 LangChain ReAct 委派', () => {
     expect(value.reads).toBe(1);
     expect(result.messages.filter((message) => message.role === 'tool')).toHaveLength(1);
     expect(new Set(value.saved.map((message) => message.id)).size).toBe(value.saved.length);
+  });
+
+  it('将已完成的 v3 会话 Checkpoint 升级到三 Agent 图状态', async () => {
+    const value = fixture();
+    const first = await runLearningAssistant(value.graph, value.deps, value.input);
+    await value.graph.updateState({ configurable: { thread_id: value.input.conversation_id } }, { stateVersion: 3 });
+    const restored = await runLearningAssistant(value.graph, value.deps, value.input);
+    expect(restored.responseText).toBe(first.responseText);
+    expect(restored.stateVersion).toBe(4);
+    expect(restored.delegation).toBeNull();
+  });
+
+  it('旧 v3 主节点挂起后允许下一轮从业务历史继续', async () => {
+    const value = fixture();
+    const priorMessage: ConversationMessage = { id: value.input.message.id, turnNo: 1, role: 'user', content: value.input.message.content };
+    value.deps.loadInitialMessages = async () => [priorMessage];
+    const config = { configurable: { thread_id: value.input.conversation_id } };
+    await value.graph.updateState(config, {
+      stateVersion: 3,
+      input: value.input,
+      activeRunId: value.input.run_id,
+      messages: [priorMessage],
+      responseText: null,
+    }, 'prepare');
+
+    const nextInput: RunInput = {
+      ...value.input,
+      run_id: randomUUID(),
+      message: { id: randomUUID(), turn_no: 2, content: '补充一下题目条件' },
+    };
+    const result = await runLearningAssistant(value.graph, value.deps, nextInput);
+
+    expect(result.stateVersion).toBe(4);
+    expect(result.activeRunId).toBe(nextInput.run_id);
+    expect(result.responseText).toContain('循环条件');
+    expect(value.calls[0]?.messages.filter((message) => message.role === 'user').map((message) => message.content)).toContain('补充一下题目条件');
+  });
+
+  it('失败运行留下 v4 主节点挂起点时由新用户轮接管', async () => {
+    const value = fixture();
+    const priorMessage: ConversationMessage = { id: value.input.message.id, turnNo: 1, role: 'user', content: value.input.message.content };
+    value.deps.loadInitialMessages = async () => [priorMessage];
+    const config = { configurable: { thread_id: value.input.conversation_id } };
+    await value.graph.updateState(config, {
+      stateVersion: 4,
+      input: value.input,
+      activeRunId: value.input.run_id,
+      messages: [priorMessage],
+      responseText: null,
+    }, 'prepare');
+
+    const nextInput: RunInput = {
+      ...value.input,
+      run_id: randomUUID(),
+      message: { id: randomUUID(), turn_no: 2, content: '继续这个问题' },
+    };
+    const result = await runLearningAssistant(value.graph, value.deps, nextInput);
+
+    expect(result.activeRunId).toBe(nextInput.run_id);
+    expect(result.responseText).toContain('循环条件');
+    expect(value.calls[0]?.messages.filter((message) => message.role === 'user').map((message) => message.content)).toContain('继续这个问题');
   });
 });

@@ -68,7 +68,6 @@ describe.skipIf(!databaseUrl)('学习助手 PostgreSQL 图与轨迹', () => {
       { role: 'assistant', content: null, toolCalls: [{ id: 'delegate', name: 'analyze_wrong_answer', argumentsJson: '{"task":"分析边界"}' }] },
       { role: 'assistant', content: null, toolCalls: [{ id: 'profile', name: 'get_user_profile', argumentsJson: '{}' }] },
       new Error('模拟子模型崩溃'),
-      { role: 'assistant', content: '当前证据不足以确认错因，请展示最后一次迭代的推演过程。' },
       { role: 'assistant', content: '目前还需要具体的推演过程。' },
     ];
     const saver = createLearningAssistantCheckpointer(databaseUrl!).saver;
@@ -107,22 +106,20 @@ describe.skipIf(!databaseUrl)('学习助手 PostgreSQL 图与轨迹', () => {
     };
     let restored = saver;
     try {
-      await expect(runLearningAssistant(createLearningAssistantGraph(deps), deps, run)).rejects.toThrow('模拟子模型崩溃');
-      expect(reads).toBe(1);
-      await saver.end();
-      restored = createLearningAssistantCheckpointer(databaseUrl!).saver;
-      deps.checkpointer = restored;
       const result = await runLearningAssistant(createLearningAssistantGraph(deps), deps, run);
       expect(reads).toBe(1);
-      expect(result.diagnosisText).toContain('当前证据不足');
+      expect(result.diagnosisText).toBeNull();
       expect(result.responseText).toContain('具体的推演过程');
       const events = await store.listOwnedEvents(ownerId, run.run_id);
       const delegate = events.find((event) => event.event_type === 'tool.started' && (event.payload_json as Record<string, unknown>).toolName === 'analyze_wrong_answer');
       expect(events.some((event) => event.agent_name === 'error_attribution' && event.parent_span_id === delegate?.span_id)).toBe(true);
+      const failedDelegate = events.find((event) => event.event_type === 'tool.completed' && (event.payload_json as Record<string, unknown>).toolName === 'analyze_wrong_answer');
+      expect((failedDelegate?.payload_json as Record<string, unknown>).ok).toBe(false);
       expect(await store.listOwnedEvents(randomUUID(), run.run_id)).toEqual([]);
       const stats = await pool.query('SELECT model_call_count, input_tokens, output_tokens, sub_agent_summary_json FROM learning_assistant_runs WHERE id = $1', [run.run_id]);
-      expect(stats.rows[0]).toMatchObject({ model_call_count: 5, input_tokens: 8, output_tokens: 12 });
+      expect(stats.rows[0]).toMatchObject({ model_call_count: 4, input_tokens: 6, output_tokens: 9 });
       expect(stats.rows[0]?.sub_agent_summary_json).toHaveLength(1);
+      expect((stats.rows[0]?.sub_agent_summary_json as Array<Record<string, unknown>>)[0]?.result).toBeUndefined();
       const messages = await pool.query('SELECT role FROM learning_assistant_messages WHERE conversation_id = $1 ORDER BY sequence_no', [run.conversation_id]);
       expect(messages.rows.map((row) => row.role)).toEqual(['user', 'assistant', 'tool', 'assistant']);
       const checkpoint = await restored.getTuple({ configurable: { thread_id: run.conversation_id } });

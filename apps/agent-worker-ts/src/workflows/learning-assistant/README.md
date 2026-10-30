@@ -1,6 +1,6 @@
 # 学习助手对话图
 
-这里实现独立的 LangGraph.js 对话图，主 Agent 将错题归因与苏格拉底导师当作两个工具调用。子 Agent 可以调用业务读工具、Skill 与共享 Tavily 网关，工具白名单不包含继续委派。四个既有生成工作流继续使用原执行器。
+这里实现独立的 LangGraph.js 三 Agent 对话图：主 Agent 将错题归因与苏格拉底导师当作两个委派工具，图节点直接从子 Agent 回到主 Agent。子 Agent 可以调用业务读工具、Skill 与共享 Tavily 网关，工具白名单不包含继续委派。四个既有生成工作流继续使用原执行器。
 
 ## 文件与调用顺序
 
@@ -8,11 +8,11 @@
 - `graph.ts`：编译主图、检查运行身份与固定连接、恢复同一运行。
 - `state.ts`：可序列化状态、消息幂等合并、20 轮模型窗口。
 - `ports.ts`：模型、可信取数和消息持久化端口合同。
-- `agents/main-agent.ts`：调用 LangChain ReAct runner，主 Agent 仅通过两个委派工具调用子 Agent。
-- `agents/langchain-agent-runner.ts`：注册 LangChain 工具与 ChatModel 适配，传递可信输入、State 结果与脱敏委派异常。
+- `agents/main-agent.ts`：主 Agent 节点入口；每次只作一个模型决策，后续路由由 LangGraph 完成。
+- `agents/langchain-agent-runner.ts`：装配三个固定 Agent，执行主 Agent 单轮决策、主只读工具和两个子 Agent 节点，并绑定委派 `tool_call_id`。
 - `agents/langchain-model-adapter.ts`：把 LangChain 消息和工具定义转成现有受控模型网关合同。
 - `agents/shared.ts`：稳定消息标识、角色级 ReAct 上限错误和嵌套轨迹。
-- `nodes/load-context-node.ts`、`nodes/persist-nodes.ts`：分别负责上下文准备和消息持久化；工具循环由 LangChain ReAct runner 承担。
+- `nodes/load-context-node.ts`、`nodes/persist-nodes.ts`：分别负责上下文准备和消息持久化；工具循环由 LangGraph 节点回环承担。
 - `tools/index.ts`：业务查询、动态 Skill、Tavily、两个子 Agent 的工具定义。
 - `prompts/main-agent-prompt.ts`、`error-attribution-prompt.ts`、`socratic-tutor-prompt.ts`：每个 Agent 各自完整维护七节提示词、可信上下文、输出合同和示例。
 - LangChain ReAct 回复直接保存为自然语言，不存在整段 JSON 修复节点。
@@ -20,14 +20,14 @@
 - `../../infrastructure/database/learning-assistant-runtime-store.ts`：独立轨迹、原子模型调用计数、内部分页查询。
 
 ```text
-START → prepare → main (LangChain ReAct)
+START → prepare → main (单轮 Function Calling)
                          ├→ 只读业务 / Skill / Tavily 工具
-                         ├→ analyze_wrong_answer → 错题归因 Agent
-                         ├→ generate_socratic_question → 苏格拉底导师 Agent
+                         ├→ analyze_wrong_answer → error_agent → main
+                         ├→ generate_socratic_question → tutor_agent → main
                          └→ 自然语言回复 → persist → END
 ```
 
-子 Agent 不可互相委派，仅注册只读业务、Skill 和 Tavily 工具。子 Agent 的自由文本作为委派工具结果返回主 Agent，并写入父状态；调用失败抛出 `ChildAgentInvocationError`，主 Agent 可以重试、降级或终止。ReAct 循环位于主图的 `main` 节点内；主图和每个 LangChain 子 Agent 使用稳定 thread ID 写入 Checkpoint，已持久化消息按固定 ID 合并，恢复时不会重复业务消息。
+子 Agent 不可互相委派，仅注册只读业务、Skill 和 Tavily 工具。子 Agent 的自由文本作为绑定原 `tool_call_id` 的 `ToolMessage` 直接返回主 Agent，不经过 `child_result` 或 `main_resume` 节点；调用失败也以脱敏工具错误返回，由主 Agent 决定重试、降级或终止。主 Agent 的只读工具由 `main_read_tool` 节点执行后回到主 Agent；主图和每个 LangChain 子 Agent 使用稳定 thread ID 写入 Checkpoint，已持久化消息按固定 ID 合并，恢复时不会重复业务消息。
 
 ## 装配约定
 
@@ -41,7 +41,7 @@ START → prepare → main (LangChain ReAct)
 
 `persistMessages` 必须调用已有消息 Repository，按图生成的固定 UUID 幂等写入；用户消息已在发送 API 落库，不重复写。本次不包含 mem0 端口、适配器或运行时；生产部署、完整对话出网、保留期限和旧 `learning_experience_memories` 存量处置均延期到单独决策。
 
-主 Agent 使用 LangChain ReAct，并只通过 `analyze_wrong_answer` 与 `generate_socratic_question` 委派工具调用两个子 Agent。子 Agent 仅注册只读业务、Skill 和 Tavily 工具；委派失败抛出 `ChildAgentInvocationError`，由主 Agent 决定重试、降级或终止。自然语言回复保存在 `responseText`，`pendingQuestion`、`hintLevel`、`verificationTarget`、证据和身份等控制状态由 LangGraph State 维护，不从回复文本猜测。
+主 Agent 使用 LangChain ChatModel 的单轮 Function Calling，由 LangGraph 控制工具和子 Agent 路由；错题归因和苏格拉底导师分别是固定的独立 Agent 实例。自然语言回复保存在 `responseText`，`pendingQuestion`、`hintLevel`、`verificationTarget`、证据、委派状态和 `tool_call_id` 由 LangGraph State 维护，不从回复文本猜测。
 
 Checkpoint 无法保证模型只收费一次：模型返回后、Checkpoint 保存前崩溃仍可能重发。消息写入使用固定 ID 幂等。队列消费者还必须保证同一会话串行领取，图会拒绝其他未完成运行和过期运行覆盖当前状态。
 

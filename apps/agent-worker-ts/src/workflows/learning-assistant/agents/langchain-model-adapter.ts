@@ -77,7 +77,6 @@ function toToolDefinition(input: BindToolsInput): ModelToolDefinition {
 /** 复用现有 ModelPort 的 LangChain ChatModel；不直接接触 Provider 或密钥。 */
 export class LearningAssistantChatModel extends BaseChatModel<BaseChatModelCallOptions> {
   private readonly boundTools: readonly ModelToolDefinition[];
-  private modelRequestSequence = 0;
 
   constructor(
     private readonly port: ModelPort,
@@ -104,7 +103,6 @@ export class LearningAssistantChatModel extends BaseChatModel<BaseChatModelCallO
 
   /** 调用现有网关并保留用量结果。 */
   override async _generate(messages: BaseMessage[], _options: BaseChatModelCallOptions, runManager?: CallbackManagerForLLMRun): Promise<ChatResult> {
-    this.modelRequestSequence += 1;
     const response: ModelCompletionResponse = await this.port.complete({
       ...this.request,
       messages: messages.map(toModelMessage),
@@ -112,12 +110,11 @@ export class LearningAssistantChatModel extends BaseChatModel<BaseChatModelCallO
       responseFormat: 'text',
       onReasoningDelta: async (text) => { await runManager?.handleLLMNewToken(text); },
     });
-    const message = response.message.toolCalls === undefined ? response.message : {
-      ...response.message,
-      toolCalls: response.message.toolCalls.map((call, index) => ({ ...call, id: call.id + ':lc:' + String(this.modelRequestSequence) + ':' + String(index) })),
-    };
+    if (response.message.toolCalls?.some((call) => typeof call.id !== 'string' || call.id.trim().length === 0)) {
+      throw new Error('模型工具调用缺少 tool_call_id');
+    }
     return {
-      generations: [{ text: message.content ?? '', message: toAIMessage(message, response.usage, response.finishReason) }],
+      generations: [{ text: response.message.content ?? '', message: toAIMessage(response.message, response.usage, response.finishReason) }],
       llmOutput: { tokenUsage: response.usage, finishReason: response.finishReason },
     };
   }

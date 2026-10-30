@@ -26,6 +26,7 @@ export async function prepareAgent(deps: LearningAssistantDependencies, state: A
     stateVersion: LEARNING_ASSISTANT_STATE_VERSION,
     activeRunId: state.input.run_id, questionId: state.input.question_id,
     messages: mergeMessages(initial, [current]), context: { ...context, evidence },
+    pendingMainToolCalls: [], delegation: null,
     diagnosisText: changedQuestion ? null : state.diagnosisText,
     hintLevel, stalledTurns: stalledTurns >= 2 ? 0 : stalledTurns,
     pendingQuestion: changedQuestion ? null : state.pendingQuestion,

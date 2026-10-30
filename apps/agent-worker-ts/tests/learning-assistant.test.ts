@@ -65,19 +65,21 @@ describe('学习助手新 LangChain/LangGraph 合同', () => {
     expect(result.responseText).toBe(reply);
   });
 
-  it('重复工具调用 ID 在不同模型轮次仍产生独立工具执行和消息', async () => {
+  it('重复工具调用 ID 在不同模型轮次仍产生独立消息并保留原 ID', async () => {
     const value = fixture([tool('get_user_profile', 'same'), tool('get_mastery_state', 'same'), { role: 'assistant', content: '已读取两项服务端事实。' }]);
     const result = await runLearningAssistant(value.graph, value.deps, value.input);
     expect(value.toolsUsed).toEqual(['get_user_profile', 'get_mastery_state']);
     expect(result.messages.filter((message) => message.role === 'tool')).toHaveLength(2);
-    expect(new Set(value.calls.flatMap((call) => call.messages.flatMap((message) => message.toolCalls?.map((item) => item.id) ?? []))).size).toBe(2);
+    const toolMessages = result.messages.filter((message) => message.role === 'tool');
+    expect(toolMessages.map((message) => message.toolCallId)).toEqual(['same', 'same']);
+    expect(new Set(toolMessages.map((message) => message.id)).size).toBe(2);
   });
 
   it('控制状态独立于自然语言，并可安全序列化恢复', async () => {
     const value = fixture([{ role: 'assistant', content: '我可以继续说明边界。' }]);
     const result = await runLearningAssistant(value.graph, value.deps, value.input);
     const serialized = serializeAssistantState(result);
-    expect(JSON.parse(serialized)).toMatchObject({ stateVersion: 3, responseText: '我可以继续说明边界。', pendingQuestion: null, hintLevel: 0 });
+    expect(JSON.parse(serialized)).toMatchObject({ stateVersion: 4, responseText: '我可以继续说明边界。', pendingQuestion: null, hintLevel: 0 });
     expect(serialized).not.toContain('test-only');
   });
 

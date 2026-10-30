@@ -34,6 +34,7 @@ import {
   type LearningAssistantRun,
 } from "../api/learning-assistant-client";
 import { Button } from "@/shared/ui/primitives/button";
+import { MarkdownContent } from "@/shared/ui/markdown-content";
 
 const CONVERSATION_STORAGE_KEY = "learncraft.learning-assistant.conversation-id";
 const MAX_STATUS_POLL_RETRIES = 5;
@@ -74,7 +75,8 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   const [error, setError] = useState<string | null>(null);
   const [pollingFailed, setPollingFailed] = useState(false);
   const [pollRetryToken, setPollRetryToken] = useState(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesViewportRef = useRef<HTMLDivElement>(null);
+  const shouldStickToBottomRef = useRef(true);
   const pendingMessageRef = useRef<{ content: string; idempotencyKey: string } | null>(null);
   const lastProgressSeqRef = useRef(0);
   const activeRunId = activeRun?.id;
@@ -194,7 +196,6 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   useEffect(() => {
     if (!activeRunId || !hasActiveRun) return;
     lastProgressSeqRef.current = 0;
-    setStreamingAnswer("");
     const source = new EventSource(`/api/v1/learning-assistant/runs/${activeRunId}/stream`, {
       withCredentials: true,
     });
@@ -224,7 +225,9 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   }, [activeRunId, hasActiveRun]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const viewport = messagesViewportRef.current;
+    if (!viewport || !shouldStickToBottomRef.current) return;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: streamingAnswer ? "auto" : "smooth" });
   }, [messages, activeRun?.status, streamingAnswer]);
 
   /** 提交当前输入，接口返回的运行由状态轮询继续处理。 */
@@ -234,6 +237,8 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
     if (!content || !conversation || isSending || activeRun?.status === "queued" || activeRun?.status === "running") return;
 
     setIsSending(true);
+    shouldStickToBottomRef.current = true;
+    setStreamingAnswer("");
     setError(null);
     setPollingFailed(false);
     const pendingMessage = pendingMessageRef.current;
@@ -259,8 +264,9 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   return (
     <aside
       aria-label="学习助手对话"
-      className="fixed inset-x-3 top-[5.75rem] z-40 flex h-[min(720px,calc(100vh-6.5rem))] flex-col overflow-hidden rounded-2xl border border-border/90 bg-card/95 shadow-[0_24px_80px_-30px_rgba(23,53,58,0.45)] backdrop-blur-xl sm:inset-x-auto sm:right-5 sm:w-[min(28rem,calc(100vw-2rem))]"
+      className="fixed inset-x-3 top-[5.75rem] z-40 flex h-[min(720px,calc(100vh-6.5rem))] min-h-[24rem] min-w-0 w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] max-h-[calc(100vh-6.5rem)] resize overflow-hidden rounded-2xl border border-border/90 bg-card/95 shadow-[0_24px_80px_-30px_rgba(23,53,58,0.45)] backdrop-blur-xl sm:inset-x-auto sm:right-5 sm:w-[min(28rem,calc(100vw-2rem))] sm:min-w-[20rem] sm:max-w-[min(90vw,48rem)]"
       id="learning-assistant-panel"
+      title="拖动右下角调整面板大小"
     >
       <header className="flex shrink-0 items-center justify-between border-b border-border/80 px-4 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
@@ -287,7 +293,14 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+      <div
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-4"
+        onScroll={(event) => {
+          const viewport = event.currentTarget;
+          shouldStickToBottomRef.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 48;
+        }}
+        ref={messagesViewportRef}
+      >
         {isLoading ? (
           <div className="grid h-full place-items-center text-sm text-muted-foreground"><LoaderCircle aria-hidden className="size-5 animate-spin text-primary" /></div>
         ) : error && messages.length === 0 ? (
@@ -299,7 +312,6 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
             {messages.filter((message) => message.role !== "tool" && message.content !== null).map((message) => <MessageBubble key={message.id} role={message.role === "user" ? "user" : "assistant"} content={message.content!} />)}
             {streamingAnswer ? <MessageBubble key={`${activeRunId}:streaming`} role="assistant" content={streamingAnswer} /> : null}
             {isBusy ? <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><LoaderCircle aria-hidden className="size-3.5 animate-spin" />正在整理回复…</div> : null}
-            <div ref={messagesEndRef} />
           </div>
         )}
       </div>
@@ -354,7 +366,7 @@ function MessageBubble({ role, content }: Readonly<{ role: "user" | "assistant";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-6 ${isUser ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-secondary/75 text-foreground"}`}>
-        {content}
+        {isUser ? content : <MarkdownContent className="min-w-0 space-y-3 break-words [overflow-wrap:anywhere]" content={content} />}
       </div>
     </div>
   );
