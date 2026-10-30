@@ -40,7 +40,7 @@ export const LearningAssistantJobPayloadSchema = z.object({
 
 export interface LearningAssistantRunProcessorDeps {
   repository: Pick<PgLearningAssistantRunQueueRepository, 'acquireExecutionLock' | 'beginExecution'> & Partial<Pick<PgLearningAssistantRunQueueRepository, 'pool' | 'bindModel' | 'loadRunInput'>>;
-  internalClient?: Pick<CoreInternalClient, 'getLearningAssistantDefaultModelConnection' | 'getLearningAssistantContext' | 'appendLearningAssistantMessages' | 'finishLearningAssistantRun' | 'persistLearningAssistantMemory'>;
+  internalClient?: Pick<CoreInternalClient, 'getLearningAssistantDefaultModelConnection' | 'getLearningAssistantContext' | 'appendLearningAssistantMessages' | 'finishLearningAssistantRun'>;
   decryptor?: Pick<ModelCredentialDecryptor, 'decrypt'>;
   model?: ModelPort;
   skills?: Pick<FileLearningSkills, 'listSkills' | 'loadSkill'>;
@@ -102,23 +102,21 @@ export function createLearningAssistantRunProcessor(
             data: name === 'get_wrong_question' ? trustedContext.wrong_question ?? {}
               : name === 'get_user_profile' ? trustedContext.user_profile ?? {}
                 : name === 'get_mastery_state' ? trustedContext.mastery_state ?? {}
-                  : trustedContext.learning_context ?? {},
+                  : {},
             evidence: name === 'get_wrong_question' ? trustedContext.evidence : [],
           }),
           loadInitialMessages: async () => trustedContext.recent_messages.map(toConversationMessage),
           persistMessages: async (value, messages) => {
             await deps.internalClient!.appendLearningAssistantMessages(value.run_id, { messages: messages.map(toInternalMessage) });
           },
-          validateLearningMemory: async (value, candidate) => (await deps.internalClient!.persistLearningAssistantMemory(value.run_id, { operation: 'validate', candidate })).accepted,
-          persistLearningMemory: async (value, candidate) => { await deps.internalClient!.persistLearningAssistantMemory(value.run_id, { operation: 'write', candidate }); },
         };
         const graph = createLearningAssistantGraph(graphDeps);
         const result = await runLearningAssistant(graph, graphDeps, input);
         await deps.internalClient.finishLearningAssistantRun(parsed.data.run_id, {
           status: 'succeeded', model_id: connection.modelId, model_call_count: result.modelStep,
           tool_call_count: result.messages.filter((message) => message.role === 'tool').length,
-          output_summary_json: { intent: result.intent, stage: result.stage, response: result.response },
-          conversation: { stage: result.stage, state_json: { intent: result.intent, response: result.response, pending_question: result.pendingQuestion, hint_level: result.hintLevel } },
+          output_summary_json: { intent: result.intent, stage: result.stage, response: result.responseText },
+          conversation: { stage: result.stage, state_json: { intent: result.intent, response: result.responseText, pending_question: result.pendingQuestion, hint_level: result.hintLevel } },
         });
       }
     } catch (error) {

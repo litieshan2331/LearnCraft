@@ -3,7 +3,7 @@
  *
  * 调用顺序：创建/读取会话 → createQueuedRun 原子分配轮次并写入用户消息和运行
  * → startOwnedRun 领取执行 → appendRunMessages 保存中间消息 → finishOwnedRun 原子提交结果
- * → recordLearningMemory 保存有证据的经历；页面用 listOwnedMessages 恢复，模型用 getRecentContext。
+ * → 页面用 listOwnedMessages 恢复，模型用 getRecentContext。
  * 所有写入先锁会话再锁运行，消息序号、幂等和同一会话单运行都在事务内维护。
  */
 
@@ -21,7 +21,6 @@ import {
   learningAssistantConversations as conversations,
   learningAssistantMessages as messages,
   learningAssistantRuns as runs,
-  learningExperienceMemories as memories,
   learningGoals,
   outboxEvents,
 } from "../../../lib/db/schema";
@@ -34,13 +33,10 @@ import {
   type CreateConversationInput,
   type CreateQueuedRunInput,
   type FinishRunInput,
-  type LearningExperienceMemoryRepository,
-  type LearningExperienceMemorySnapshot,
   type MessageRepository,
   type MessageSnapshot,
   type PersistRunMessageInput,
   type QueuedRunResult,
-  type RecordLearningMemoryInput,
   type RunRepository,
   type RunSnapshot,
   type RunStatistics,
@@ -52,7 +48,6 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type ConversationRecord = typeof conversations.$inferSelect;
 type MessageRecord = typeof messages.$inferSelect;
 type RunRecord = typeof runs.$inferSelect;
-type MemoryRecord = typeof memories.$inferSelect;
 
 const uuid = z.uuid().toLowerCase();
 const jsonObject = z.record(z.string(), z.json());
@@ -63,8 +58,6 @@ const conversationStage = z.enum([
   "checking_repair", "mastered", "needs_more_practice", "unresolved",
 ]);
 const runStatus = z.enum(["queued", "running", "succeeded", "failed", "cancelled"]);
-const memoryType = z.enum(["error_pattern", "concept_gap", "learning_preference", "intervention_result"]);
-const repairStatus = z.enum(["unverified", "improving", "repaired", "needs_more_practice", "unresolved"]);
 const LEARNING_ASSISTANT_RUN_REQUESTED_EVENT_TYPE = "learning_assistant.run.requested";
 const LEARNING_ASSISTANT_RUN_REQUESTED_EVENT_VERSION = 1;
 const conversationUpdateSchema = z.object({
@@ -93,14 +86,8 @@ const runMessageSchema = z.object({
   toolResultJson: jsonObject.optional(),
   metadataJson: jsonObject.optional(),
 }).strict().refine((message) => message.role !== "tool" || Boolean(message.toolName && message.toolCallId));
-const evidenceSchema = z.object({
-  kind: z.enum(["user_message", "assessment_answer"]),
-  sourceId: uuid,
-  observation: z.string().trim().min(1),
-}).strict();
 
-export class DrizzleLearningAssistantRepository implements
-  ConversationRepository, MessageRepository, RunRepository, LearningExperienceMemoryRepository {
+export class DrizzleLearningAssistantRepository implements ConversationRepository, MessageRepository, RunRepository {
   /** 默认复用 Web 数据库；测试可注入隔离连接而不改动全局客户端。 */
   constructor(private readonly databaseProvider: () => Database = getDatabase) {}
 
@@ -353,72 +340,7 @@ export class DrizzleLearningAssistantRepository implements
     });
   }
 
-  /** 保存可追溯学习经历；相同 ID 重试不重复写入，不提供直接编辑接口。 */
-  async recordLearningMemory(input: RecordLearningMemoryInput): Promise<{ memory: LearningExperienceMemorySnapshot; created: boolean }> {
-    const value = parseInput(z.object({
-      id: uuid, ownerId: uuid, conversationId: uuid, sourceRunId: uuid,
-      sourceAssessmentAnswerId: uuid.nullable().optional(),
-      memoryType,
-      knowledgePoint: z.string().min(1).max(200).nullable().optional(),
-      errorType: z.string().min(1).max(40).nullable().optional(),
-      pattern: z.string().nullable().optional(),
-      evidenceJson: z.array(evidenceSchema).min(1),
-      interventionJson: jsonObject.optional(),
-      repairStatus,
-      confidence: z.number().min(0).max(1),
-      observedAt: z.date(),
-    }).strict(), input);
-    return this.databaseProvider().transaction(async (transaction) => {
-      const { run } = await lockOwnedRun(transaction, value.ownerId, value.sourceRunId);
-      if (run.conversationId !== value.conversationId || !["running", "succeeded"].includes(run.status)) {
-        throw new LearningAssistantRepositoryError("INVALID_MEMORY_EVIDENCE");
-      }
-      if (value.sourceAssessmentAnswerId
-        && !await findOwnedAssessmentAnswer(transaction, value.ownerId, value.sourceAssessmentAnswerId)) {
-        throw new LearningAssistantRepositoryError("INVALID_MEMORY_EVIDENCE");
-      }
-      for (const evidence of value.evidenceJson) {
-        if (evidence.kind === "assessment_answer") {
-          if (!await findOwnedAssessmentAnswer(transaction, value.ownerId, evidence.sourceId)) {
-            throw new LearningAssistantRepositoryError("INVALID_MEMORY_EVIDENCE");
-          }
-        } else {
-          const [message] = await transaction.select({ id: messages.id }).from(messages).where(and(
-            eq(messages.id, evidence.sourceId), eq(messages.conversationId, value.conversationId), eq(messages.role, "user"),
-          )).limit(1);
-          if (!message) throw new LearningAssistantRepositoryError("INVALID_MEMORY_EVIDENCE");
-        }
-      }
-      const values = {
-        ...value,
-        sourceAssessmentAnswerId: value.sourceAssessmentAnswerId ?? null,
-        knowledgePoint: value.knowledgePoint ?? null,
-        errorType: value.errorType ?? null,
-        pattern: value.pattern ?? null,
-        interventionJson: value.interventionJson ?? {},
-        confidence: value.confidence.toFixed(3),
-      };
-      const [record] = await transaction.insert(memories).values(values)
-        .onConflictDoNothing({ target: memories.id }).returning();
-      if (record) return { memory: toMemorySnapshot(record), created: true };
-      const [existing] = await transaction.select().from(memories).where(eq(memories.id, value.id)).limit(1);
-      if (!existing || !matchesPatch(existing, values)) throw new LearningAssistantRepositoryError("IDEMPOTENCY_CONFLICT");
-      return { memory: toMemorySnapshot(existing), created: false };
-    });
-  }
-
-  /** 按用户和可选知识点读取长期经历；调用方只能通过服务端工具使用这些数据。 */
-  async findOwnedMemories(
-    ownerId: string, options: { knowledgePoint?: string; limit?: number } = {},
-  ): Promise<LearningExperienceMemorySnapshot[]> {
-    const records = await this.databaseProvider().select().from(memories).where(and(
-      eq(memories.ownerId, ownerId),
-      options.knowledgePoint === undefined ? undefined : eq(memories.knowledgePoint, options.knowledgePoint),
-    )).orderBy(desc(memories.observedAt), desc(memories.id)).limit(validateLimit(options.limit ?? 50));
-    return records.map(toMemorySnapshot);
-  }
 }
-
 /** 使用结构化合同校验输入，拒绝枚举、计数或 JSON 数据不符合持久化约定的请求。 */
 function parseInput<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
@@ -575,14 +497,5 @@ function toRunSnapshot(record: RunRecord): RunSnapshot {
     subAgentSummaryJson: z.array(z.unknown()).parse(record.subAgentSummaryJson),
     skillSummaryJson: z.array(z.unknown()).parse(record.skillSummaryJson),
     tavilySummaryJson: z.array(z.unknown()).parse(record.tavilySummaryJson),
-  };
-}
-
-/** 转换学习经历快照，numeric 置信度在领域中使用 number。 */
-function toMemorySnapshot(record: MemoryRecord): LearningExperienceMemorySnapshot {
-  return {
-    ...record, memoryType: memoryType.parse(record.memoryType), repairStatus: repairStatus.parse(record.repairStatus),
-    confidence: Number(record.confidence), evidenceJson: z.array(evidenceSchema).parse(record.evidenceJson),
-    interventionJson: jsonObject.parse(record.interventionJson),
   };
 }

@@ -112,6 +112,21 @@ describe('学习助手 Job 处理器', () => {
 });
 
 describe('学习助手 queued 运行领取', () => {
+  it('固定模型 ID 并把连接 ID 写入运行输入摘要', async () => {
+    const client = {
+      query: vi.fn(async (sql: string) => sql.includes('SET model_id = COALESCE') ? { rows: [{ id: TASK.runId }] } : { rows: [] }),
+      release: vi.fn(),
+    };
+    const repository = new PgLearningAssistantRunQueueRepository({ connect: async () => client });
+    await repository.bindModel(TASK.runId, TASK.ownerId, '55555555-2222-4333-8444-555555555555', 'test-model');
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining('model_id = COALESCE(model_id, $3)'), [
+      TASK.runId,
+      TASK.ownerId,
+      'test-model',
+      JSON.stringify({ connection_id: '55555555-2222-4333-8444-555555555555' }),
+    ]);
+  });
+
   it('使用 session advisory lock 串行化同一 run_id，并在释放时归还连接', async () => {
     const client = {
       query: vi.fn(async () => ({ rows: [] })),

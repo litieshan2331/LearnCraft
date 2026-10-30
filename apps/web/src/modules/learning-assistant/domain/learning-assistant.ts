@@ -3,8 +3,7 @@
  *
  * 调用顺序：ConversationRepository 创建会话 → RunRepository 原子写入用户消息和运行
  * → MessageRepository 保存助手/工具消息、读取历史和最近 20 轮 → RunRepository 完成运行
- * → LearningExperienceMemoryRepository 记录有来源证据的学习经历。
- * 这些端口只供服务端应用层使用，学习经历记忆不提供用户编辑端口。
+ * 这些端口只供服务端应用层使用；长期记忆适配器不属于本次运行链路。
  */
 
 export type ConversationStatus = "active" | "completed" | "archived";
@@ -13,8 +12,6 @@ export type ConversationStage =
   | "checking_repair" | "mastered" | "needs_more_practice" | "unresolved";
 export type MessageRole = "user" | "assistant" | "tool";
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-export type MemoryType = "error_pattern" | "concept_gap" | "learning_preference" | "intervention_result";
-export type RepairStatus = "unverified" | "improving" | "repaired" | "needs_more_practice" | "unresolved";
 
 export const LEARNING_ASSISTANT_CONTEXT_TURNS = 20;
 
@@ -75,32 +72,6 @@ export interface RunSnapshot extends Required<RunStatistics> {
   updatedAt: Date;
 }
 
-/** 学习经历的证据必须引用当前会话用户消息或当前用户的测评作答。 */
-export interface MemoryEvidence {
-  kind: "user_message" | "assessment_answer";
-  sourceId: string;
-  observation: string;
-}
-
-export interface LearningExperienceMemorySnapshot {
-  id: string;
-  ownerId: string;
-  conversationId: string | null;
-  sourceAssessmentAnswerId: string | null;
-  sourceRunId: string | null;
-  memoryType: MemoryType;
-  knowledgePoint: string | null;
-  errorType: string | null;
-  pattern: string | null;
-  evidenceJson: MemoryEvidence[];
-  interventionJson: Record<string, unknown>;
-  repairStatus: RepairStatus;
-  confidence: number;
-  observedAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface CreateConversationInput {
   ownerId: string;
   goalId?: string | null;
@@ -151,24 +122,6 @@ export interface FinishRunInput extends RunStatistics {
   conversation?: Pick<UpdateConversationInput, "stage" | "stateJson">;
 }
 
-/** 写入时必须关联当前会话和来源运行；关联字段可在业务对象删除后变为空。 */
-export interface RecordLearningMemoryInput {
-  id: string;
-  ownerId: string;
-  conversationId: string;
-  sourceRunId: string;
-  sourceAssessmentAnswerId?: string | null;
-  memoryType: MemoryType;
-  knowledgePoint?: string | null;
-  errorType?: string | null;
-  pattern?: string | null;
-  evidenceJson: MemoryEvidence[];
-  interventionJson?: Record<string, unknown>;
-  repairStatus: RepairStatus;
-  confidence: number;
-  observedAt: Date;
-}
-
 export interface ConversationRepository {
   createConversation(input: CreateConversationInput): Promise<ConversationSnapshot>;
   findOwnedConversation(ownerId: string, conversationId: string): Promise<ConversationSnapshot | null>;
@@ -194,15 +147,10 @@ export interface RunRepository {
   finishOwnedRun(input: FinishRunInput): Promise<RunSnapshot>;
 }
 
-export interface LearningExperienceMemoryRepository {
-  recordLearningMemory(input: RecordLearningMemoryInput): Promise<{ memory: LearningExperienceMemorySnapshot; created: boolean }>;
-  findOwnedMemories(ownerId: string, options?: { knowledgePoint?: string; limit?: number }): Promise<LearningExperienceMemorySnapshot[]>;
-}
-
 export type LearningAssistantRepositoryErrorCode =
   | "CONVERSATION_NOT_FOUND" | "CONVERSATION_NOT_ACTIVE" | "CONVERSATION_BUSY"
   | "RELATED_RESOURCE_NOT_FOUND" | "RUN_NOT_FOUND" | "RUN_NOT_RUNNING"
-  | "INVALID_INPUT" | "INVALID_MEMORY_EVIDENCE" | "IDEMPOTENCY_CONFLICT";
+  | "INVALID_INPUT" | "IDEMPOTENCY_CONFLICT";
 
 export class LearningAssistantRepositoryError extends Error {
   /** 使用稳定错误码表示不可访问的资源、非法输入或幂等冲突，供后续应用层映射响应。 */

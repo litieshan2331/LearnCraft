@@ -1,6 +1,6 @@
 /**
  * 学习助手 Worker 读取可信运行上下文的内部接口。
- * 调用顺序：校验共享密钥 → 锁定运行和会话归属 → 读取最近 20 轮消息、错题、画像、掌握度与学习经历 → 返回严格上下文合同。
+ * 调用顺序：校验共享密钥 → 锁定运行和会话归属 → 读取最近 20 轮消息、错题、画像与掌握度 → 返回严格上下文合同。
  * Worker 和模型不能通过请求参数指定 owner、conversation 或 question；所有关联均由 run_id 反查得到。
  */
 import { timingSafeEqual } from "node:crypto";
@@ -19,7 +19,6 @@ import {
   learningAssistantConversations,
   learningAssistantMessages,
   learningAssistantRuns,
-  learningExperienceMemories,
 } from "@/lib/db/schema";
 
 export const runtime = "nodejs";
@@ -46,7 +45,6 @@ export async function GET(request: Request, context: RouteContext): Promise<Next
 
   const [conversation] = await database.select({
     sourceAssessmentAnswerId: learningAssistantConversations.sourceAssessmentAnswerId,
-    stateJson: learningAssistantConversations.stateJson,
   }).from(learningAssistantConversations).where(and(
     eq(learningAssistantConversations.id, run.conversationId),
     eq(learningAssistantConversations.ownerId, run.ownerId),
@@ -57,7 +55,6 @@ export async function GET(request: Request, context: RouteContext): Promise<Next
   const wrongQuestion = await readWrongQuestion(database, run.ownerId, conversation.sourceAssessmentAnswerId);
   const profile = await readProfile(database, run.ownerId);
   const mastery = await readMastery(database, run.ownerId, conversation.sourceAssessmentAnswerId);
-  const memories = await readLearningContext(database, run.ownerId);
   const questionId = wrongQuestion?.assessment_item_id ?? null;
   const evidence = wrongQuestion === null ? [] : [{
     id: String(wrongQuestion.answer_id), kind: "assessment_answer" as const,
@@ -73,7 +70,6 @@ export async function GET(request: Request, context: RouteContext): Promise<Next
     wrong_question: wrongQuestion,
     user_profile: profile,
     mastery_state: mastery,
-    learning_context: { memories, conversation_state: toRecord(conversation.stateJson) },
     evidence,
   };
   return NextResponse.json(response);
@@ -166,24 +162,6 @@ async function readMastery(database: ReturnType<typeof getDatabase>, ownerId: st
       eq(assessmentAttempts.status, "graded"),
     )).orderBy(desc(assessmentAttempts.gradedAt)).limit(1);
   return attempt ?? null;
-}
-
-/** 读取服务端维护的学习经历摘要，不暴露给公开用户 API。 */
-async function readLearningContext(database: ReturnType<typeof getDatabase>, ownerId: string) {
-  const rows = await database.select({
-    id: learningExperienceMemories.id,
-    memory_type: learningExperienceMemories.memoryType,
-    knowledge_point: learningExperienceMemories.knowledgePoint,
-    error_type: learningExperienceMemories.errorType,
-    pattern: learningExperienceMemories.pattern,
-    evidence_json: learningExperienceMemories.evidenceJson,
-    intervention_json: learningExperienceMemories.interventionJson,
-    repair_status: learningExperienceMemories.repairStatus,
-    confidence: learningExperienceMemories.confidence,
-    observed_at: learningExperienceMemories.observedAt,
-  }).from(learningExperienceMemories).where(eq(learningExperienceMemories.ownerId, ownerId))
-    .orderBy(desc(learningExperienceMemories.observedAt)).limit(20);
-  return rows;
 }
 
 /** 将 JSONB 安全转换为对象，避免把数组或 null 当成可信记录。 */

@@ -169,8 +169,8 @@ MVP 的工具由 Worker 统一提供，模型不能直接连接数据库。
 | `get_wrong_question` | 获取题目、用户答案、标准答案、解析和代码运行信息 | 否 |
 | `get_learner_profile` | 获取编程语言水平、学习目标和交互偏好 | 否 |
 | `get_mastery_state` | 获取相关知识点掌握度、历史错误和最近练习 | 否 |
-| `get_learning_context` | 获取当前会话已确认的事实和未解决问题 | 否 |
-| `record_learning_memory` | 写入本次诊断、错误模式、干预结果和置信度 | 是 |
+| `get_learning_context` | 已退役；长期记忆不在当前学习助手运行链路 | 否 |
+| `record_learning_memory` | 已退役；旧长期记忆表仅保留存量，等待独立处置决策 | 否 |
 | `load_skill` | 在当前助手白名单内读取一个 Skill | 否 |
 | `tavily_search` | 核对近期版本、API 或外部技术事实 | 否 |
 | `mark_learning_step` | 记录本轮完成的分析、追问或修复动作 | 是 |
@@ -344,14 +344,14 @@ apps/
       │  │  ├─ load-context-node.ts
       │  │  ├─ route-intent-node.ts
       │  │  ├─ persist-message-node.ts
-      │  │  └─ persist-memory-node.ts
+      │  │  └─ persist-response-node.ts
       │  ├─ tools/
       │  │  ├─ get-wrong-question-tool.ts
       │  │  ├─ get-learner-profile-tool.ts
       │  │  ├─ get-mastery-state-tool.ts
       │  │  ├─ get-learning-context-tool.ts
       │  │  ├─ load-skill-tool.ts
-      │  │  ├─ record-learning-memory-tool.ts
+      │  │  ├─ (旧 record-learning-memory-tool.ts 已退役)
       │  │  ├─ mark-learning-step-tool.ts
       │  │  └─ tavily-search-tool.ts
       │  ├─ prompts/

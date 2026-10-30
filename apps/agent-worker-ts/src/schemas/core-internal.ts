@@ -12,7 +12,7 @@
  * - EncryptedModelCredentialSchema / DefaultModelConnectionEnvelopeSchema
  * - PersistedAssessmentEnvelopeSchema / PersistedLearningPlanEnvelopeSchema
  * - CardContentContextEnvelopeSchema / CardContentPitfallDebugSchema / PersistedCardContentEnvelopeSchema
- * - LearningAssistantContextEnvelopeSchema / LearningAssistantWriteEnvelopeSchema / LearningAssistantMemoryEnvelopeSchema
+ * - LearningAssistantContextEnvelopeSchema / LearningAssistantWriteEnvelopeSchema
  */
 
 import { z } from 'zod';
@@ -112,7 +112,6 @@ export const LearningAssistantContextEnvelopeSchema = z.object({
   wrong_question: z.record(z.string(), z.unknown()).nullable(),
   user_profile: z.record(z.string(), z.unknown()).nullable(),
   mastery_state: z.record(z.string(), z.unknown()).nullable(),
-  learning_context: z.record(z.string(), z.unknown()).nullable(),
   evidence: z.array(LearningAssistantEvidenceSchema),
 }).strict();
 
@@ -122,12 +121,6 @@ export const LearningAssistantWriteEnvelopeSchema = z.object({
   message_ids: z.array(z.uuid()),
 }).strict();
 
-export const LearningAssistantMemoryEnvelopeSchema = z.object({
-  accepted: z.boolean(),
-  memory_id: z.uuid().nullable(),
-  created: z.boolean(),
-}).strict();
-
 export type DefaultModelConnectionEnvelope = z.infer<typeof DefaultModelConnectionEnvelopeSchema>;
 export type PersistedAssessmentEnvelope = z.infer<typeof PersistedAssessmentEnvelopeSchema>;
 export type PersistedLearningPlanEnvelope = z.infer<typeof PersistedLearningPlanEnvelopeSchema>;
@@ -135,4 +128,3 @@ export type CardContentContextEnvelope = z.infer<typeof CardContentContextEnvelo
 export type PersistedCardContentEnvelope = z.infer<typeof PersistedCardContentEnvelopeSchema>;
 export type LearningAssistantContextEnvelope = z.infer<typeof LearningAssistantContextEnvelopeSchema>;
 export type LearningAssistantWriteEnvelope = z.infer<typeof LearningAssistantWriteEnvelopeSchema>;
-export type LearningAssistantMemoryEnvelope = z.infer<typeof LearningAssistantMemoryEnvelopeSchema>;

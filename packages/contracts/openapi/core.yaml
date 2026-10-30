@@ -1451,7 +1451,7 @@ components:
     LearningAssistantConversation:
       type: object
       additionalProperties: false
-      required: [id, goal_id, source_assessment_answer_id, status, stage, last_message_at, created_at, updated_at]
+      required: [id, goal_id, source_assessment_answer_id, status, stage, pending_question, hint_level, last_message_at, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1468,6 +1468,14 @@ components:
         stage:
           type: string
           enum: [new, context_loaded, diagnosing, waiting_for_user, hinting, checking_repair, mastered, needs_more_practice, unresolved]
+        pending_question:
+          type: [string, 'null']
+          description: 当前需要用户回答的单一主要问题；没有待回答问题时为 null。
+        hint_level:
+          type: integer
+          minimum: 0
+          maximum: 3
+          description: 当前教学提示级别，0 为初始级别，3 为最强提示级别。
         active_run_id:
           type: [string, 'null']
           format: uuid

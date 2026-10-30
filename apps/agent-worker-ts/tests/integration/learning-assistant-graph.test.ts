@@ -68,8 +68,8 @@ describe.skipIf(!databaseUrl)('学习助手 PostgreSQL 图与轨迹', () => {
       { role: 'assistant', content: null, toolCalls: [{ id: 'delegate', name: 'analyze_wrong_answer', argumentsJson: '{"task":"分析边界"}' }] },
       { role: 'assistant', content: null, toolCalls: [{ id: 'profile', name: 'get_user_profile', argumentsJson: '{}' }] },
       new Error('模拟子模型崩溃'),
-      { role: 'assistant', content: JSON.stringify({ status: 'insufficient_evidence', hypotheses: [], verification_direction: '核对迭代边界', verification: { status: 'not_verified', conclusion: '暂无推演证据', evidence_ids: [], demonstrated_progress: false } }) },
-      { role: 'assistant', content: JSON.stringify({ intent: 'wrong_answer_analysis', explanation: '目前还需要具体的推演过程。', primary_question: '最后一次循环的下标是多少？', next_action: 'await_user', stage: 'waiting_for_user' }) },
+      { role: 'assistant', content: '当前证据不足以确认错因，请展示最后一次迭代的推演过程。' },
+      { role: 'assistant', content: '目前还需要具体的推演过程。' },
     ];
     const saver = createLearningAssistantCheckpointer(databaseUrl!).saver;
     let reads = 0;
@@ -104,8 +104,6 @@ describe.skipIf(!databaseUrl)('学习助手 PostgreSQL 图与轨迹', () => {
           await client.query('COMMIT');
         } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
       },
-      /** 本用例证据不足，拒绝记忆。 */ async validateLearningMemory() { return false; },
-      /** 不应发生写入。 */ async persistLearningMemory() { throw new Error('不应写记忆'); },
     };
     let restored = saver;
     try {
@@ -115,7 +113,9 @@ describe.skipIf(!databaseUrl)('学习助手 PostgreSQL 图与轨迹', () => {
       restored = createLearningAssistantCheckpointer(databaseUrl!).saver;
       deps.checkpointer = restored;
       const result = await runLearningAssistant(createLearningAssistantGraph(deps), deps, run);
-      expect(reads).toBe(1); expect(result.pendingQuestion).toContain('下标');
+      expect(reads).toBe(1);
+      expect(result.diagnosisText).toContain('当前证据不足');
+      expect(result.responseText).toContain('具体的推演过程');
       const events = await store.listOwnedEvents(ownerId, run.run_id);
       const delegate = events.find((event) => event.event_type === 'tool.started' && (event.payload_json as Record<string, unknown>).toolName === 'analyze_wrong_answer');
       expect(events.some((event) => event.agent_name === 'error_attribution' && event.parent_span_id === delegate?.span_id)).toBe(true);

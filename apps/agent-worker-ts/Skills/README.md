@@ -81,7 +81,7 @@ description: 当需要依据已提供的学习者画像调整解释深度时使�
 2. 名称、描述或适用范围变化时同步更新 `index.json` 和本 README；新增资料时登记 `references`。
 3. 不复制同一份案例到正文和参考资料，不要求一次读取全部文件。
 4. 使用 `skill-creator` 的 `scripts/quick_validate.py` 校验各 Skill；它检查格式，不能证明教学质量或运行时行为正确。
-5. 修改加载代码时运行 `pnpm --filter @learncraft/agent-worker-ts typecheck`、`tests/learning-skills.test.ts` 和 `tests/learning-assistant.test.ts`；涉及工作流装配时构建验证。
+5. 修改加载代码时运行 `pnpm --filter @learncraft/agent-worker-ts typecheck`、`tests/learning-skills.test.ts` 和 `tests/learning-assistant-react.test.ts`；涉及工作流装配时构建验证。
 
 ## 来源与许可证
 

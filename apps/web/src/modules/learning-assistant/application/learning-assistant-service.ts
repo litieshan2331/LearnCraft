@@ -182,7 +182,6 @@ function mapRepositoryError(error: unknown): unknown {
     case "RUN_NOT_FOUND":
       return new LearningAssistantApplicationError("RUN_NOT_FOUND");
     case "RUN_NOT_RUNNING":
-    case "INVALID_MEMORY_EVIDENCE":
       return new LearningAssistantApplicationError("INVALID_INPUT");
   }
 }

@@ -15,7 +15,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import * as schema from "../../src/lib/db/schema";
 import { LearningAssistantService } from "../../src/modules/learning-assistant/application/learning-assistant-service";
-import type { CreateQueuedRunInput, FinishRunInput, RecordLearningMemoryInput } from "../../src/modules/learning-assistant/domain/learning-assistant";
+import type { CreateQueuedRunInput, FinishRunInput } from "../../src/modules/learning-assistant/domain/learning-assistant";
 import { DrizzleLearningAssistantRepository } from "../../src/modules/learning-assistant/infrastructure/drizzle-learning-assistant-repository";
 
 const databaseUrl = process.env.LEARNING_ASSISTANT_TEST_DATABASE_URL;
@@ -222,30 +222,6 @@ describe.skipIf(!databaseUrl)("学习助手 PostgreSQL Repository", () => {
     expect(await repository.listOwnedMessages(ownerId, conversationId)).toHaveLength(22 * 4 + 1);
     await expect(repository.getRecentContext(otherOwnerId, conversationId)).resolves.toEqual([]);
   }, 20_000);
-
-  it("长期经历需要真实用户证据，验证运行关联和跨用户隔离并幂等写入", async () => {
-    const { run, message } = await startRun();
-    const input: RecordLearningMemoryInput = {
-      id: randomUUID(), ownerId, conversationId, sourceRunId: run.id, sourceAssessmentAnswerId: answerIds[0],
-      memoryType: "error_pattern", knowledgePoint: "词法作用域", pattern: "混淆定义和调用环境",
-      evidenceJson: [{ kind: "user_message", sourceId: message.id, observation: "用户回答引用调用环境" }],
-      interventionJson: { hintLevel: 1 }, repairStatus: "improving", confidence: 0.86, observedAt: new Date(),
-    };
-    const first = await repository.recordLearningMemory(input);
-    expect(first).toMatchObject({ created: true, memory: { confidence: 0.86, sourceRunId: run.id } });
-    await expect(repository.recordLearningMemory(input)).resolves.toMatchObject({ created: false, memory: first.memory });
-    await expect(repository.recordLearningMemory({ ...input, pattern: "改写旧经历" })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
-    await expect(repository.recordLearningMemory({ ...input, observedAt: new Date(input.observedAt.getTime() + 1_000) })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
-    await expect(repository.recordLearningMemory({ ...input, id: randomUUID(), evidenceJson: [] })).rejects.toMatchObject({ code: "INVALID_INPUT" });
-    await expect(repository.recordLearningMemory({ ...input, id: randomUUID(), sourceAssessmentAnswerId: answerIds[1] })).rejects.toMatchObject({ code: "INVALID_MEMORY_EVIDENCE" });
-    const otherConversation = await repository.createConversation({ ownerId });
-    await expect(repository.recordLearningMemory({ ...input, id: randomUUID(), conversationId: otherConversation.id })).rejects.toMatchObject({ code: "INVALID_MEMORY_EVIDENCE" });
-    const [assistantMessage] = await repository.appendRunMessages(ownerId, run.id, [{ id: randomUUID(), role: "assistant", content: "模型自己的猜测" }]);
-    await expect(repository.recordLearningMemory({ ...input, id: randomUUID(), evidenceJson: [{ kind: "user_message", sourceId: assistantMessage.id, observation: "错误来源" }] })).rejects.toMatchObject({ code: "INVALID_MEMORY_EVIDENCE" });
-    await expect(repository.recordLearningMemory({ ...input, id: randomUUID(), evidenceJson: [{ kind: "assessment_answer", sourceId: answerIds[1], observation: "其他用户作答" }] })).rejects.toMatchObject({ code: "INVALID_MEMORY_EVIDENCE" });
-    expect(await repository.findOwnedMemories(ownerId, { knowledgePoint: "词法作用域" })).toEqual(expect.arrayContaining([first.memory]));
-    await expect(repository.findOwnedMemories(otherOwnerId)).resolves.toEqual([]);
-  });
 
   it("完成运行时消息冲突回滚状态和统计，拒绝非法工具消息和 JSON", async () => {
     const { run } = await startRun();

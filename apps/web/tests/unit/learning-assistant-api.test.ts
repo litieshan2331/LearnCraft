@@ -44,7 +44,7 @@ const idempotencyKey = "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE";
 const now = new Date("2026-10-10T00:00:00.000Z");
 const conversation: ConversationSnapshot = {
   id: conversationId, ownerId, goalId: null, sourceAssessmentAnswerId: null,
-  status: "active", stage: "new", stateJson: { private_memory: "内部事实" },
+  status: "active", stage: "new", stateJson: { private_memory: "内部事实", pending_question: "请指出循环边界。", hint_level: 2 },
   lastMessageAt: null, createdAt: now, updatedAt: now,
 };
 const message: MessageSnapshot = {
@@ -107,7 +107,12 @@ describe("学习助手 HTTP API", () => {
     expect(mocks.service.getConversation).toHaveBeenCalledWith(ownerId, conversationId);
     expect(mocks.service.listMessages).toHaveBeenCalledWith(ownerId, conversationId, { afterSequenceNo: 25, limit: 30 });
     expect(mocks.service.getRun).toHaveBeenCalledWith(ownerId, runId);
-    expect(await responses[2].json()).toMatchObject({ id: conversationId, active_run_id: runId });
+    expect(await responses[2].json()).toMatchObject({
+      id: conversationId,
+      active_run_id: runId,
+      pending_question: "请指出循环边界。",
+      hint_level: 2,
+    });
   });
 
   it("新消息返回 202，幂等重试返回 200，代码缩进不变", async () => {
@@ -201,6 +206,7 @@ describe("学习助手 HTTP API", () => {
     const messageBody = await (await listMessages(request(`/conversations/${conversationId}/messages`), conversationContext)).json();
     const runBody = await (await getRun(request(`/runs/${runId}`), runContext)).json();
     expect(conversationBody).not.toHaveProperty("state");
+    expect(conversationBody).not.toHaveProperty("private_memory");
     expect(conversationBody).not.toHaveProperty("owner_id");
     expect(messageBody).toMatchObject({ items: [{ role: "tool", content: null }], next_after_sequence_no: 25 });
     expect(messageBody.items[0]).not.toHaveProperty("tool_result");

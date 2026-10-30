@@ -55,6 +55,7 @@ import { createCardContentGenerateWorkflow } from '../workflows/card-content-gen
 import { createPlanGenerateWorkflow } from '../workflows/plan-generate/index.js';
 import { createPosttestGenerateWorkflow } from '../workflows/posttest-generate/index.js';
 import { createLearningAssistantCheckpointer, closeLearningAssistantCheckpointer } from '../infrastructure/langgraph/learning-assistant-checkpointer.js';
+import { FakeLearningAssistantModel, readFakeLearningAssistantScenario } from '../testing/fake-learning-assistant-model.js';
 
 function requireDatabaseUrl(): string {
   const url = process.env.DATABASE_URL?.trim();
@@ -107,6 +108,8 @@ async function main(): Promise<void> {
     fallbackBudget,
     traceWriter,
   );
+  const fakeModelEnabled = process.env.LEARNING_ASSISTANT_E2E_MODEL === 'fake';
+  const learningAssistantModel = fakeModelEnabled ? new FakeLearningAssistantModel(readFakeLearningAssistantScenario()) : gateway;
 
   // 联网工具：Key 或配额 Redis 缺失时不阻止启动，网关会把受控错误回传给模型（Python 同行为）。
   const tavilySettings = readTavilyToolSettings();
@@ -178,11 +181,11 @@ async function main(): Promise<void> {
   }));
 
   const workers = {
-    short: createAgentRunWorker(
+    short: fakeModelEnabled ? null : createAgentRunWorker(
       queueConfigs.short,
       createAgentRunProcessor({ repository, workflows, maxRetries: queueConfigs.short.maxAttempts }),
     ),
-    long: createAgentRunWorker(
+    long: fakeModelEnabled ? null : createAgentRunWorker(
       queueConfigs.long,
       createAgentRunProcessor({ repository, workflows, maxRetries: queueConfigs.long.maxAttempts }),
     ),
@@ -192,9 +195,11 @@ async function main(): Promise<void> {
         repository: learningAssistantRunRepository,
         internalClient,
         decryptor,
-        model: gateway,
+        model: learningAssistantModel,
         skills: learningSkills,
-        createTavily: createToolGateway,
+        createTavily: fakeModelEnabled
+          ? () => ({ execute: async () => ({ ok: false, code: 'FAKE_TOOL_FAILURE', message: '测试工具失败。', data: {} }) })
+          : createToolGateway,
         reactLimits: learningAssistantReactLimits,
         checkpointer: learningAssistantCheckpointer,
         maxRetries: learningAssistantQueueConfig.maxAttempts,
@@ -225,6 +230,7 @@ async function main(): Promise<void> {
       tavily_quota_configured: redisQuota !== null,
       tool_max_calls: maxToolCalls,
       react_max_turns: reactMaxTurns,
+      model_mode: fakeModelEnabled ? 'fake' : 'provider',
     }),
     readiness: createReadinessChecker({
       database: async () => {
@@ -239,7 +245,7 @@ async function main(): Promise<void> {
     }),
   });
   for (const [pool, worker] of Object.entries(workers)) {
-    worker.on('failed', (job, error) => {
+    worker?.on('failed', (job, error) => {
       console.error('[worker] ' + pool + ' 任务失败 run=' + String(job?.id) + ' attempts=' + String(job?.attemptsMade) + '：' + error.message);
     });
   }
@@ -252,7 +258,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     console.log('[worker] 收到 ' + signal + '，等待在飞任务结束');
     await health.close();
-    await Promise.all([workers.short.close(), workers.long.close(), workers.learningAssistant.close()]);
+    await Promise.all([workers.short?.close(), workers.long?.close(), workers.learningAssistant.close()]);
     await closeLearningAssistantCheckpointer(learningAssistantCheckpointer);
     await pool.end();
     await readinessRedis.close();
@@ -277,6 +283,7 @@ async function main(): Promise<void> {
       '，ReAct 轮数=' + JSON.stringify(reactMaxTurns) +
       '，学习助手 ReAct 轮数=' + JSON.stringify(learningAssistantReactLimits) +
       '，实时进度=已启用' +
+      '，模型模式=' + (fakeModelEnabled ? 'fake（仅学习助手队列）' : 'provider') +
       '，健康端点=:' + String(health.port),
   );
 }

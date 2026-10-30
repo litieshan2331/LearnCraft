@@ -161,8 +161,11 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
           timer = window.setTimeout(() => void poll(), STATUS_POLL_DELAY_MS);
           return;
         }
-        if (conversationId) await loadMessages(conversationId);
-        if (nextRun.status === "failed") setError(nextRun.error_summary ?? "本次回复生成失败，请稍后重试。");
+        if (conversationId) {
+          await loadMessages(conversationId);
+          setConversation(await getLearningAssistantConversation(conversationId));
+        }
+        if (nextRun.status === "failed") setError("本次回复生成失败，请稍后重试。");
       } catch (pollError) {
         if (cancelled) return;
         retryCount += 1;
@@ -234,6 +237,18 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
           <X aria-hidden className="size-4" />
         </Button>
       </header>
+
+      {conversation ? (
+        <div className="shrink-0 border-b border-border/70 bg-secondary/30 px-4 py-2.5 text-xs text-muted-foreground" aria-live="polite">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>阶段：{getStageLabel(conversation.stage)}</span>
+            <span>提示级别：{conversation.hint_level}</span>
+          </div>
+          {conversation.pending_question ? (
+            <p className="mt-1.5 break-words leading-5 text-foreground">待回答：{conversation.pending_question}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
         {isLoading ? (
@@ -319,8 +334,26 @@ function getRunStatusLabel(status: LearningAssistantRun["status"] | undefined): 
   }
 }
 
+/** 将服务端教学阶段转换为页面可读文案。 */
+function getStageLabel(stage: string): string {
+  const labels: Record<string, string> = {
+    new: "准备开始",
+    context_loaded: "已读取上下文",
+    diagnosing: "分析问题",
+    waiting_for_user: "等待你的回答",
+    hinting: "提示中",
+    checking_repair: "验证修复",
+    mastered: "已掌握",
+    needs_more_practice: "需要继续练习",
+    unresolved: "待继续分析",
+  };
+  return labels[stage] ?? "进行中";
+}
+
 /** 将 API 异常转换成面板可直接显示的文案。 */
 function toDisplayError(error: unknown, fallback: string): string {
-  if (error instanceof LearningAssistantApiError) return error.message;
-  return error instanceof Error ? error.message : fallback;
+  if (error instanceof LearningAssistantApiError && error.code === "CONVERSATION_BUSY") {
+    return "当前会话已有消息正在处理，请稍后再试。";
+  }
+  return fallback;
 }

@@ -1,14 +1,14 @@
 /**
  * 学习助手运行时依赖端口；图通过注入的接口复用网关与业务应用服务。
- * 调用顺序：装配固定连接和调用计数 → 取可信业务事实 → 模型/工具观测 → 校验证据 → 幂等保存。
+ * 调用顺序：装配固定连接和调用计数 → 取可信业务事实 → 模型/工具观测 → 幂等保存。
  */
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import type { FileLearningSkills } from '../../application/services/learning-skills.js';
 import type { TraceWriter } from '../../application/services/trace-writer.js';
 import type { ModelCompletionRequest, ModelCompletionResponse, ModelProviderConnection } from '../../infrastructure/llm/model-gateway.js';
 import type { ToolGatewayPort } from '../../application/services/tool-aware-generator.js';
-import type { AssistantState, ConversationMessage } from './state.js';
-import type { BusinessResult, BusinessToolName, Evidence, RunInput, Verification } from './schemas/index.js';
+import type { ConversationMessage } from './state.js';
+import type { BusinessResult, BusinessToolName, RunInput } from './schemas/index.js';
 
 export interface LearningAssistantReactLimits {
   main: number;
@@ -17,10 +17,6 @@ export interface LearningAssistantReactLimits {
 }
 
 export interface ModelPort { complete(request: ModelCompletionRequest): Promise<ModelCompletionResponse> }
-export interface MemoryCandidate {
-  verification: Verification; evidence: Evidence[];
-  diagnosis: AssistantState['diagnosis']; evaluation: 'executed' | 'model_evaluated';
-}
 export interface LearningAssistantDependencies {
   checkpointer: BaseCheckpointSaver;
   model: ModelPort;
@@ -39,8 +35,4 @@ export interface LearningAssistantDependencies {
   loadInitialMessages(input: RunInput): Promise<ConversationMessage[]>;
   /** 固定消息 ID，幂等落库；工具原始载荷留在内部字段。 */
   persistMessages(input: RunInput, messages: readonly ConversationMessage[]): Promise<void>;
-  /** 除结构和来源检查外，服务端还需检查后续表现；不能只采信模型自评。 */
-  validateLearningMemory(input: RunInput, candidate: MemoryCandidate): Promise<boolean>;
-  /** 幂等键固定为 run_id；不直接更新画像或掌握度。 */
-  persistLearningMemory(input: RunInput, candidate: MemoryCandidate): Promise<void>;
 }
