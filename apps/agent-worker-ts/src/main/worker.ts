@@ -200,6 +200,7 @@ async function main(): Promise<void> {
         createTavily: fakeModelEnabled
           ? () => ({ execute: async () => ({ ok: false, code: 'FAKE_TOOL_FAILURE', message: '测试工具失败。', data: {} }) })
           : createToolGateway,
+        createProgressReporter,
         reactLimits: learningAssistantReactLimits,
         checkpointer: learningAssistantCheckpointer,
         maxRetries: learningAssistantQueueConfig.maxAttempts,

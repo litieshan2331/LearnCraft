@@ -3,8 +3,8 @@
  *
  * 职责：定义 worker 上报、web 转发给浏览器的步骤级、工具级与思考原文事件契约，以及上报端口。
  * 三条硬约束：
- * 1. 只上报步骤、工具元数据与**模型思考原文**（thinking.completed）；提示词、生成正文与工具返回内容一律不上报。
- *    思考原文是本契约中唯一允许携带模型原文的事件，仅用于生成过程中的前端呈现；
+ * 1. 只上报步骤、工具元数据、**模型思考原文**（thinking.completed）与学习助手主 Agent 的回答增量（answer.delta）；提示词与工具返回内容一律不上报。
+ *    模型原文事件仅用于生成过程中的前端呈现；
  * 2. **不落库、不写日志、不入浏览器存储**：事件只经 Redis Pub/Sub 临时转发，生成结束即消失；
  * 3. **上报不得影响 AgentRun**：report 是同步 fire-and-forget，实现必须自行吞掉所有错误。
  *
@@ -30,6 +30,8 @@ export type AgentProgressStep =
   | 'thinking.delta'
   /** 一轮思考结束，携带该轮模型思考原文（data.text）：作为权威整段，前端用它覆盖本轮增量。 */
   | 'thinking.completed'
+  /** 学习助手最终回答正文增量（data.text）：只在主 Agent 生成过程中推送。 */
+  | 'answer.delta'
   /** 模型输出未通过结构校验，字段路径将回灌同一会话。 */
   | 'validation.failed'
   /** 模型在同一会话内自纠。 */

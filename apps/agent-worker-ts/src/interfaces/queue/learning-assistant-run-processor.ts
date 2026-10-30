@@ -26,6 +26,7 @@ import { createLearningAssistantGraph, runLearningAssistant } from '../../workfl
 import { PgLearningAssistantRuntimeStore } from '../../infrastructure/database/learning-assistant-runtime-store.js';
 import type { LearningAssistantDependencies } from '../../workflows/learning-assistant/ports.js';
 import type { ConversationMessage } from '../../workflows/learning-assistant/state.js';
+import type { AgentProgressReporter } from '../../application/services/agent-progress.js';
 
 export const LearningAssistantJobPayloadSchema = z.object({
   run_id: z.uuid(),
@@ -45,6 +46,7 @@ export interface LearningAssistantRunProcessorDeps {
   model?: ModelPort;
   skills?: Pick<FileLearningSkills, 'listSkills' | 'loadSkill'>;
   createTavily?: (ownerId: string) => ToolGatewayPort;
+  createProgressReporter?: (runId: string) => AgentProgressReporter;
   reactLimits?: LearningAssistantReactLimits;
   checkpointer?: LearningAssistantCheckpointer;
   /** BullMQ 允许的额外重试次数；最后一次尝试才把运行写为 failed。 */
@@ -96,6 +98,7 @@ export function createLearningAssistantRunProcessor(
         const runtime = new PgLearningAssistantRuntimeStore(deps.repository.pool);
         const graphDeps: LearningAssistantDependencies = {
           checkpointer: deps.checkpointer.saver, model: deps.model, connection, trace: runtime,
+          progress: deps.createProgressReporter?.(input.run_id),
           reserveModelAttempt: (value) => runtime.reserveModelAttempt(value), reactLimits: deps.reactLimits,
           skills: deps.skills, tavily: deps.createTavily(connection.ownerId),
           readBusinessTool: async (name) => ({

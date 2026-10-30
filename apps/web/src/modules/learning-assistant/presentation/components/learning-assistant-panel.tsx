@@ -30,6 +30,7 @@ import {
   sendLearningAssistantMessage,
   type LearningAssistantConversation,
   type LearningAssistantMessage,
+  type LearningAssistantProgressEvent,
   type LearningAssistantRun,
 } from "../api/learning-assistant-client";
 import { Button } from "@/shared/ui/primitives/button";
@@ -66,6 +67,7 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   const [conversation, setConversation] = useState<LearningAssistantConversation | null>(null);
   const [messages, setMessages] = useState<LearningAssistantMessage[]>([]);
   const [activeRun, setActiveRun] = useState<LearningAssistantRun | null>(null);
+  const [streamingAnswer, setStreamingAnswer] = useState("");
   const [draft, setDraft] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
@@ -74,9 +76,11 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   const [pollRetryToken, setPollRetryToken] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pendingMessageRef = useRef<{ content: string; idempotencyKey: string } | null>(null);
+  const lastProgressSeqRef = useRef(0);
   const activeRunId = activeRun?.id;
   const activeRunStatus = activeRun?.status;
   const conversationId = conversation?.id;
+  const hasActiveRun = activeRunStatus === "queued" || activeRunStatus === "running";
 
   const loadMessages = useCallback(async (conversationId: string): Promise<void> => {
     const loaded: LearningAssistantMessage[] = [];
@@ -165,6 +169,7 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
           await loadMessages(conversationId);
           setConversation(await getLearningAssistantConversation(conversationId));
         }
+        setStreamingAnswer("");
         if (nextRun.status === "failed") setError("本次回复生成失败，请稍后重试。");
       } catch (pollError) {
         if (cancelled) return;
@@ -187,8 +192,40 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   }, [activeRunId, activeRunStatus, conversationId, loadMessages, pollRetryToken]);
 
   useEffect(() => {
+    if (!activeRunId || !hasActiveRun) return;
+    lastProgressSeqRef.current = 0;
+    setStreamingAnswer("");
+    const source = new EventSource(`/api/v1/learning-assistant/runs/${activeRunId}/stream`, {
+      withCredentials: true,
+    });
+
+    source.onmessage = (messageEvent) => {
+      let event: LearningAssistantProgressEvent;
+      try {
+        event = JSON.parse(messageEvent.data) as LearningAssistantProgressEvent;
+      } catch {
+        return;
+      }
+      if (event.v !== 1 || event.step !== "answer.delta" || !Number.isInteger(event.seq)
+        || event.seq <= lastProgressSeqRef.current || typeof event.data?.text !== "string") return;
+      lastProgressSeqRef.current = event.seq;
+      const text = event.data?.text;
+      if (typeof text !== "string") return;
+      setStreamingAnswer((current) => current + text);
+    };
+    source.onerror = () => {
+      // 实时通道断开时保留状态轮询，避免自动重连产生重复订阅。
+      source.close();
+    };
+
+    return () => {
+      source.close();
+    };
+  }, [activeRunId, hasActiveRun]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activeRun?.status]);
+  }, [messages, activeRun?.status, streamingAnswer]);
 
   /** 提交当前输入，接口返回的运行由状态轮询继续处理。 */
   async function handleSend(event: React.FormEvent<HTMLFormElement>): Promise<void> {
@@ -255,11 +292,12 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
           <div className="grid h-full place-items-center text-sm text-muted-foreground"><LoaderCircle aria-hidden className="size-5 animate-spin text-primary" /></div>
         ) : error && messages.length === 0 ? (
           <div className="grid h-full place-items-center px-5 text-center"><CircleAlert aria-hidden className="size-6 text-destructive" /><p className="mt-3 text-sm text-muted-foreground">{error}</p></div>
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && !streamingAnswer ? (
           <div className="grid h-full place-items-center px-7 text-center"><span className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary"><MessageCircle aria-hidden className="size-5" /></span><p className="mt-4 text-sm font-medium">从当前页面开始提问</p><p className="mt-1 text-xs leading-6 text-muted-foreground">可以让助手帮你分析错题、追问思路或回答编程问题。</p></div>
         ) : (
           <div className="space-y-3">
-            {messages.filter((message) => message.role !== "tool" && message.content !== null).map((message) => <MessageBubble key={message.id} message={message} />)}
+            {messages.filter((message) => message.role !== "tool" && message.content !== null).map((message) => <MessageBubble key={message.id} role={message.role === "user" ? "user" : "assistant"} content={message.content!} />)}
+            {streamingAnswer ? <MessageBubble key={`${activeRunId}:streaming`} role="assistant" content={streamingAnswer} /> : null}
             {isBusy ? <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><LoaderCircle aria-hidden className="size-3.5 animate-spin" />正在整理回复…</div> : null}
             <div ref={messagesEndRef} />
           </div>
@@ -311,12 +349,12 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
 }
 
 /** 将公开消息转换成用户和助手可区分的气泡。 */
-function MessageBubble({ message }: Readonly<{ message: LearningAssistantMessage }>) {
-  const isUser = message.role === "user";
+function MessageBubble({ role, content }: Readonly<{ role: "user" | "assistant"; content: string }>) {
+  const isUser = role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-6 ${isUser ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-secondary/75 text-foreground"}`}>
-        {message.content}
+        {content}
       </div>
     </div>
   );

@@ -48,6 +48,14 @@ export type LearningAssistantRun = {
   updated_at: string;
 };
 
+export type LearningAssistantProgressEvent = {
+  v: 1;
+  step: string;
+  at: string;
+  seq: number;
+  data?: Record<string, string | number | boolean>;
+};
+
 export type LearningAssistantMessagePage = {
   items: LearningAssistantMessage[];
   next_after_sequence_no: number | null;

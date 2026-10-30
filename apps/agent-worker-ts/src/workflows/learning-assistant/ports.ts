@@ -5,6 +5,7 @@
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import type { FileLearningSkills } from '../../application/services/learning-skills.js';
 import type { TraceWriter } from '../../application/services/trace-writer.js';
+import type { AgentProgressReporter } from '../../application/services/agent-progress.js';
 import type { ModelCompletionRequest, ModelCompletionResponse, ModelProviderConnection } from '../../infrastructure/llm/model-gateway.js';
 import type { ToolGatewayPort } from '../../application/services/tool-aware-generator.js';
 import type { ConversationMessage } from './state.js';
@@ -23,6 +24,8 @@ export interface LearningAssistantDependencies {
   /** 运行开始选择并固定；恢复时按已保存 connection_id 读取，禁止换成新的默认连接。 */
   connection: ModelProviderConnection;
   trace: TraceWriter;
+  /** 回答正文实时推送端口；发布失败不得影响回答生成。 */
+  progress?: AgentProgressReporter;
   /** 记录一次实际模型尝试；返回本 run 已累计次数，不承担 ReAct 上限判断。 */
   reserveModelAttempt(input: RunInput): Promise<number>;
   /** 每个 Agent 一次运行内的 ReAct 模型轮数上限；不由用户请求覆盖。 */

@@ -105,6 +105,21 @@ describe('思考增量转发', () => {
   });
 });
 
+describe('正文增量转发', () => {
+  it('按到达顺序回调正文增量，且聚合结果不受影响', async () => {
+    const gateway = new OpenAiCompatibleModelGateway(
+      new FakeEgress(() => [event({ content: '你好' }), event({ content: '，世界' })]),
+      0,
+    );
+    const chunks: string[] = [];
+
+    const response = await gateway.complete(request({ onContentDelta: (text) => chunks.push(text) }));
+
+    expect(chunks).toEqual(['你好', '，世界']);
+    expect(response.message.content).toBe('你好，世界');
+  });
+});
+
 describe('载荷构造', () => {
   const gateway = new OpenAiCompatibleModelGateway(new FakeEgress(() => []), 0);
 

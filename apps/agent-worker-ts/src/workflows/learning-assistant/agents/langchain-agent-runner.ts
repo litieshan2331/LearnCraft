@@ -82,6 +82,9 @@ function createModel(deps: LearningAssistantDependencies, state: AssistantState,
       run.modelStep += 1;
     },
     traceWriter: scopedTrace(deps, actor, stableId(state.input.run_id + ':model:' + String(run.modelStep + 1)), stableId(state.input.run_id)),
+    onContentDelta: actor === 'main'
+      ? (text) => deps.progress?.report('answer.delta', { turn: state.input.message.turn_no, text })
+      : undefined,
   });
 }
 
