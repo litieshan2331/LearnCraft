@@ -33,7 +33,7 @@ export const TERMINAL_AGENT_RUN_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 const SQL_LOCK_RUN = [
-  'SELECT id, owner_id, run_type, target_type, target_id, input_summary_json, status, retry_count, trace_id',
+  'SELECT id, owner_id, goal_id, run_type, target_type, target_id, input_summary_json, graph_version, status, retry_count, trace_id',
   'FROM agent.agent_runs',
   'WHERE id = $1',
   'FOR UPDATE',
@@ -51,7 +51,7 @@ const SQL_SELECT_STATUS = 'SELECT status FROM agent.agent_runs WHERE id = $1';
 
 const SQL_MARK_SUCCEEDED = [
   'UPDATE agent.agent_runs',
-  "SET status = 'succeeded', output_summary_json = $2::jsonb, input_tokens = $3, output_tokens = $4,",
+  "SET status = 'succeeded', output_summary_json = $2::jsonb, input_tokens = input_tokens + $3, output_tokens = output_tokens + $4,",
   'actual_model_profile = $5, error_code = NULL, error_summary = NULL, finished_at = now()',
   'WHERE id = $1',
 ].join(' ');
@@ -66,6 +66,19 @@ const SQL_MARK_FAILED = [
   'UPDATE agent.agent_runs',
   "SET status = 'failed', error_code = $2, error_summary = $3, finished_at = now()",
   'WHERE id = $1',
+].join(' ');
+
+const SQL_INSERT_HUMAN_REVIEW = [
+  'INSERT INTO agent.human_reviews',
+  '(id, agent_run_id, owner_id, goal_id, thread_id, schema_version, graph_version, questions_json, answers_json, status, expires_at)',
+  "VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, '[]'::jsonb, 'waiting', $9)",
+  'ON CONFLICT (agent_run_id) DO NOTHING',
+].join(' ');
+
+const SQL_MARK_WAITING_FOR_HUMAN = [
+  'UPDATE agent.agent_runs',
+  "SET status = 'waiting_for_human', input_tokens = input_tokens + $2, output_tokens = output_tokens + $3, error_code = NULL, error_summary = NULL, finished_at = NULL",
+  "WHERE id = $1 AND status = 'running'",
 ].join(' ');
 
 const SQL_MARK_PLAN_NODE_CONTENT_FAILED = [
@@ -92,8 +105,21 @@ export interface AgentRunExecutionState {
   targetType: string;
   targetId: string;
   inputSummaryJson: Record<string, unknown>;
+  /** 创建任务时固定的工作流版本；恢复时不能被当前进程环境变量改写。 */
+  graphVersion?: string;
   status: string;
   shouldExecute: boolean;
+}
+
+export interface AgentHumanReviewState {
+  reviewId: string;
+  threadId: string;
+  schemaVersion: string;
+  graphVersion: string;
+  questions: Record<string, unknown>;
+  answers: unknown[];
+  status: string;
+  expiresAt: string | null;
 }
 
 export class AgentRunNotFoundError extends Error {
@@ -126,10 +152,12 @@ export interface PoolLike {
 interface AgentRunRow {
   id: string;
   owner_id: string;
+  goal_id: string;
   run_type: string;
   target_type: string;
   target_id: string;
   input_summary_json: Record<string, unknown> | null;
+  graph_version: string;
   status: string;
   retry_count: number;
   trace_id: string;
@@ -143,6 +171,7 @@ function toExecutionState(row: AgentRunRow, shouldExecute: boolean): AgentRunExe
     targetType: row.target_type,
     targetId: row.target_id,
     inputSummaryJson: row.input_summary_json ?? {},
+    graphVersion: row.graph_version,
     status: row.status,
     shouldExecute,
   };
@@ -175,6 +204,10 @@ export class PgAgentRunRepository {
         return toExecutionState(row, false);
       }
 
+      if (row.status === 'waiting_for_human') {
+        return toExecutionState(row, false);
+      }
+
       const retryCount = Math.max(row.retry_count, input.retryCount);
       if (row.status === 'queued') {
         await client.query(SQL_MARK_RUNNING, [row.id, retryCount]);
@@ -198,6 +231,56 @@ export class PgAgentRunRepository {
       const row = result.rows[0];
       return row !== undefined && row.status === 'cancelled';
     } finally {
+      client.release();
+    }
+  }
+
+  /** 读取同一 AgentRun 的人工确认快照；答案由 Web 提交接口事务写入。 */
+  async getHumanReview(runId: string): Promise<AgentHumanReviewState | null> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query([
+        'SELECT id, thread_id, schema_version, graph_version, questions_json, answers_json, status, expires_at',
+        'FROM agent.human_reviews WHERE agent_run_id = $1',
+      ].join(' '), [runId]);
+      const row = result.rows[0] as Record<string, unknown> | undefined;
+      if (row === undefined) return null;
+      return {
+        reviewId: String(row.id),
+        threadId: String(row.thread_id),
+        schemaVersion: String(row.schema_version),
+        graphVersion: String(row.graph_version),
+        questions: (row.questions_json ?? {}) as Record<string, unknown>,
+        answers: Array.isArray(row.answers_json) ? row.answers_json : [],
+        status: String(row.status),
+        expiresAt: row.expires_at instanceof Date ? row.expires_at.toISOString() : (row.expires_at === null ? null : String(row.expires_at)),
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  /** 使用 PostgreSQL advisory lock 串行恢复同一 LangGraph thread，超时交给队列退避。 */
+  async withThreadLock<T>(threadId: string, work: () => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    const timeoutMs = Number(process.env.AGENT_HITL_THREAD_LOCK_TIMEOUT_MS ?? 5_000);
+    const startedAt = Date.now();
+    let locked = false;
+    try {
+      while (!locked && Date.now() - startedAt < timeoutMs) {
+        const result = await client.query(
+          'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS locked',
+          [threadId],
+        );
+        locked = result.rows[0]?.locked === true;
+        if (!locked) await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      if (!locked) throw new Error('AGENT_HITL_THREAD_LOCK_TIMEOUT');
+      return await work();
+    } finally {
+      if (locked) {
+        await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [threadId]).catch(() => undefined);
+      }
       client.release();
     }
   }
@@ -227,6 +310,48 @@ export class PgAgentRunRepository {
       await this.appendEvent(client, row.id, 'run.succeeded', {
         input_tokens: inputTokens,
         output_tokens: outputTokens,
+      });
+    });
+  }
+
+  /** 保存人工问题快照并把运行置为 waiting_for_human；Checkpoint 已由 LangGraph 在此前写入。 */
+  async markWaitingForHuman(input: {
+    runId: string;
+    review: {
+      reviewId: string;
+      threadId: string;
+      graphVersion: string;
+      schemaVersion: string;
+      questions: Record<string, unknown>;
+      expiresAt: string;
+    };
+    usage: { inputTokens: number; outputTokens: number };
+  }): Promise<void> {
+    await this.inTransaction(async (client) => {
+      const row = await this.getLockedRun(client, input.runId);
+      if (TERMINAL_AGENT_RUN_STATUSES.has(row.status) || row.status === 'waiting_for_human') {
+        return;
+      }
+      await client.query(SQL_INSERT_HUMAN_REVIEW, [
+        input.review.reviewId,
+        row.id,
+        row.owner_id,
+        row.goal_id,
+        input.review.threadId,
+        input.review.schemaVersion,
+        input.review.graphVersion,
+        JSON.stringify(input.review.questions),
+        input.review.expiresAt,
+      ]);
+      await client.query(SQL_MARK_WAITING_FOR_HUMAN, [
+        row.id,
+        Math.max(0, input.usage.inputTokens),
+        Math.max(0, input.usage.outputTokens),
+      ]);
+      await this.appendEvent(client, row.id, 'run.waiting_for_human', {
+        review_id: input.review.reviewId,
+        thread_id: input.review.threadId,
+        expires_at: input.review.expiresAt,
       });
     });
   }

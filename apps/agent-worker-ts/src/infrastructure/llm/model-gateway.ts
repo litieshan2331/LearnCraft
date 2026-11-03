@@ -84,6 +84,8 @@ export interface ModelCompletionRequest {
    * 用于「边生成边展示思考过程」。回调失败会被忽略，不影响本次调用与聚合结果。
    */
   onReasoningDelta?: (text: string) => void;
+  /** 可选的正文增量回调；由学习助手主 Agent 用于向浏览器推送临时回答。 */
+  onContentDelta?: (text: string) => void;
   /** 每次实际出网前预占共享预算；含重试和备用请求，失败必须阻止出网。 */
   beforeModelAttempt?: () => Promise<void>;
   /** 请求级观测端口；学习助手使用独立运行表，不改变旧工作流的默认观测。 */
@@ -268,7 +270,7 @@ export class OpenAiCompatibleModelGateway {
           payload,
           signal: lease?.signal,
         });
-        const accumulator = new ModelCompletionAccumulator(request.onReasoningDelta);
+        const accumulator = new ModelCompletionAccumulator(request.onReasoningDelta, request.onContentDelta);
         for await (const event of response.events) {
           lease?.signal?.throwIfAborted();
           accumulator.accept(event);
@@ -435,7 +437,10 @@ export class ModelCompletionAccumulator {
   private inputTokens = 0;
   private outputTokens = 0;
 
-  constructor(private readonly onReasoningDelta?: (text: string) => void) {}
+  constructor(
+    private readonly onReasoningDelta?: (text: string) => void,
+    private readonly onContentDelta?: (text: string) => void,
+  ) {}
 
   /** 合并一个 Provider SSE 事件；只处理 choices[0]，工具调用按 index 拼接。 */
   accept(event: unknown): void {
@@ -469,6 +474,13 @@ export class ModelCompletionAccumulator {
     }
     if (typeof delta.content === 'string') {
       this.content += delta.content;
+      if (delta.content.length > 0 && this.onContentDelta !== undefined) {
+        try {
+          this.onContentDelta(delta.content);
+        } catch {
+          // 实时正文展示是 best-effort；回调失败不能影响模型聚合与工作流执行。
+        }
+      }
     }
     if (typeof delta.reasoning_content === 'string') {
       this.reasoningContent += delta.reasoning_content;

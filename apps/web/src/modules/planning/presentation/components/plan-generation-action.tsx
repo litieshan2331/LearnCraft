@@ -21,6 +21,7 @@ import { Button } from "@/shared/ui/primitives/button";
 import {
   createPlanGenerationRun,
   getPlanGenerationRun,
+  submitPlanHumanReview,
   PlanningApiError,
   type PlanGenerationAgentRun,
 } from "../api/planning-client";
@@ -44,10 +45,13 @@ export function PlanGenerationAction({
   const [agentRun, setAgentRun] = useState<PlanGenerationAgentRun | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [reviewAnswers, setReviewAnswers] = useState<Record<string, { option_id: string; custom_text?: string }>>({});
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const activeRunId = agentRun?.id ?? null;
   const activeRunStatus = agentRun?.status ?? null;
   const taskIsInFlight = activeRunStatus ? isInFlight(activeRunStatus) : false;
+  const taskIsWaiting = activeRunStatus === "waiting_for_human" && Boolean(agentRun?.human_review);
 
   useEffect(() => {
     if (!activeRunId || !activeRunStatus || !isInFlight(activeRunStatus)) {
@@ -170,6 +174,40 @@ export function PlanGenerationAction({
     }
   }
 
+  async function handleSubmitReview(): Promise<void> {
+    if (!agentRun?.human_review || isSubmittingReview) return;
+    const review = agentRun.human_review;
+    const answers = review.questions.map((question) => {
+      const answer = reviewAnswers[question.question_id];
+      const option = question.options.find((item) => item.option_id === answer?.option_id);
+      if (!answer || !option) return null;
+      if (option.kind === "custom_text") {
+        const customText = answer.custom_text ?? "";
+        if (!option.input || customText.length < option.input.min_length || customText.length > option.input.max_length) return null;
+        return { question_id: question.question_id, option_id: option.option_id, custom_text: customText };
+      }
+      return { question_id: question.question_id, option_id: option.option_id };
+    });
+    if (answers.some((answer) => answer === null)) {
+      setErrorMessage("请回答全部问题，并补充自定义选项内容。");
+      return;
+    }
+    setErrorMessage(null);
+    setIsSubmittingReview(true);
+    try {
+      const submitted = await submitPlanHumanReview(
+        agentRun.id,
+        { review_id: review.review_id, answers: answers as Array<{ question_id: string; option_id: string; custom_text?: string }> },
+        crypto.randomUUID(),
+      );
+      setAgentRun({ ...agentRun, ...submitted, status: "queued", human_review: undefined });
+    } catch (error) {
+      setErrorMessage(toDisplayError(error, "人工确认暂时无法提交，请稍后重试。"));
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  }
+
   if (activePlanId) {
     return (
       <div className="mt-8 flex flex-col-reverse gap-3 rounded-2xl bg-secondary/55 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -192,7 +230,55 @@ export function PlanGenerationAction({
         </Alert>
       ) : null}
 
-      {taskIsInFlight && agentRun ? (
+      {taskIsWaiting && agentRun?.human_review ? (
+        <div className="rounded-2xl border border-primary/25 bg-primary/5 p-5">
+          <div className="flex items-start gap-3">
+            <Sparkles aria-hidden className="mt-0.5 size-5 shrink-0 text-primary" />
+            <div>
+              <p className="font-medium">先确认几个学习偏好</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">Agent 会结合你的回答生成更贴合的学习路线。</p>
+            </div>
+          </div>
+          <div className="mt-5 space-y-5">
+            {agentRun.human_review.questions.map((question) => {
+              const selected = reviewAnswers[question.question_id];
+              const selectedOption = question.options.find((option) => option.option_id === selected?.option_id);
+              return (
+                <fieldset className="space-y-2" key={question.question_id}>
+                  <legend className="text-sm font-medium">{question.prompt}</legend>
+                  {question.options.map((option) => (
+                    <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-border/80 bg-background/70 px-3 py-2 text-sm" key={option.option_id}>
+                      <input
+                        checked={selected?.option_id === option.option_id}
+                        className="mt-1"
+                        disabled={isSubmittingReview}
+                        name={question.question_id}
+                        onChange={() => setReviewAnswers((current) => ({ ...current, [question.question_id]: { option_id: option.option_id } }))}
+                        type="radio"
+                      />
+                      <span className="flex-1">{option.label}</span>
+                    </label>
+                  ))}
+                  {selectedOption?.kind === "custom_text" ? (
+                    <textarea
+                      className="min-h-20 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                      disabled={isSubmittingReview}
+                      maxLength={selectedOption.input?.max_length ?? 4000}
+                      onChange={(event) => setReviewAnswers((current) => ({ ...current, [question.question_id]: { option_id: selectedOption.option_id, custom_text: event.target.value } }))}
+                      placeholder="请输入你的偏好"
+                      value={selected?.custom_text ?? ""}
+                    />
+                  ) : null}
+                </fieldset>
+              );
+            })}
+          </div>
+          <Button className="mt-6 w-full rounded-xl" disabled={isSubmittingReview} onClick={() => void handleSubmitReview()} type="button">
+            {isSubmittingReview ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : null}
+            提交并生成学习路线
+          </Button>
+        </div>
+      ) : taskIsInFlight && agentRun ? (
         <div className="rounded-2xl border border-border/80 bg-background/65 p-5">
           <div className="flex items-start gap-3">
             <LoaderCircle aria-hidden className="mt-0.5 size-5 shrink-0 animate-spin text-primary" />
@@ -225,7 +311,7 @@ export function PlanGenerationAction({
 }
 
 function isInFlight(status: PlanGenerationAgentRun["status"]): boolean {
-  return status === "queued" || status === "running";
+  return status === "queued" || status === "running" || status === "waiting_for_human";
 }
 
 function toDisplayError(error: unknown, fallback: string): string {

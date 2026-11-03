@@ -11,14 +11,18 @@ import type {
   RunSnapshot,
 } from "../domain/learning-assistant";
 
-/** 将会话快照转换为公开响应。 */
+/** 将会话快照转换为公开响应，只投影页面需要的教学状态白名单。 */
 export function presentConversation(conversation: ConversationSnapshot) {
+  const pendingQuestion = conversation.stateJson.pending_question;
+  const hintLevel = conversation.stateJson.hint_level;
   return {
     id: conversation.id,
     goal_id: conversation.goalId,
     source_assessment_answer_id: conversation.sourceAssessmentAnswerId,
     status: conversation.status,
     stage: conversation.stage,
+    pending_question: typeof pendingQuestion === "string" && pendingQuestion.trim().length > 0 ? pendingQuestion : null,
+    hint_level: typeof hintLevel === "number" && Number.isInteger(hintLevel) && hintLevel >= 0 && hintLevel <= 3 ? hintLevel : 0,
     last_message_at: conversation.lastMessageAt?.toISOString() ?? null,
     created_at: conversation.createdAt.toISOString(),
     updated_at: conversation.updatedAt.toISOString(),

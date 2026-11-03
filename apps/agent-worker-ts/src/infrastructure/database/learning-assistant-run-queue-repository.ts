@@ -167,9 +167,9 @@ export class PgLearningAssistantRunQueueRepository {
   /** 在首次模型请求前固定连接身份；同一 run 恢复时拒绝切换到另一模型。 */
   async bindModel(runId: string, ownerId: string, connectionId: string, modelId: string): Promise<void> {
     const result = await this.query(`UPDATE public.learning_assistant_runs
-      SET model_id = COALESCE(model_id, $4), input_summary_json = input_summary_json || $5::jsonb, updated_at = now()
-      WHERE id = $1 AND owner_id = $2 AND status = 'running' AND (model_id IS NULL OR model_id = $4)
-      RETURNING id`, [runId, ownerId, connectionId, modelId, JSON.stringify({ connection_id: connectionId })]);
+      SET model_id = COALESCE(model_id, $3), input_summary_json = input_summary_json || $4::jsonb, updated_at = now()
+      WHERE id = $1 AND owner_id = $2 AND status = 'running' AND (model_id IS NULL OR model_id = $3)
+      RETURNING id`, [runId, ownerId, modelId, JSON.stringify({ connection_id: connectionId })]);
     if (result.rows.length === 0) throw new LearningAssistantRunContractError('学习助手运行已绑定其他模型或不可执行。');
   }
 
@@ -217,15 +217,15 @@ export class PgLearningAssistantRunQueueRepository {
   }
 
   /** 运行成功后写入安全摘要和终态；同一结果重复回写保持幂等。 */
-  async finishSucceeded(input: RunInput, state: { intent: unknown; stage: unknown; response: unknown; modelCallCount: number; toolCallCount: number; }): Promise<void> {
+  async finishSucceeded(input: RunInput, state: { intent: unknown; stage: unknown; responseText: string | null; modelCallCount: number; toolCallCount: number; }): Promise<void> {
     await this.query(`UPDATE public.learning_assistant_runs SET status = 'succeeded', finished_at = now(),
       model_id = $4, model_call_count = GREATEST(model_call_count, $5), tool_call_count = GREATEST(tool_call_count, $6),
       output_summary_json = $7::jsonb, updated_at = now() WHERE id = $1 AND owner_id = $2 AND conversation_id = $3
       AND status IN ('running', 'succeeded')`, [input.run_id, input.owner_id, input.conversation_id, input.model_id,
-      state.modelCallCount, state.toolCallCount, JSON.stringify({ intent: state.intent, stage: state.stage, response: state.response })]);
+      state.modelCallCount, state.toolCallCount, JSON.stringify({ intent: state.intent, stage: state.stage, responseText: state.responseText })]);
     await this.query(`UPDATE public.learning_assistant_conversations SET stage = $2,
       state_json = $3::jsonb, updated_at = now() WHERE id = $1`,
-      [input.conversation_id, state.stage, JSON.stringify({ intent: state.intent, response: state.response })]);
+      [input.conversation_id, state.stage, JSON.stringify({ intent: state.intent, responseText: state.responseText })]);
   }
 
   /** 失败只保存稳定错误码和安全摘要，不把凭据或完整模型异常暴露给页面。 */

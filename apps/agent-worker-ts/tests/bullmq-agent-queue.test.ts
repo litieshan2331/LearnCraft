@@ -28,6 +28,10 @@ vi.mock('bullmq', () => {
       return { id: 'job-1' };
     }
 
+    async getJob(): Promise<null> {
+      return null;
+    }
+
     async close(): Promise<void> {}
   }
 
@@ -99,6 +103,7 @@ describe('队列装配', () => {
       jobId: 'run-1',
       attempts: 4,
       backoff: { type: 'custom' },
+      removeOnComplete: true,
     });
   });
 

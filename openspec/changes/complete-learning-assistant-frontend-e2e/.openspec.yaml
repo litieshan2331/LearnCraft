@@ -1,0 +1,3 @@
+schema: spec-driven
+created: 2026-10-29
+goal: 让登录用户能够从学习起点完成学习助手对话，并通过隔离的测试数据库、Redis 与假模型验证完整链路。

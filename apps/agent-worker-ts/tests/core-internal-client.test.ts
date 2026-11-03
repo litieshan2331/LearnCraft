@@ -60,7 +60,6 @@ const VALID_LEARNING_CONTEXT = {
   wrong_question: null,
   user_profile: null,
   mastery_state: null,
-  learning_context: null,
   evidence: [],
 };
 
@@ -160,7 +159,6 @@ describe('CoreInternalClient', () => {
   it('调用学习助手上下文和结果内部端点并校验响应合同', async () => {
     const { fetchImpl, calls } = fakeFetch((captured) => {
       if (captured.url.endsWith('/context')) return jsonResponse(200, VALID_LEARNING_CONTEXT);
-      if (captured.url.endsWith('/learning-memory')) return jsonResponse(200, { accepted: true, memory_id: null, created: false });
       return jsonResponse(200, { run_id: VALID_LEARNING_CONTEXT.run_id, status: captured.url.endsWith('/messages') ? 'running' : 'succeeded', message_ids: [] });
     });
     const workerClient = client(fetchImpl);
@@ -169,12 +167,10 @@ describe('CoreInternalClient', () => {
     });
     await workerClient.appendLearningAssistantMessages(VALID_LEARNING_CONTEXT.run_id, { messages: [] });
     await workerClient.finishLearningAssistantRun(VALID_LEARNING_CONTEXT.run_id, { status: 'succeeded' });
-    await workerClient.persistLearningAssistantMemory(VALID_LEARNING_CONTEXT.run_id, { operation: 'validate' });
     expect(calls.map((call) => call.url)).toEqual([
       'http://127.0.0.1:3000/internal/v1/learning-assistant-runs/' + VALID_LEARNING_CONTEXT.run_id + '/context',
       'http://127.0.0.1:3000/internal/v1/learning-assistant-runs/' + VALID_LEARNING_CONTEXT.run_id + '/messages',
       'http://127.0.0.1:3000/internal/v1/learning-assistant-runs/' + VALID_LEARNING_CONTEXT.run_id + '/result',
-      'http://127.0.0.1:3000/internal/v1/learning-assistant-runs/' + VALID_LEARNING_CONTEXT.run_id + '/learning-memory',
     ]);
   });
 });

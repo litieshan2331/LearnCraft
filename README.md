@@ -14,7 +14,9 @@ LearnCraft 会根据学习者的背景、目标和前测结果组织学习路线
 - **学习者账户与画像**：注册、登录、Session 管理，以及编程经验、每周可投入时间、内容偏好等学习画像。
 - **自定义学习目标**：围绕技术主题和期望结果创建学习目标。
 - **前测诊断**：生成 10–20 题的单选前测，按学习者水平安排难度和少量提高题，并进行确定性评分。
-- **学习路线**：根据目标和前测结果生成 6–12 个章节，包含学习目标、难度、预计时长、前置依赖和完成标准。
+- **HITL（Human-in-the-Loop）路线确认**：生成学习路线前，Agent 基于学习目标、画像和前测结果提出 1–3 个结构化问题；学习者可以选择预设偏好或填写自定义回答，再继续生成路线。
+- **学习路线**：根据目标、前测结果和人工确认答案生成 6–12 个章节，包含学习目标、难度、预计时长、前置依赖和完成标准。
+- **题目生成与解析**：为前测和节点后测生成带选项、答案、知识点与解析的题目，覆盖代码理解和知识迁移，并支持提交答案后的确定性评分。
 - **节点内容**：为路线节点生成结构化知识内容、代码示例和 worked example，并支持节点完成标记。
 - **节点后测**：围绕已经学习的节点生成 5–10 题后测，检验知识掌握和迁移能力。
 - **Agent 运行观测**：查看运行状态、实时生成进度、模型思考内容、事件序列和错误信息。
@@ -43,6 +45,14 @@ LearnCraft 将学习目标、学习路线、章节内容和 Agent 运行过程�
   <img src="./docs/assets/readme/02-learning-map.png" alt="LearnCraft 学习路线总览" width="900">
 </p>
 
+### HITL（Human-in-the-Loop）路线确认
+
+学习路线生成不会替学习者猜测关键偏好。Agent 会先提出少量结构化问题，每题提供两个建议选项和一个可填写自定义内容的选项；学习者提交后，系统恢复同一个生成任务并继续产出路线。人工等待期间任务会释放 Worker 和模型资源，刷新页面也能接回原任务。
+
+<p align="center">
+  <img src="./docs/assets/readme/07-human-review.png" alt="LearnCraft 学习路线生成前的 Human-in-the-Loop 偏好确认" width="700">
+</p>
+
 ### 章节与完成标准
 
 每个章节包含学习目标、预计投入、难度、前置章节和可验证的完成标准，学习者可以从章节入口进入具体内容。
@@ -57,6 +67,14 @@ LearnCraft 将学习目标、学习路线、章节内容和 Agent 运行过程�
 
 <p align="center">
   <img src="./docs/assets/readme/04-code-learning-card.png" alt="LearnCraft 代码学习卡片" width="900">
+</p>
+
+### 题目生成与解析
+
+系统会根据学习目标、学习路线和已学节点生成前测或后测题目。题目可以包含代码片段，提交后同时展示学习者答案、正确答案和解析，帮助定位知识盲点；生成结果经过题量、选项、答案和知识点校验后才会写入学习记录。
+
+<p align="center">
+  <img src="./docs/assets/readme/08-question-generation.png" alt="LearnCraft 代码题生成、作答结果与解析" width="760">
 </p>
 
 ### Agent 生成过程
@@ -205,6 +223,22 @@ pnpm eval:score -- --owner-id <用户UUID> --dataset evals/datasets/built.json -
 ```
 
 评测需要独立的 Judge 模型连接；真实模型调用和真实数据库写入只应在本地开发环境中按需启用，具体开关和环境变量见 [`apps/agent-worker-ts/README.md`](./apps/agent-worker-ts/README.md)。
+
+工具上下文 token 基准只在显式开启时调用一次 Tavily 原始 MCP：先设置 `infra/.env` 中的
+`TAVILY_BENCHMARK_ALLOW_NETWORK=true`、`TAVILY_BENCHMARK_API_KEY` 和
+`TAVILY_BENCHMARK_QUERY`，再运行：
+
+```powershell
+pnpm measure:tool-context
+```
+
+报告比较原始 `search/extract` payload 与线上 `ok/code/message/data` 四字段结果的字节数、估算 token、
+以及工具结果在后续多轮模型请求中重复携带时的累计节省。估算使用 UTF-8 字节数除以
+`TAVILY_BENCHMARK_BYTES_PER_TOKEN`；真实账单和精确输入 token 以模型网关返回的 `inputTokens` 为准。
+该命令默认关闭网络，开启后会产生 Tavily 配额/费用，所有查询、结果数、截断和输出文件参数均可由
+`infra/.env.example` 中的 `TAVILY_BENCHMARK_*` 变量覆盖。
+
+完整公式和结果解释见 [`docs/tool-context-token-benchmark.md`](./docs/tool-context-token-benchmark.md)。
 
 ## 项目结构
 

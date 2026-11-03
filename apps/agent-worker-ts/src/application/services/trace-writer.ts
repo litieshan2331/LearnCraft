@@ -7,6 +7,7 @@
 
 export type AgentTraceEventType =
   | 'run.started'
+  | 'run.waiting_for_human'
   | 'run.completed'
   | 'run.failed'
   | 'llm.request.started'

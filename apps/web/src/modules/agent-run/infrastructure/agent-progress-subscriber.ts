@@ -5,7 +5,7 @@
  * 进度事件。三条约束：
  * 1. 只订阅由已授权 runId 派生的频道，不接受任意频道名；
  * 2. 每条消息都经 Zod 白名单校验，非法或超长内容直接丢弃（防御脏数据/敌意数据）；
- *    `thinking.completed` 的 `data.text` 是模型思考原文：只转发给当前登录的所有者，不落库、不写日志；
+ *    `thinking.completed` 与 `answer.delta` 的 `data.text` 仅转发给当前登录的所有者，不落库、不写日志；
  * 3. 未配置 `AGENT_PROGRESS_REDIS_URL` 或连接失败时抛 AgentProgressUnavailableError，
  *    由上层降级为「没有实时进度」，不影响状态轮询与最终结果；
  * 4. **序号不设上限**（只要求非负整数）：长运行不会因为 seq 变大而整段失效；
@@ -36,6 +36,7 @@ export const AGENT_PROGRESS_STEPS = [
   // thinking.delta 为流式增量，thinking.completed 为该轮权威整段。
   "thinking.delta",
   "thinking.completed",
+  "answer.delta",
   "tool.called",
   "tool.completed",
   "validation.failed",

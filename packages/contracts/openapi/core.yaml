@@ -896,6 +896,40 @@ paths:
           $ref: '#/components/responses/AgentRunNotCancellable'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /api/v1/agent-runs/{agent_run_id}/human-review:
+    post:
+      tags: [AgentRun]
+      summary: 提交学习路线人工确认答案
+      description: 仅允许当前任务所有者提交当前 review 的完整答案；服务端根据 AgentRun 派生 thread_id，客户端不得提交或覆盖线程标识。重复 Idempotency-Key 返回同一 continuation 状态。
+      operationId: submit_agent_run_human_review
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AgentRunId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HumanReviewSubmission'
+      responses:
+        '200':
+          description: 答案已幂等记录，任务等待重新投递或已重新排队
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanReviewSubmissionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/InvalidOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/learning-assistant/conversations:
     get:
       tags: [学习助手]
@@ -1451,7 +1485,7 @@ components:
     LearningAssistantConversation:
       type: object
       additionalProperties: false
-      required: [id, goal_id, source_assessment_answer_id, status, stage, last_message_at, created_at, updated_at]
+      required: [id, goal_id, source_assessment_answer_id, status, stage, pending_question, hint_level, last_message_at, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1468,6 +1502,14 @@ components:
         stage:
           type: string
           enum: [new, context_loaded, diagnosing, waiting_for_user, hinting, checking_repair, mastered, needs_more_practice, unresolved]
+        pending_question:
+          type: [string, 'null']
+          description: 当前需要用户回答的单一主要问题；没有待回答问题时为 null。
+        hint_level:
+          type: integer
+          minimum: 0
+          maximum: 3
+          description: 当前教学提示级别，0 为初始级别，3 为最强提示级别。
         active_run_id:
           type: [string, 'null']
           format: uuid
@@ -1936,7 +1978,7 @@ components:
             - adaptation
         status:
           type: string
-          enum: [queued, running, succeeded, failed, cancelled, expired]
+          enum: [queued, running, waiting_for_human, succeeded, failed, cancelled, expired]
         target_type:
           type: string
           maxLength: 50
@@ -1969,6 +2011,8 @@ components:
           $ref: '#/components/schemas/AgentRunAssessmentResult'
         plan_result:
           $ref: '#/components/schemas/AgentRunPlanResult'
+        human_review:
+          $ref: '#/components/schemas/HumanReviewQuestionBatch'
         error:
           $ref: '#/components/schemas/AgentRunError'
         created_at:
@@ -2001,6 +2045,121 @@ components:
           type: integer
           minimum: 6
           maximum: 12
+    HumanReviewQuestionBatch:
+      type: object
+      additionalProperties: false
+      required: [schema_version, review_id, questions, expires_at]
+      properties:
+        schema_version:
+          type: string
+          enum: [plan_generation_human_review.v1]
+        review_id:
+          type: string
+          format: uuid
+        questions:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/HumanReviewQuestion'
+        expires_at:
+          type: [string, 'null']
+          format: date-time
+    HumanReviewQuestion:
+      type: object
+      additionalProperties: false
+      required: [question_id, prompt, options]
+      properties:
+        question_id:
+          type: string
+          minLength: 1
+          maxLength: 100
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        options:
+          type: array
+          minItems: 3
+          maxItems: 3
+          description: 固定三个选项，第三项必须为 custom_text。
+          items:
+            $ref: '#/components/schemas/HumanReviewOption'
+    HumanReviewOption:
+      type: object
+      additionalProperties: false
+      required: [option_id, label, kind, input]
+      properties:
+        option_id:
+          type: string
+          minLength: 1
+          maxLength: 100
+        label:
+          type: string
+          minLength: 1
+          maxLength: 500
+        kind:
+          type: string
+          enum: [preset, custom_text]
+        input:
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [min_length, max_length]
+              properties:
+                min_length:
+                  type: integer
+                  minimum: 0
+                  maximum: 2000
+                max_length:
+                  type: integer
+                  minimum: 1
+                  maximum: 4000
+    HumanReviewAnswer:
+      type: object
+      additionalProperties: false
+      required: [question_id, option_id]
+      properties:
+        question_id:
+          type: string
+          minLength: 1
+          maxLength: 100
+        option_id:
+          type: string
+          minLength: 1
+          maxLength: 100
+        custom_text:
+          type: string
+          maxLength: 4000
+    HumanReviewSubmission:
+      type: object
+      additionalProperties: false
+      required: [review_id, answers]
+      properties:
+        review_id:
+          type: string
+          format: uuid
+        answers:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/HumanReviewAnswer'
+    HumanReviewSubmissionResult:
+      type: object
+      additionalProperties: false
+      required: [id, status, review_id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued]
+        review_id:
+          type: string
+          format: uuid
     Assessment:
       type: object
       additionalProperties: false

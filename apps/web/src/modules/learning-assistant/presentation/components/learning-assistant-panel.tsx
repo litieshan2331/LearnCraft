@@ -30,9 +30,11 @@ import {
   sendLearningAssistantMessage,
   type LearningAssistantConversation,
   type LearningAssistantMessage,
+  type LearningAssistantProgressEvent,
   type LearningAssistantRun,
 } from "../api/learning-assistant-client";
 import { Button } from "@/shared/ui/primitives/button";
+import { MarkdownContent } from "@/shared/ui/markdown-content";
 
 const CONVERSATION_STORAGE_KEY = "learncraft.learning-assistant.conversation-id";
 const MAX_STATUS_POLL_RETRIES = 5;
@@ -66,17 +68,21 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   const [conversation, setConversation] = useState<LearningAssistantConversation | null>(null);
   const [messages, setMessages] = useState<LearningAssistantMessage[]>([]);
   const [activeRun, setActiveRun] = useState<LearningAssistantRun | null>(null);
+  const [streamingAnswer, setStreamingAnswer] = useState("");
   const [draft, setDraft] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollingFailed, setPollingFailed] = useState(false);
   const [pollRetryToken, setPollRetryToken] = useState(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesViewportRef = useRef<HTMLDivElement>(null);
+  const shouldStickToBottomRef = useRef(true);
   const pendingMessageRef = useRef<{ content: string; idempotencyKey: string } | null>(null);
+  const lastProgressSeqRef = useRef(0);
   const activeRunId = activeRun?.id;
   const activeRunStatus = activeRun?.status;
   const conversationId = conversation?.id;
+  const hasActiveRun = activeRunStatus === "queued" || activeRunStatus === "running";
 
   const loadMessages = useCallback(async (conversationId: string): Promise<void> => {
     const loaded: LearningAssistantMessage[] = [];
@@ -161,8 +167,12 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
           timer = window.setTimeout(() => void poll(), STATUS_POLL_DELAY_MS);
           return;
         }
-        if (conversationId) await loadMessages(conversationId);
-        if (nextRun.status === "failed") setError(nextRun.error_summary ?? "本次回复生成失败，请稍后重试。");
+        if (conversationId) {
+          await loadMessages(conversationId);
+          setConversation(await getLearningAssistantConversation(conversationId));
+        }
+        setStreamingAnswer("");
+        if (nextRun.status === "failed") setError("本次回复生成失败，请稍后重试。");
       } catch (pollError) {
         if (cancelled) return;
         retryCount += 1;
@@ -184,8 +194,41 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   }, [activeRunId, activeRunStatus, conversationId, loadMessages, pollRetryToken]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activeRun?.status]);
+    if (!activeRunId || !hasActiveRun) return;
+    lastProgressSeqRef.current = 0;
+    const source = new EventSource(`/api/v1/learning-assistant/runs/${activeRunId}/stream`, {
+      withCredentials: true,
+    });
+
+    source.onmessage = (messageEvent) => {
+      let event: LearningAssistantProgressEvent;
+      try {
+        event = JSON.parse(messageEvent.data) as LearningAssistantProgressEvent;
+      } catch {
+        return;
+      }
+      if (event.v !== 1 || event.step !== "answer.delta" || !Number.isInteger(event.seq)
+        || event.seq <= lastProgressSeqRef.current || typeof event.data?.text !== "string") return;
+      lastProgressSeqRef.current = event.seq;
+      const text = event.data?.text;
+      if (typeof text !== "string") return;
+      setStreamingAnswer((current) => current + text);
+    };
+    source.onerror = () => {
+      // 实时通道断开时保留状态轮询，避免自动重连产生重复订阅。
+      source.close();
+    };
+
+    return () => {
+      source.close();
+    };
+  }, [activeRunId, hasActiveRun]);
+
+  useEffect(() => {
+    const viewport = messagesViewportRef.current;
+    if (!viewport || !shouldStickToBottomRef.current) return;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: streamingAnswer ? "auto" : "smooth" });
+  }, [messages, activeRun?.status, streamingAnswer]);
 
   /** 提交当前输入，接口返回的运行由状态轮询继续处理。 */
   async function handleSend(event: React.FormEvent<HTMLFormElement>): Promise<void> {
@@ -194,6 +237,8 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
     if (!content || !conversation || isSending || activeRun?.status === "queued" || activeRun?.status === "running") return;
 
     setIsSending(true);
+    shouldStickToBottomRef.current = true;
+    setStreamingAnswer("");
     setError(null);
     setPollingFailed(false);
     const pendingMessage = pendingMessageRef.current;
@@ -219,8 +264,9 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
   return (
     <aside
       aria-label="学习助手对话"
-      className="fixed inset-x-3 top-[5.75rem] z-40 flex h-[min(720px,calc(100vh-6.5rem))] flex-col overflow-hidden rounded-2xl border border-border/90 bg-card/95 shadow-[0_24px_80px_-30px_rgba(23,53,58,0.45)] backdrop-blur-xl sm:inset-x-auto sm:right-5 sm:w-[min(28rem,calc(100vw-2rem))]"
+      className="fixed inset-x-3 top-[5.75rem] z-40 flex h-[min(720px,calc(100vh-6.5rem))] min-h-[24rem] min-w-0 w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] max-h-[calc(100vh-6.5rem)] resize overflow-hidden rounded-2xl border border-border/90 bg-card/95 shadow-[0_24px_80px_-30px_rgba(23,53,58,0.45)] backdrop-blur-xl sm:inset-x-auto sm:right-5 sm:w-[min(28rem,calc(100vw-2rem))] sm:min-w-[20rem] sm:max-w-[min(90vw,48rem)]"
       id="learning-assistant-panel"
+      title="拖动右下角调整面板大小"
     >
       <header className="flex shrink-0 items-center justify-between border-b border-border/80 px-4 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
@@ -235,18 +281,37 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
         </Button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+      {conversation ? (
+        <div className="shrink-0 border-b border-border/70 bg-secondary/30 px-4 py-2.5 text-xs text-muted-foreground" aria-live="polite">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>阶段：{getStageLabel(conversation.stage)}</span>
+            <span>提示级别：{conversation.hint_level}</span>
+          </div>
+          {conversation.pending_question ? (
+            <p className="mt-1.5 break-words leading-5 text-foreground">待回答：{conversation.pending_question}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-4"
+        onScroll={(event) => {
+          const viewport = event.currentTarget;
+          shouldStickToBottomRef.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 48;
+        }}
+        ref={messagesViewportRef}
+      >
         {isLoading ? (
           <div className="grid h-full place-items-center text-sm text-muted-foreground"><LoaderCircle aria-hidden className="size-5 animate-spin text-primary" /></div>
         ) : error && messages.length === 0 ? (
           <div className="grid h-full place-items-center px-5 text-center"><CircleAlert aria-hidden className="size-6 text-destructive" /><p className="mt-3 text-sm text-muted-foreground">{error}</p></div>
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && !streamingAnswer ? (
           <div className="grid h-full place-items-center px-7 text-center"><span className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary"><MessageCircle aria-hidden className="size-5" /></span><p className="mt-4 text-sm font-medium">从当前页面开始提问</p><p className="mt-1 text-xs leading-6 text-muted-foreground">可以让助手帮你分析错题、追问思路或回答编程问题。</p></div>
         ) : (
           <div className="space-y-3">
-            {messages.filter((message) => message.role !== "tool" && message.content !== null).map((message) => <MessageBubble key={message.id} message={message} />)}
+            {messages.filter((message) => message.role !== "tool" && message.content !== null).map((message) => <MessageBubble key={message.id} role={message.role === "user" ? "user" : "assistant"} content={message.content!} />)}
+            {streamingAnswer ? <MessageBubble key={`${activeRunId}:streaming`} role="assistant" content={streamingAnswer} /> : null}
             {isBusy ? <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><LoaderCircle aria-hidden className="size-3.5 animate-spin" />正在整理回复…</div> : null}
-            <div ref={messagesEndRef} />
           </div>
         )}
       </div>
@@ -296,12 +361,12 @@ function LearningAssistantDialog({ onClose }: Readonly<{ onClose: () => void }>)
 }
 
 /** 将公开消息转换成用户和助手可区分的气泡。 */
-function MessageBubble({ message }: Readonly<{ message: LearningAssistantMessage }>) {
-  const isUser = message.role === "user";
+function MessageBubble({ role, content }: Readonly<{ role: "user" | "assistant"; content: string }>) {
+  const isUser = role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-6 ${isUser ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-secondary/75 text-foreground"}`}>
-        {message.content}
+        {isUser ? content : <MarkdownContent className="min-w-0 space-y-3 break-words [overflow-wrap:anywhere]" content={content} />}
       </div>
     </div>
   );
@@ -319,8 +384,26 @@ function getRunStatusLabel(status: LearningAssistantRun["status"] | undefined): 
   }
 }
 
+/** 将服务端教学阶段转换为页面可读文案。 */
+function getStageLabel(stage: string): string {
+  const labels: Record<string, string> = {
+    new: "准备开始",
+    context_loaded: "已读取上下文",
+    diagnosing: "分析问题",
+    waiting_for_user: "等待你的回答",
+    hinting: "提示中",
+    checking_repair: "验证修复",
+    mastered: "已掌握",
+    needs_more_practice: "需要继续练习",
+    unresolved: "待继续分析",
+  };
+  return labels[stage] ?? "进行中";
+}
+
 /** 将 API 异常转换成面板可直接显示的文案。 */
 function toDisplayError(error: unknown, fallback: string): string {
-  if (error instanceof LearningAssistantApiError) return error.message;
-  return error instanceof Error ? error.message : fallback;
+  if (error instanceof LearningAssistantApiError && error.code === "CONVERSATION_BUSY") {
+    return "当前会话已有消息正在处理，请稍后再试。";
+  }
+  return fallback;
 }

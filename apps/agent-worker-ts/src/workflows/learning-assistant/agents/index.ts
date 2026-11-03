@@ -1,8 +1,7 @@
 /**
- * 学习助手三个 Agent 的统一出口；角色实现和提示词各自独立。
- * 调用顺序：主图导入主 Agent 或指定子 Agent → 复用 shared 的模型调用、轨迹和子循环。
+ * 学习助手三个 Agent 的统一出口；三个角色均由 LangChain runner 装配。
+ * 调用顺序：主 Agent 注册委派工具 → 子 Agent 使用只读工具 → 返回自然语言结果。
  */
 export { runMainAgent } from './main-agent.js';
-export { runErrorAttributionAgent } from './error-attribution-agent.js';
-export { runSocraticTutorAgent } from './socratic-tutor-agent.js';
+export { ChildAgentInvocationError, runErrorAttributionAgent, runSocraticTutorAgent, runMainReadTool } from './langchain-agent-runner.js';
 export { stableId, modelBudgetExceeded } from './shared.js';

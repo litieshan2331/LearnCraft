@@ -19,7 +19,6 @@ import {
   PersistedCardContentEnvelopeSchema,
   LearningAssistantContextEnvelopeSchema,
   LearningAssistantWriteEnvelopeSchema,
-  LearningAssistantMemoryEnvelopeSchema,
   PersistedLearningPlanEnvelopeSchema,
   type CardContentContextEnvelope,
   type DefaultModelConnectionEnvelope,
@@ -27,7 +26,6 @@ import {
   type PersistedCardContentEnvelope,
   type LearningAssistantContextEnvelope,
   type LearningAssistantWriteEnvelope,
-  type LearningAssistantMemoryEnvelope,
   type PersistedLearningPlanEnvelope,
 } from '../schemas/core-internal.js';
 
@@ -121,19 +119,6 @@ export class CoreInternalClient {
       notFoundCode: 'LEARNING_ASSISTANT_RUN_NOT_FOUND', notFoundMessage: '学习助手运行不存在。',
       rejectedCode: 'LEARNING_ASSISTANT_RESULT_REJECTED', rejectedMessage: 'Web 拒绝了学习助手运行结果。',
       schema: LearningAssistantWriteEnvelopeSchema, invalidMessage: '学习助手运行结果响应契约不合法。',
-    });
-  }
-
-  /** 请求服务端验证或幂等写入学习经历；模型只提供候选，最终规则由 Web 执行。 */
-  async persistLearningAssistantMemory(
-    runId: string,
-    payload: Record<string, unknown>,
-  ): Promise<LearningAssistantMemoryEnvelope> {
-    return this.request({
-      method: 'POST', path: '/learning-assistant-runs/' + runId + '/learning-memory', body: payload, timeoutMs: 15_000,
-      notFoundCode: 'LEARNING_ASSISTANT_RUN_NOT_FOUND', notFoundMessage: '学习助手运行不存在。',
-      rejectedCode: 'LEARNING_ASSISTANT_MEMORY_REJECTED', rejectedMessage: 'Web 拒绝了学习经历写入。',
-      schema: LearningAssistantMemoryEnvelopeSchema, invalidMessage: '学习经历响应契约不合法。',
     });
   }
 

@@ -395,3 +395,18 @@ describe('PgAgentRunRepository.isCancelled', () => {
     await expect(running.repository.isCancelled(RUN_ID)).resolves.toBe(false);
   });
 });
+
+describe('PgAgentRunRepository.thread lock', () => {
+  it('使用 PostgreSQL advisory lock 串行保护同一 thread', async () => {
+    const client = new FakeClient((text) => {
+      if (text.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
+      return { rows: [] };
+    });
+    const repository = new PgAgentRunRepository(new FakePool(client));
+
+    await expect(repository.withThreadLock('plan_generate:run-1', async () => 'ok')).resolves.toBe('ok');
+    expect(client.find('pg_try_advisory_lock')?.values).toEqual(['plan_generate:run-1']);
+    expect(client.find('pg_advisory_unlock')?.values).toEqual(['plan_generate:run-1']);
+    expect(client.released).toBe(true);
+  });
+});

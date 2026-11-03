@@ -11,6 +11,8 @@ export type LearningAssistantConversation = {
   source_assessment_answer_id: string | null;
   status: "active" | "completed" | "archived";
   stage: string;
+  pending_question: string | null;
+  hint_level: number;
   last_message_at: string | null;
   created_at: string;
   updated_at: string;
@@ -44,6 +46,14 @@ export type LearningAssistantRun = {
   finished_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type LearningAssistantProgressEvent = {
+  v: 1;
+  step: string;
+  at: string;
+  seq: number;
+  data?: Record<string, string | number | boolean>;
 };
 
 export type LearningAssistantMessagePage = {
@@ -147,8 +157,11 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
 /** 从统一错误响应中提取安全错误码和文案。 */
 async function createApiError(response: Response): Promise<LearningAssistantApiError> {
   const payload = await response.json().catch((): ApiErrorPayload => ({}));
+  const code = payload.error?.code ?? "REQUEST_FAILED";
   return new LearningAssistantApiError(
-    payload.error?.code ?? "REQUEST_FAILED",
-    payload.error?.message ?? "学习助手暂时无法响应，请稍后重试。",
+    code,
+    code === "CONVERSATION_BUSY"
+      ? "当前会话已有消息正在处理，请稍后再试。"
+      : "学习助手暂时无法响应，请稍后重试。",
   );
 }

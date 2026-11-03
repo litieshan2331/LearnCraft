@@ -32,6 +32,14 @@ export function presentAgentRun(agentRun: AgentRunSnapshot) {
         node_count: agentRun.planResult.nodeCount,
       },
     } : {}),
+    ...(agentRun.humanReview ? {
+      human_review: {
+        schema_version: agentRun.humanReview.questions.schema_version,
+        review_id: agentRun.humanReview.questions.review_id,
+        questions: agentRun.humanReview.questions.questions,
+        expires_at: agentRun.humanReview.expiresAt?.toISOString() ?? null,
+      },
+    } : {}),
     ...(agentRun.error ? { error: agentRun.error } : {}),
     created_at: agentRun.createdAt.toISOString(),
     updated_at: agentRun.updatedAt.toISOString(),

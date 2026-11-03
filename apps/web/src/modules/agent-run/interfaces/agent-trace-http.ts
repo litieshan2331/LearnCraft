@@ -16,7 +16,7 @@ const sequence = z.coerce.number().int().min(0).max(2_147_483_647);
 const runType = z.enum([
   "assessment_generate", "plan_generate", "card_content_generate", "posttest_generate", "adaptation",
 ]);
-const runStatus = z.enum(["queued", "running", "succeeded", "failed", "cancelled", "expired"]);
+const runStatus = z.enum(["queued", "running", "waiting_for_human", "succeeded", "failed", "cancelled", "expired"]);
 
 /** 编码运行列表的稳定复合游标。 */
 export function encodeTraceRunCursor(cursor: TraceRunCursor): string {

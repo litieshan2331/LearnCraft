@@ -2,7 +2,7 @@
  * BullMQ 队列的发布与消费装配（替代 Celery 的 send_task 与 worker 启动）。
  *
  * 职责：把队列配置收敛为 BullMQ 的 Queue / Worker 选项，并保证：
- * - jobId 使用 agent_run_id，天然去重，与数据库幂等键一致；
+ * - jobId 使用 agent_run_id，单次投递天然去重，与数据库幂等键一致；人工确认恢复依赖完成后立即移除旧 Job；
  * - attempts = maxRetries + 1，配合自定义退避复用 10/20/40… 封顶 300 秒的策略；
  * - lockDuration 大于任务硬超时，避免长任务被误判为 stalled 而重投；
  * - 键前缀与 Celery 的 learncraft:celery: 完全隔离。
@@ -101,11 +101,19 @@ export async function publishAgentRun(
   task: AgentRunTask,
   config: AgentQueueConfig,
 ): Promise<Job<AgentRunJobPayload>> {
+  // 兼容 removeOnComplete 调整前已经保留在 Redis 的人工暂停 Job：恢复投递前清理 completed
+  // 记录，避免 BullMQ 因同一 jobId 已存在而静默复用旧的 completed Job。
+  const existing = await queue.getJob(task.agentRunId);
+  if (existing !== undefined && existing !== null && await existing.getState() === 'completed') {
+    await existing.remove();
+  }
   return queue.add(AGENT_RUN_JOB_NAME, toJobPayload(task), {
     jobId: task.agentRunId,
     attempts: config.maxAttempts + 1,
     backoff: { type: 'custom' },
-    removeOnComplete: { count: 1_000 },
+    // Human-in-the-Loop 首次执行会以 completed 结束并释放 Worker；若保留该 Job，恢复投递复用同一
+    // agent_run_id 时会被 BullMQ 当作重复任务吞掉。完成后立即移除，数据库状态和 Checkpoint 仍是事实来源。
+    removeOnComplete: true,
     removeOnFail: { count: 5_000 },
   });
 }

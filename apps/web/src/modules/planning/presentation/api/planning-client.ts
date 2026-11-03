@@ -52,6 +52,7 @@ export interface PlanNode extends LearningPlanNode {
 export type PlanGenerationAgentRunStatus =
   | "queued"
   | "running"
+  | "waiting_for_human"
   | "succeeded"
   | "failed"
   | "cancelled"
@@ -61,6 +62,21 @@ export interface PlanGenerationAgentRun {
   id: string;
   run_type: "plan_generate" | string;
   status: PlanGenerationAgentRunStatus;
+  human_review?: {
+    schema_version: "plan_generation_human_review.v1";
+    review_id: string;
+    questions: Array<{
+      question_id: string;
+      prompt: string;
+      options: Array<{
+        option_id: string;
+        label: string;
+        kind: "preset" | "custom_text";
+        input: { min_length: number; max_length: number } | null;
+      }>;
+    }>;
+    expires_at: string | null;
+  };
   plan_result?: {
     learning_plan_id: string;
     node_count: number;
@@ -115,6 +131,18 @@ export function createPlanGenerationRun(
 
 export function getPlanGenerationRun(agentRunId: string): Promise<PlanGenerationAgentRun> {
   return requestJson<PlanGenerationAgentRun>("/api/v1/agent-runs/" + agentRunId);
+}
+
+export function submitPlanHumanReview(
+  agentRunId: string,
+  input: { review_id: string; answers: Array<{ question_id: string; option_id: string; custom_text?: string }> },
+  idempotencyKey: string,
+): Promise<PlanGenerationAgentRun & { review_id?: string }> {
+  return requestJson<PlanGenerationAgentRun & { review_id?: string }>("/api/v1/agent-runs/" + agentRunId + "/human-review", {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(input),
+  });
 }
 async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {

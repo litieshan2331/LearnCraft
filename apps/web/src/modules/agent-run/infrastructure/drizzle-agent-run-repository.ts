@@ -8,7 +8,7 @@
 import { and, desc, eq, inArray, max } from "drizzle-orm";
 
 import { getDatabase } from "@/lib/db/client";
-import { agentRunEvents, agentRuns, outboxEvents } from "@/lib/db/schema";
+import { agentHumanReviews, agentRunEvents, agentRuns, outboxEvents } from "@/lib/db/schema";
 
 import {
   AgentRunApplicationError,
@@ -22,6 +22,7 @@ import {
   type AgentRunRepository,
   type AgentRunSnapshot,
 } from "../domain/agent-run";
+import { HumanReviewQuestionBatchSchema, HumanReviewAnswerSchema, HumanReviewStatusSchema } from "../domain/human-review";
 
 const AGENT_RUN_REQUESTED_EVENT_TYPE = "agent.run.requested";
 const AGENT_RUN_REQUESTED_EVENT_VERSION = 1;
@@ -107,7 +108,7 @@ export class DrizzleAgentRunRepository implements AgentRunRepository {
       .where(and(eq(agentRuns.id, agentRunId), eq(agentRuns.ownerId, ownerId)))
       .limit(1);
 
-    return agentRun ? toAgentRunSnapshot(agentRun) : null;
+    return agentRun ? this.withHumanReview(toAgentRunSnapshot(agentRun)) : null;
   }
 
   async findInFlightRun(query: AgentRunInFlightQuery): Promise<AgentRunSnapshot | null> {
@@ -120,12 +121,49 @@ export class DrizzleAgentRunRepository implements AgentRunRepository {
         eq(agentRuns.runType, query.runType),
         eq(agentRuns.targetType, query.targetType),
         eq(agentRuns.targetId, query.targetId),
-        inArray(agentRuns.status, ["queued", "running"]),
+        inArray(agentRuns.status, ["queued", "running", "waiting_for_human"]),
       ))
       .orderBy(desc(agentRuns.createdAt))
       .limit(1);
 
-    return agentRun ? toAgentRunSnapshot(agentRun) : null;
+    return agentRun ? this.withHumanReview(toAgentRunSnapshot(agentRun)) : null;
+  }
+
+  private async withHumanReview(snapshot: AgentRunSnapshot): Promise<AgentRunSnapshot> {
+    if (snapshot.runType !== "plan_generate") {
+      return snapshot;
+    }
+    const database = getDatabase();
+    const [review] = await database.select().from(agentHumanReviews).where(
+      eq(agentHumanReviews.agentRunId, snapshot.id),
+    ).limit(1);
+    if (!review) {
+      return snapshot;
+    }
+    const questions = HumanReviewQuestionBatchSchema.parse(review.questionsJson);
+    const answers = Array.isArray(review.answersJson)
+      ? review.answersJson.map((value) => HumanReviewAnswerSchema.parse(value))
+      : [];
+    return {
+      ...snapshot,
+      humanReview: {
+        id: review.id,
+        agentRunId: review.agentRunId,
+        ownerId: review.ownerId,
+        goalId: review.goalId,
+        threadId: review.threadId,
+        schemaVersion: review.schemaVersion,
+        graphVersion: review.graphVersion,
+        questions,
+        answers,
+        status: HumanReviewStatusSchema.parse(review.status),
+        idempotencyKey: review.idempotencyKey,
+        expiresAt: review.expiresAt,
+        submittedAt: review.submittedAt,
+        createdAt: review.createdAt,
+        updatedAt: review.updatedAt,
+      },
+    };
   }
 
   async cancelOwnedRun(ownerId: string, agentRunId: string): Promise<AgentRunCancellationResult> {

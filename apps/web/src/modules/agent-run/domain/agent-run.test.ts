@@ -15,7 +15,7 @@ import {
 } from "./agent-run";
 
 describe("AgentRun 协作式取消状态机", () => {
-  it.each(["queued", "running"] as const)("允许取消 %s 任务", (status) => {
+  it.each(["queued", "running", "waiting_for_human"] as const)("允许取消 %s 任务", (status) => {
     expect(getAgentRunCancellationDecision(status)).toBe("cancel");
   });
 

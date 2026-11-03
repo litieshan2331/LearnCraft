@@ -15,7 +15,6 @@ const READ_TOOLS: ModelToolDefinition[] = [
   { name: 'get_wrong_question', description: '读取当前会话关联的现有测评错题、用户作答和评分。', parameters: EMPTY },
   { name: 'get_user_profile', description: '读取当前用户必要画像；缺失字段保留为空。', parameters: EMPTY },
   { name: 'get_mastery_state', description: '读取当前目标或知识点的掌握度；不写入。', parameters: EMPTY },
-  { name: 'get_learning_context', description: '读取当前会话相关的学习经历与验证记录。', parameters: EMPTY },
   { name: 'load_skill', description: '按注册 skill_id 读取教学 Skill 正文；需要其中链接的场景资料时，再传已登记的 reference_id 单独读取。只影响教学方式，不执行脚本。', parameters: { type: 'object', properties: { skill_id: { type: 'string' }, reference_id: { type: 'string', description: '可选，仅使用 Skill 正文列出的参考资料 ID，禁止文件路径。' } }, required: ['skill_id'], additionalProperties: false } },
   TAVILY_SEARCH_TOOL,
 ];
