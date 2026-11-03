@@ -8,6 +8,8 @@
  * - getAgentRunCancellationDecision：判断任务是否允许协作式取消。
  */
 
+import type { HumanReviewSnapshot } from "./human-review";
+
 export const AGENT_RUN_TYPES = [
   "assessment_generate",
   "plan_generate",
@@ -19,6 +21,7 @@ export const AGENT_RUN_TYPES = [
 export const AGENT_RUN_STATUSES = [
   "queued",
   "running",
+  "waiting_for_human",
   "succeeded",
   "failed",
   "cancelled",
@@ -59,6 +62,7 @@ export interface AgentRunSnapshot {
   assessmentResult?: AgentRunAssessmentResultSnapshot;
   planResult?: AgentRunPlanResultSnapshot;
   error?: AgentRunErrorSnapshot;
+  humanReview?: HumanReviewSnapshot;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -121,7 +125,7 @@ export class AgentRunApplicationError extends Error {
 }
 
 export function getAgentRunCancellationDecision(status: AgentRunStatus): AgentRunCancellationDecision {
-  if (status === "queued" || status === "running") {
+  if (status === "queued" || status === "running" || status === "waiting_for_human") {
     return "cancel";
   }
 

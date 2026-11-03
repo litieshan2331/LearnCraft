@@ -11,6 +11,7 @@ import {
   TAVILY_SEARCH_TOOL,
   TavilyMcpError,
   TavilyToolGateway,
+  compactTavilyResults,
   isNetworkError,
   parseExtractedSources,
   parseSearchSources,
@@ -183,6 +184,17 @@ describe('MCP 调用失败归类', () => {
 });
 
 describe('MCP 结果解析', () => {
+  it('用与线上网关相同的四字段契约压缩原始 search/extract payload', () => {
+    const result = compactTavilyResults({
+      query: 'TypeScript',
+      searchPayload: { results: [{ title: '来源', url: 'https://example.com/a', content: '摘要', score: 0.9, extra: 'drop' }] },
+      extractPayload: { results: [{ url: 'https://example.com/a', raw_content: '正文' }] },
+      extractTopResults: 1,
+    });
+    expect(Object.keys(result).sort()).toEqual(['code', 'data', 'message', 'ok']);
+    expect(result.data).toMatchObject({ query: 'TypeScript', sources: [{ rank: 1, title: '来源', url: 'https://example.com/a', content: '正文' }] });
+  });
+
   it('优先使用 structuredContent，其次解析 content 文本', () => {
     expect(readMcpPayload({ structuredContent: { results: [] } }, 'CODE')).toEqual({ results: [] });
     expect(

@@ -5,6 +5,7 @@
 - `agent-workflow-registry.ts`：`AgentWorkflowRegistry`，把 `run_type` 映射到已注册的工作流。
 - `tool-aware-generator.ts`：`runReactAgentSession` —— 单会话 ReAct 循环（工具回传、校验反馈自纠、
   轮数与工具调用双上限），可选 `onProgress` 上报实时进度。
+- `tool-context-token-measurement.ts`：比较原始工具结果与四字段结果的字节、估算 token 和多轮累计节省；不发起外部请求。
 - `trace-writer.ts`：`TraceWriter` —— Worker 完整模型与工具观测的持久化写入端口。
 - `agent-progress.ts`：实时进度事件契约 —— `AgentProgressStep` / `AgentProgressEvent` /
   `AgentProgressReporter`；其中 `thinking.delta` 与 `thinking.completed` 携带模型思考原文

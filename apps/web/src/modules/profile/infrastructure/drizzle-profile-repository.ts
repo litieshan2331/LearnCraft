@@ -42,7 +42,7 @@ type DiagnosticAssessmentRecord = typeof assessments.$inferSelect;
 
 const IDEMPOTENCY_SCOPE = "learning_goal.create";
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
-const ACTIVE_AGENT_RUN_STATUSES = ["queued", "running"] as const;
+const ACTIVE_AGENT_RUN_STATUSES = ["queued", "running", "waiting_for_human"] as const;
 
 export class DrizzleProfileRepository implements ProfileRepository {
   async findProfile(ownerId: string): Promise<LearnerProfileSnapshot | null> {

@@ -95,7 +95,7 @@ export const agentRuns = agentSchema.table("agent_runs", {
   ),
   check(
     "ck_agent_runs_status",
-    sql`${table.status} in ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'expired')`,
+    sql`${table.status} in ('queued', 'running', 'waiting_for_human', 'succeeded', 'failed', 'cancelled', 'expired')`,
   ),
   check("ck_agent_runs_input_tokens", sql`${table.inputTokens} >= 0`),
   check("ck_agent_runs_output_tokens", sql`${table.outputTokens} >= 0`),
@@ -193,6 +193,42 @@ export const learningAssistantTraceEvents = agentSchema.table("learning_assistan
 export const langgraphCheckpointMigrations = agentSchema.table("checkpoint_migrations", {
   version: integer("v").primaryKey(),
 });
+
+/**
+ * 学习路线 Human-in-the-Loop 人工确认记录。
+ * 问题快照和答案与 AgentRun 输入快照分离保存，支持权限校验、幂等提交、过期处理和同线程恢复。
+ */
+export const agentHumanReviews = agentSchema.table("human_reviews", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  agentRunId: uuid("agent_run_id")
+    .notNull()
+    .unique()
+    .references(() => agentRuns.id, { onDelete: "cascade" }),
+  ownerId: uuid("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  goalId: uuid("goal_id")
+    .notNull()
+    .references(() => learningGoals.id, { onDelete: "cascade" }),
+  threadId: varchar("thread_id", { length: 255 }).notNull(),
+  schemaVersion: varchar("schema_version", { length: 50 }).notNull(),
+  graphVersion: varchar("graph_version", { length: 100 }).notNull(),
+  questionsJson: jsonb("questions_json").notNull(),
+  answersJson: jsonb("answers_json").notNull().default([]),
+  status: varchar("status", { length: 20 }).notNull().default("waiting"),
+  idempotencyKey: varchar("idempotency_key", { length: 255 }),
+  expiresAt: nullableTimestampColumn("expires_at"),
+  submittedAt: nullableTimestampColumn("submitted_at"),
+  createdAt: createdAtColumn(),
+  updatedAt: updatedAtColumn(),
+}, (table) => [
+  check(
+    "ck_human_reviews_status",
+    sql`${table.status} in ('waiting', 'submitted', 'expired', 'cancelled')`,
+  ),
+  unique("uq_human_reviews_run_idempotency").on(table.agentRunId, table.idempotencyKey),
+  index("idx_human_reviews_owner_status_expires").on(table.ownerId, table.status, table.expiresAt),
+]);
 
 /** LangGraph 图状态主表；保存 thread、命名空间、检查点 JSON 与元数据。 */
 export const langgraphCheckpoints = agentSchema.table("checkpoints", {

@@ -32,6 +32,7 @@
  * - PlanGenerationWorkflowDeps / createPlanGenerateWorkflow。
  */
 
+import { randomUUID } from 'node:crypto';
 import type { ToolGatewayPort } from '../../application/services/tool-aware-generator.js';
 import { runReactAgentSession } from '../../application/services/tool-aware-generator.js';
 import {
@@ -65,6 +66,16 @@ import {
 import { PlanRecoveryNormalizationError, normalizeRecoveryDocument } from './recovery/index.js';
 import { PlanGenerationInputSchema } from './schema/index.js';
 import type { TraceWriter } from '../../application/services/trace-writer.js';
+import type { BaseCheckpointSaver } from '@langchain/langgraph';
+import {
+  createPlanHumanReviewGraph,
+  createPlanHumanReviewResume,
+  HumanReviewAnswerBatchSchema,
+  HumanReviewQuestionBatchSchema,
+  isPlanHumanReviewInterrupt,
+  type HumanReviewAnswer,
+  type HumanReviewQuestionBatch,
+} from './human-review.js';
 export * from './schema/index.js';
 
 /** 路线输出的解析结果：通过时给出文档，失败时给出脱敏字段路径。 */
@@ -163,12 +174,35 @@ export interface PlanGenerationDeps {
   traceWriter?: TraceWriter;
   /** 按工作流分层加载的教学 Skill；未提供时保持旧提示词行为。 */
   learningSkills?: LearningSkillsPort;
+  /** Human-in-the-Loop 必须使用 PostgreSQL Checkpointer，不能退化为进程内等待。 */
+  checkpointer?: BaseCheckpointSaver;
+  /** 生产装配默认开启；测试装配可显式关闭以复用旧路线合同测试。 */
+  humanReviewEnabled?: boolean;
+  /** 读取或写入同一 AgentRun 的人工确认快照。 */
+  getHumanReview?: (agentRunId: string) => Promise<{
+    reviewId: string;
+    threadId: string;
+    schemaVersion: string;
+    graphVersion: string;
+    questions: Record<string, unknown>;
+    answers: unknown[];
+    status: string;
+    expiresAt: string | null;
+  } | null>;
 }
 
 export interface PlanGenerationResult {
   /** 与 Python 完全一致的 6 个摘要键，直接写入 output_summary_json。 */
   outputSummary: Record<string, unknown>;
   usage: { inputTokens: number; outputTokens: number };
+  humanReview?: {
+    reviewId: string;
+    threadId: string;
+    graphVersion: string;
+    schemaVersion: string;
+    questions: Record<string, unknown>;
+    expiresAt: string;
+  };
 }
 
 /** 执行一次学习路线生成；失败时抛出带稳定错误码的 ModelGatewayError 或 CoreInternalClientError。 */
@@ -205,6 +239,134 @@ export async function runPlanGenerate(
     return response;
   };
 
+  const humanReviewEnabled = deps.humanReviewEnabled ?? (deps.checkpointer !== undefined && deps.getHumanReview !== undefined);
+  if (humanReviewEnabled && (deps.checkpointer === undefined || deps.getHumanReview === undefined)) {
+    throw new ModelGatewayError('PLAN_HUMAN_REVIEW_CHECKPOINTER_MISSING', '学习路线人工确认未配置 PostgreSQL Checkpointer。', false);
+  }
+
+  let humanAnswers: HumanReviewAnswer[] = [];
+  if (humanReviewEnabled && deps.checkpointer !== undefined && deps.getHumanReview !== undefined) {
+  const threadId = 'plan_generate:' + input.runId;
+  // review_id 是人工确认记录的独立引用；AgentRun ID 只用于任务路由，thread_id 只用于 Checkpoint 恢复。
+  const reviewId = randomUUID();
+  const graphVersion = 'plan_generate.hitl.v1';
+  const reviewSchemaVersion = 'plan_generation_human_review.v1';
+  const reviewExpiresAt = new Date(Date.now() + 2 * 60 * 60 * 1_000);
+  const reviewGraph = createPlanHumanReviewGraph({
+    checkpointer: deps.checkpointer,
+    generateQuestions: async (): Promise<HumanReviewQuestionBatch> => {
+      const response = await complete({
+        agentRunId: input.runId,
+        connection,
+        turnNo: 1,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              '你是学习路线需求澄清助手。',
+              '请仅返回 JSON，不要输出 Markdown、思考过程或额外文字。',
+              '必须生成 1-3 个问题；每个问题必须有恰好 3 个选项；第三个选项必须是 custom_text。',
+              '问题应帮助学习路线更贴合学习重点、节奏、内容偏好或实践方式。',
+              'JSON 合同：{"schema_version":"plan_generation_human_review.v1","review_id":"' + reviewId + '","questions":[{"question_id":"...","prompt":"...","options":[{"option_id":"...","label":"...","kind":"preset","input":null},{"option_id":"...","label":"...","kind":"preset","input":null},{"option_id":"custom","label":"自定义","kind":"custom_text","input":{"min_length":1,"max_length":500}}]}]}',
+            ].join('\\n'),
+          },
+          { role: 'user', content: '完整学习上下文：' + JSON.stringify(value) },
+        ],
+        tools: [],
+        toolChoice: 'none',
+      });
+      let raw: unknown;
+      try {
+        raw = JSON.parse(extractJsonText(response.message.content ?? ''));
+      } catch {
+        throw new ModelGatewayError('PLAN_HUMAN_REVIEW_INVALID', '模型返回的人工确认问题不是合法 JSON。', false);
+      }
+      const parsed = HumanReviewQuestionBatchSchema.safeParse(raw);
+      if (!parsed.success) {
+        throw new ModelGatewayError('PLAN_HUMAN_REVIEW_INVALID', '模型返回的人工确认问题不符合结构化合同。', false);
+      }
+      return parsed.data;
+    },
+  });
+  const graphConfig = {
+    configurable: { thread_id: threadId },
+    durability: 'sync' as const,
+  };
+  const graphState = await reviewGraph.getState(graphConfig);
+  if (graphState.next.length === 0) {
+    let firstResult: { __interrupt__?: Array<{ value: unknown }> };
+    try {
+      firstResult = await reviewGraph.invoke({ review: null, answers: null }, graphConfig) as {
+        __interrupt__?: Array<{ value: unknown }>;
+      };
+    } catch (error) {
+      // 不同 LangGraph JS 版本对 interrupt 分别返回 __interrupt__ 或抛出 GraphInterrupt，
+      // 两种形式都必须转换为同一个 waiting_for_human 结果，不能把正常暂停写成失败。
+      if (!isPlanHumanReviewInterrupt(error)) throw error;
+      firstResult = {
+        __interrupt__: (error as { interrupts?: Array<{ value: unknown }> }).interrupts ?? [],
+      };
+    }
+    const interruptValue = firstResult.__interrupt__?.[0]?.value as { review?: unknown } | undefined;
+    if (interruptValue !== undefined) {
+      const review = HumanReviewQuestionBatchSchema.safeParse(interruptValue?.review);
+      if (!review.success) {
+        throw new ModelGatewayError('PLAN_HUMAN_REVIEW_INVALID', '人工确认中断载荷不符合合同。', false);
+      }
+      if (review.data.review_id !== reviewId) {
+        throw new ModelGatewayError('PLAN_HUMAN_REVIEW_INVALID', '人工确认 review_id 与当前确认记录不匹配。', false);
+      }
+      return {
+        outputSummary: { human_review: true, review_id: review.data.review_id, model_id: connection.modelId },
+        usage,
+        humanReview: {
+          reviewId: review.data.review_id,
+          threadId,
+          graphVersion,
+          schemaVersion: reviewSchemaVersion,
+          questions: review.data,
+          expiresAt: reviewExpiresAt.toISOString(),
+        },
+      };
+    }
+  } else {
+    const savedReview = await deps.getHumanReview(input.runId);
+    if (savedReview === null) {
+      throw new ModelGatewayError('PLAN_HUMAN_REVIEW_NOT_SUBMITTED', '人工确认尚未提交，不能恢复学习路线。', false);
+    }
+    if (savedReview.threadId !== threadId) {
+      throw new ModelGatewayError('PLAN_HUMAN_REVIEW_THREAD_MISMATCH', '人工确认线程与 AgentRun 不匹配。', false);
+    }
+    if (savedReview.status === 'waiting') {
+      const waitingQuestions = HumanReviewQuestionBatchSchema.safeParse(savedReview.questions);
+      if (!waitingQuestions.success) {
+        throw new ModelGatewayError('PLAN_HUMAN_REVIEW_INVALID', '已保存的人工确认问题不符合结构化合同。', false);
+      }
+      return {
+        outputSummary: { human_review: true, review_id: waitingQuestions.data.review_id, model_id: connection.modelId },
+        usage,
+        humanReview: {
+          reviewId: waitingQuestions.data.review_id,
+          threadId,
+          graphVersion,
+          schemaVersion: reviewSchemaVersion,
+          questions: waitingQuestions.data,
+          expiresAt: savedReview.expiresAt ?? reviewExpiresAt.toISOString(),
+        },
+      };
+    }
+    if (savedReview.status !== 'submitted') {
+      throw new ModelGatewayError('PLAN_HUMAN_REVIEW_NOT_SUBMITTED', '人工确认尚未提交，不能恢复学习路线。', false);
+    }
+    const answers = HumanReviewAnswerBatchSchema.safeParse({ review_id: savedReview.reviewId, answers: savedReview.answers });
+    if (!answers.success) {
+      throw new ModelGatewayError('PLAN_HUMAN_REVIEW_INVALID', '人工确认答案不符合结构化合同。', false);
+    }
+    humanAnswers = answers.data.answers;
+    await reviewGraph.invoke(createPlanHumanReviewResume(answers.data), graphConfig);
+  }
+  }
+
   const messages = [
     {
       role: 'system' as const,
@@ -213,7 +375,7 @@ export async function runPlanGenerate(
         deps.learningSkills?.buildPromptSection('plan_generate') ?? '',
       ),
     },
-    { role: 'user' as const, content: buildUserPrompt(value) },
+    { role: 'user' as const, content: buildUserPrompt(value) + (humanAnswers.length === 0 ? '' : '\\n用户人工确认答案：' + JSON.stringify(humanAnswers)) },
   ];
 
   const outcome = await runReactAgentSession({
@@ -291,7 +453,11 @@ export function createPlanGenerateWorkflow(deps: PlanGenerationWorkflowDeps): Ag
             : { progress: deps.createProgressReporter(executionState.runId) }),
         },
       );
-      return { outputSummary: result.outputSummary, usage: result.usage };
+      return {
+        outputSummary: result.outputSummary,
+        usage: result.usage,
+        ...(result.humanReview === undefined ? {} : { humanReview: result.humanReview }),
+      };
     },
   };
 }

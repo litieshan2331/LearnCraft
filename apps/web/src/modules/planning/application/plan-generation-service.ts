@@ -14,7 +14,7 @@ import {
   type PlanGenerationRequest,
 } from "../domain/plan-generation";
 
-const GRAPH_VERSION = "plan_generate.v1";
+const GRAPH_VERSION = "plan_generate.hitl.v1";
 const PROMPT_VERSION = "plan_generate.v1";
 const INPUT_SCHEMA_VERSION = "plan_generate.input.v1";
 const OUTPUT_SCHEMA_VERSION = "learning_plan.v1";

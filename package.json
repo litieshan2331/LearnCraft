@@ -20,6 +20,7 @@
     "eval:build": "node scripts/agent-eval-command.mjs build",
     "eval:run": "node scripts/agent-eval-command.mjs run",
     "eval:score": "node scripts/agent-eval-command.mjs score",
+    "measure:tool-context": "node scripts/tool-context-benchmark.mjs",
     "test:agent-worker": "pnpm --filter @learncraft/agent-worker-ts test",
     "typecheck:agent-worker": "pnpm --filter @learncraft/agent-worker-ts typecheck",
     "test:shared": "pnpm --filter @learncraft/security-primitives test",

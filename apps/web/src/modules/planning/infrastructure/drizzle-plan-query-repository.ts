@@ -135,7 +135,7 @@ async function findInFlightRunId(
       eq(agentRuns.runType, runType),
       eq(agentRuns.targetType, "plan_node"),
       eq(agentRuns.targetId, planNodeId),
-      inArray(agentRuns.status, ["queued", "running"]),
+      inArray(agentRuns.status, ["queued", "running", "waiting_for_human"]),
     ))
     .orderBy(desc(agentRuns.createdAt))
     .limit(1);

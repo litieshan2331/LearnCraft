@@ -12,3 +12,5 @@
   `plan_generate.py` 底部的同名函数族。
 
 会话循环复用 `../../application/services/tool-aware-generator.ts` 的 `runReactAgentSession`。
+
+启用 Human-in-the-Loop 时，Worker 先使用 PostgreSQL Checkpointer 编译固定的人工确认图，模型基于冻结的目标、画像和前测快照生成 1–3 个问题；TypeScript 校验后调用 `interrupt()`，AgentRun 进入 `waiting_for_human` 并结束当前 BullMQ Job。答案提交后以 `plan_generate:<agent_run_id>` 作为同一 `thread_id`，通过 `Command({ resume })` 恢复，再把结构化答案交给现有 `runReactAgentSession` 生成并校验 `learning_plan.v1`。`interrupt()` 前的节点只读取和构造问题，不执行不可幂等副作用。

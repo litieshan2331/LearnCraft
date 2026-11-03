@@ -92,6 +92,13 @@
       "when": 1791775250250,
       "tag": "0012_learning_assistant_trace_events",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793446921249,
+      "tag": "0013_sticky_vertigo",
+      "breakpoints": true
     }
   ]
 }

@@ -89,7 +89,7 @@ function runTypeLabel(value: string): string {
 
 /** 将运行状态转换为中文标签。 */
 function statusLabel(value: string): string {
-  return ({ queued: "排队中", running: "运行中", succeeded: "已完成", failed: "失败", cancelled: "已取消", expired: "已过期" } as Record<string, string>)[value] ?? value;
+  return ({ queued: "排队中", running: "运行中", waiting_for_human: "等待确认", succeeded: "已完成", failed: "失败", cancelled: "已取消", expired: "已过期" } as Record<string, string>)[value] ?? value;
 }
 
 /** 为需要节点上下文的工作流生成可读内容节点标签。 */

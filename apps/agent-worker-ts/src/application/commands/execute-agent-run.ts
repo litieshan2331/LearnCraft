@@ -68,6 +68,15 @@ export interface AgentWorkflowResult {
   outputSummary: Record<string, unknown>;
   /** 跨阶段累计的真实 token 用量；调用方必须写入 token 列（与 Python 恒定写 0 的差异）。 */
   usage: { inputTokens: number; outputTokens: number };
+  /** 人工确认暂停结果；存在时不写 succeeded，而是保存 Checkpoint 后结束当前 Job。 */
+  humanReview?: {
+    reviewId: string;
+    threadId: string;
+    graphVersion: string;
+    schemaVersion: string;
+    questions: Record<string, unknown>;
+    expiresAt: string;
+  };
 }
 
 export interface AgentWorkflow {
@@ -89,6 +98,12 @@ export interface AgentRunRepositoryPort {
     outputTokens?: number;
     actualModelProfile?: string | null;
   }): Promise<void>;
+  markWaitingForHuman?(input: {
+    runId: string;
+    review: NonNullable<AgentWorkflowResult['humanReview']>;
+  }): Promise<void>;
+  /** 对同一 LangGraph thread_id 加互斥锁；未实现时由队列 jobId 幂等兜底。 */
+  withThreadLock?<T>(threadId: string, work: () => Promise<T>): Promise<T>;
   markFailed(input: { runId: string; errorCode: string; errorSummary: string }): Promise<void>;
   markRetryScheduled(input: {
     runId: string;
@@ -101,6 +116,7 @@ export interface AgentRunRepositoryPort {
 
 export type ExecuteAgentRunOutcome =
   | { status: 'skipped'; reason: 'already_finished' | 'cancelled' }
+  | { status: 'waiting_for_human'; runId: string }
   | { status: 'succeeded'; runId: string };
 
 /**
@@ -137,7 +153,30 @@ export async function executeAgentRun(input: {
     if (workflow === null) {
       throw new AgentWorkflowNotRegisteredError(executionState.runType);
     }
-    const result = await workflow.run(executionState);
+    const runWorkflow = () => workflow.run(executionState);
+    const result = executionState.runType === 'plan_generate' && input.repository.withThreadLock !== undefined
+      ? await input.repository.withThreadLock('plan_generate:' + executionState.runId, runWorkflow)
+      : await runWorkflow();
+    if (result.humanReview !== undefined) {
+      if (input.repository.markWaitingForHuman === undefined) {
+        throw new Error('AgentRun Repository 未提供人工确认暂停能力。');
+      }
+      await input.repository.markWaitingForHuman({
+        runId: executionState.runId,
+        review: result.humanReview,
+      });
+      await input.repository.traceWriter?.append({
+        runId: executionState.runId,
+        eventType: 'run.waiting_for_human',
+        finishedAt: new Date(),
+        payload: {
+          review_id: result.humanReview.reviewId,
+          thread_id: result.humanReview.threadId,
+          expires_at: result.humanReview.expiresAt,
+        },
+      });
+      return { status: 'waiting_for_human', runId: executionState.runId };
+    }
     const modelId = result.outputSummary.model_id;
     await input.repository.markSucceeded({
       runId: executionState.runId,
@@ -177,6 +216,9 @@ function classifyExecutionError(error: unknown): unknown {
   }
   if (error instanceof CredentialDecryptionError) {
     return new NonRetryableAgentRunError(error.code, error.message);
+  }
+  if (error instanceof Error && error.message === 'AGENT_HITL_THREAD_LOCK_TIMEOUT') {
+    return new RetryableAgentRunError('AGENT_HITL_THREAD_LOCK_TIMEOUT', '人工确认线程正在由其他 Worker 恢复。');
   }
   return error;
 }

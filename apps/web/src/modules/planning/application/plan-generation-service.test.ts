@@ -102,7 +102,7 @@ describe("PlanGenerationService", () => {
       runType: "plan_generate",
       targetType: "learning_goal",
       targetId: goalId,
-      graphVersion: "plan_generate.v1",
+      graphVersion: "plan_generate.hitl.v1",
       inputSummaryJson: {
         goal: { id: goalId },
         learner_profile: { profile_version: 3, current_level: "intermediate" },

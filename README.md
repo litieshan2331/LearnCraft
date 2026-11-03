@@ -206,6 +206,22 @@ pnpm eval:score -- --owner-id <用户UUID> --dataset evals/datasets/built.json -
 
 评测需要独立的 Judge 模型连接；真实模型调用和真实数据库写入只应在本地开发环境中按需启用，具体开关和环境变量见 [`apps/agent-worker-ts/README.md`](./apps/agent-worker-ts/README.md)。
 
+工具上下文 token 基准只在显式开启时调用一次 Tavily 原始 MCP：先设置 `infra/.env` 中的
+`TAVILY_BENCHMARK_ALLOW_NETWORK=true`、`TAVILY_BENCHMARK_API_KEY` 和
+`TAVILY_BENCHMARK_QUERY`，再运行：
+
+```powershell
+pnpm measure:tool-context
+```
+
+报告比较原始 `search/extract` payload 与线上 `ok/code/message/data` 四字段结果的字节数、估算 token、
+以及工具结果在后续多轮模型请求中重复携带时的累计节省。估算使用 UTF-8 字节数除以
+`TAVILY_BENCHMARK_BYTES_PER_TOKEN`；真实账单和精确输入 token 以模型网关返回的 `inputTokens` 为准。
+该命令默认关闭网络，开启后会产生 Tavily 配额/费用，所有查询、结果数、截断和输出文件参数均可由
+`infra/.env.example` 中的 `TAVILY_BENCHMARK_*` 变量覆盖。
+
+完整公式和结果解释见 [`docs/tool-context-token-benchmark.md`](./docs/tool-context-token-benchmark.md)。
+
 ## 项目结构
 
 ```text

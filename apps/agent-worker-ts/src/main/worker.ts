@@ -174,6 +174,9 @@ async function main(): Promise<void> {
   workflows.register('plan_generate', createPlanGenerateWorkflow({
     ...workflowDeps,
     reactMaxTurns: reactMaxTurns.planGenerate,
+    humanReviewEnabled: true,
+    checkpointer: learningAssistantCheckpointer.saver,
+    getHumanReview: (runId) => repository.getHumanReview(runId),
   }));
   workflows.register('card_content_generate', createCardContentGenerateWorkflow({
     ...workflowDeps,
