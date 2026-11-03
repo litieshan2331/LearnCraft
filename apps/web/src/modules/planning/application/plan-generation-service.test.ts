@@ -6,7 +6,7 @@
  * - PlanGenerationService.request：前置条件不满足时拒绝创建任务。
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   AgentRunProductionResult,
@@ -18,7 +18,11 @@ import {
   type PlanGenerationAgentRunRequester,
   type PlanGenerationContextRepository,
 } from "../domain/plan-generation";
-import { PlanGenerationService } from "./plan-generation-service";
+import { PlanGenerationService, readPlanHumanReviewEnabled } from "./plan-generation-service";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const ownerId = "d8418b49-5ca9-4aeb-b6e0-25b35b17fb8f";
 const goalId = "04d90a58-a556-45d2-9e63-108e2a261d58";
@@ -86,6 +90,15 @@ class FakeAgentRunRequester implements PlanGenerationAgentRunRequester {
 }
 
 describe("PlanGenerationService", () => {
+  it("严格读取 AGENT_PLAN_HUMAN_REVIEW_ENABLED", () => {
+    vi.stubEnv("AGENT_PLAN_HUMAN_REVIEW_ENABLED", "false");
+    expect(readPlanHumanReviewEnabled()).toBe(false);
+    vi.stubEnv("AGENT_PLAN_HUMAN_REVIEW_ENABLED", "true");
+    expect(readPlanHumanReviewEnabled()).toBe(true);
+    vi.stubEnv("AGENT_PLAN_HUMAN_REVIEW_ENABLED", "1");
+    expect(() => readPlanHumanReviewEnabled()).toThrow(/true 或 false/);
+  });
+
   it("将目标、当前画像和已评分前测快照组装为 plan_generate 输入", async () => {
     const requester = new FakeAgentRunRequester();
     const service = new PlanGenerationService(new FakeContextRepository(), requester);
@@ -112,6 +125,17 @@ describe("PlanGenerationService", () => {
         },
       },
     });
+  });
+
+  it("关闭开关时创建不带人工确认的路线版本", async () => {
+    vi.stubEnv("AGENT_PLAN_HUMAN_REVIEW_ENABLED", "false");
+    const requester = new FakeAgentRunRequester();
+    await new PlanGenerationService(new FakeContextRepository(), requester).request({
+      ownerId,
+      goalId,
+      idempotencyKey: "3b8b2f35-bf65-4fa4-a3f8-76d1a00cc6ac",
+    });
+    expect(requester.input?.graphVersion).toBe("plan_generate.v1");
   });
 
   it("没有已评分前测或当前画像时拒绝创建路线任务", async () => {

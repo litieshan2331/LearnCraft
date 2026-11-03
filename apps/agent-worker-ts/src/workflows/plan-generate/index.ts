@@ -447,6 +447,8 @@ export function createPlanGenerateWorkflow(deps: PlanGenerationWorkflowDeps): Ag
         { runId: executionState.runId, inputSummaryJson: executionState.inputSummaryJson },
         {
           ...deps,
+          // 任务创建时的 graph_version 是模式事实来源；重启或修改 .env 不会改变已排队任务。
+          humanReviewEnabled: executionState.graphVersion === 'plan_generate.hitl.v1',
           toolGateway: deps.createToolGateway(executionState.ownerId),
           ...(deps.createProgressReporter === undefined
             ? {}

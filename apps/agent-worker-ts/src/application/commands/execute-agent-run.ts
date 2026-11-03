@@ -101,6 +101,7 @@ export interface AgentRunRepositoryPort {
   markWaitingForHuman?(input: {
     runId: string;
     review: NonNullable<AgentWorkflowResult['humanReview']>;
+    usage: AgentWorkflowResult['usage'];
   }): Promise<void>;
   /** 对同一 LangGraph thread_id 加互斥锁；未实现时由队列 jobId 幂等兜底。 */
   withThreadLock?<T>(threadId: string, work: () => Promise<T>): Promise<T>;
@@ -164,6 +165,7 @@ export async function executeAgentRun(input: {
       await input.repository.markWaitingForHuman({
         runId: executionState.runId,
         review: result.humanReview,
+        usage: result.usage,
       });
       await input.repository.traceWriter?.append({
         runId: executionState.runId,

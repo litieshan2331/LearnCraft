@@ -253,6 +253,15 @@ export function readAgentToolMaxCalls(): number {
   return readPositiveInteger('AGENT_TOOL_MAX_CALLS', 3);
 }
 
+/** 读取学习路线 Human-in-the-Loop 开关；缺省保持当前启用行为，显式值只能是 true/false。 */
+export function readPlanHumanReviewEnabled(): boolean {
+  const raw = process.env.AGENT_PLAN_HUMAN_REVIEW_ENABLED?.trim();
+  if (raw === undefined || raw.length === 0) return true;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  throw new Error('环境变量 AGENT_PLAN_HUMAN_REVIEW_ENABLED 必须是 true 或 false。');
+}
+
 /** 各工作流的 ReAct 轮数上限：一次运行内允许的模型调用次数（含只产生工具调用的轮次）。 */
 export interface AgentReactTurnsConfig {
   assessmentGenerate: number;

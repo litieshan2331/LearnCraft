@@ -14,11 +14,19 @@ import {
   type PlanGenerationRequest,
 } from "../domain/plan-generation";
 
-const GRAPH_VERSION = "plan_generate.hitl.v1";
 const PROMPT_VERSION = "plan_generate.v1";
 const INPUT_SCHEMA_VERSION = "plan_generate.input.v1";
 const OUTPUT_SCHEMA_VERSION = "learning_plan.v1";
 const REQUESTED_MODEL_PROFILE = "account_default_openai_compatible";
+
+/** 读取 Web 侧学习路线 HITL 开关；缺省保持当前启用行为，显式值只能是 true/false。 */
+export function readPlanHumanReviewEnabled(): boolean {
+  const raw = process.env.AGENT_PLAN_HUMAN_REVIEW_ENABLED?.trim();
+  if (raw === undefined || raw.length === 0) return true;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error("环境变量 AGENT_PLAN_HUMAN_REVIEW_ENABLED 必须是 true 或 false。");
+}
 
 export class PlanGenerationService {
   constructor(
@@ -71,6 +79,7 @@ export class PlanGenerationService {
         mastery_summary: context.assessmentMasterySummary,
       },
     };
+    const humanReviewEnabled = readPlanHumanReviewEnabled();
 
     return this.agentRunRequester.request({
       ownerId: input.ownerId,
@@ -79,7 +88,7 @@ export class PlanGenerationService {
       targetType: "learning_goal",
       targetId: context.goalId,
       idempotencyKey: input.idempotencyKey,
-      graphVersion: GRAPH_VERSION,
+      graphVersion: humanReviewEnabled ? "plan_generate.hitl.v1" : "plan_generate.v1",
       promptVersion: PROMPT_VERSION,
       inputSchemaVersion: INPUT_SCHEMA_VERSION,
       outputSchemaVersion: OUTPUT_SCHEMA_VERSION,

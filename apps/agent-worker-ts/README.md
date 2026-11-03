@@ -137,6 +137,7 @@ node --experimental-strip-types src/main/worker.ts
 | `CREDENTIAL_ENCRYPTION_KEY` / `_VERSION` | 凭据解密主密钥与版本 |
 | `MODEL_EGRESS_*` | 受控出网参数；生产启用出网时必须配置代理 |
 | `AGENT_TOOL_MAX_CALLS` | 单次运行可见的联网工具调用上限（默认 6） |
+| `AGENT_PLAN_HUMAN_REVIEW_ENABLED` | 学习路线是否先进入 Human-in-the-Loop 意图澄清；只允许 `true` / `false`，默认 `true` |
 | `AGENT_REACT_MAX_TURNS_ASSESSMENT` / `_POSTTEST` / `_PLAN` / `_CARD_CONTENT` | 四个工作流各自的 ReAct 轮数上限（默认 5 / 5 / 10 / 5） |
 
 Python 运行时已下线（编排中不再有任何 Python 服务），因此 Dispatcher 领取**全部** `agent.run.requested` 事件，

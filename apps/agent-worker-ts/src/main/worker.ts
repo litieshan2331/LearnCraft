@@ -17,6 +17,7 @@ import {
   formatRedisConnection,
   readAgentQueuePoolConfigs,
   readAgentReactMaxTurns,
+  readPlanHumanReviewEnabled,
   readLearningAssistantQueueConfig,
   readAgentToolMaxCalls,
   readCoreInternalClientOptions,
@@ -174,7 +175,7 @@ async function main(): Promise<void> {
   workflows.register('plan_generate', createPlanGenerateWorkflow({
     ...workflowDeps,
     reactMaxTurns: reactMaxTurns.planGenerate,
-    humanReviewEnabled: true,
+    humanReviewEnabled: readPlanHumanReviewEnabled(),
     checkpointer: learningAssistantCheckpointer.saver,
     getHumanReview: (runId) => repository.getHumanReview(runId),
   }));

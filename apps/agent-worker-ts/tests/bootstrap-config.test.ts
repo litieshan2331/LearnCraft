@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { parseRedisConnection, readAgentQueuePoolConfigs, readModelRateLimitSettings, readModelGatewayRequestMaxRetries, readTavilyCircuitBreakerSettings } from '../src/bootstrap/config.js';
+import { parseRedisConnection, readAgentQueuePoolConfigs, readModelRateLimitSettings, readModelGatewayRequestMaxRetries, readPlanHumanReviewEnabled, readTavilyCircuitBreakerSettings } from '../src/bootstrap/config.js';
 
 describe('parseRedisConnection', () => {
   it('解析主机、端口、密码与数据库编号', () => {
@@ -22,6 +22,25 @@ describe('parseRedisConnection', () => {
   it('拒绝非 redis 协议与非法地址', () => {
     expect(() => parseRedisConnection('http://localhost:6379')).toThrow(/redis:\/\//);
     expect(() => parseRedisConnection('不是地址')).toThrow(/不合法/);
+  });
+});
+
+describe('readPlanHumanReviewEnabled', () => {
+  it('读取 true/false，并拒绝其它值', () => {
+    const previous = process.env.AGENT_PLAN_HUMAN_REVIEW_ENABLED;
+    try {
+      delete process.env.AGENT_PLAN_HUMAN_REVIEW_ENABLED;
+      expect(readPlanHumanReviewEnabled()).toBe(true);
+      process.env.AGENT_PLAN_HUMAN_REVIEW_ENABLED = 'false';
+      expect(readPlanHumanReviewEnabled()).toBe(false);
+      process.env.AGENT_PLAN_HUMAN_REVIEW_ENABLED = 'true';
+      expect(readPlanHumanReviewEnabled()).toBe(true);
+      process.env.AGENT_PLAN_HUMAN_REVIEW_ENABLED = '1';
+      expect(() => readPlanHumanReviewEnabled()).toThrow(/true 或 false/);
+    } finally {
+      if (previous === undefined) delete process.env.AGENT_PLAN_HUMAN_REVIEW_ENABLED;
+      else process.env.AGENT_PLAN_HUMAN_REVIEW_ENABLED = previous;
+    }
   });
 });
 

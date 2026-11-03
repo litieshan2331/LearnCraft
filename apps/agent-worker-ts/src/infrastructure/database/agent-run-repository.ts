@@ -33,7 +33,7 @@ export const TERMINAL_AGENT_RUN_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 const SQL_LOCK_RUN = [
-  'SELECT id, owner_id, goal_id, run_type, target_type, target_id, input_summary_json, status, retry_count, trace_id',
+  'SELECT id, owner_id, goal_id, run_type, target_type, target_id, input_summary_json, graph_version, status, retry_count, trace_id',
   'FROM agent.agent_runs',
   'WHERE id = $1',
   'FOR UPDATE',
@@ -51,7 +51,7 @@ const SQL_SELECT_STATUS = 'SELECT status FROM agent.agent_runs WHERE id = $1';
 
 const SQL_MARK_SUCCEEDED = [
   'UPDATE agent.agent_runs',
-  "SET status = 'succeeded', output_summary_json = $2::jsonb, input_tokens = $3, output_tokens = $4,",
+  "SET status = 'succeeded', output_summary_json = $2::jsonb, input_tokens = input_tokens + $3, output_tokens = output_tokens + $4,",
   'actual_model_profile = $5, error_code = NULL, error_summary = NULL, finished_at = now()',
   'WHERE id = $1',
 ].join(' ');
@@ -77,7 +77,7 @@ const SQL_INSERT_HUMAN_REVIEW = [
 
 const SQL_MARK_WAITING_FOR_HUMAN = [
   'UPDATE agent.agent_runs',
-  "SET status = 'waiting_for_human', error_code = NULL, error_summary = NULL, finished_at = NULL",
+  "SET status = 'waiting_for_human', input_tokens = input_tokens + $2, output_tokens = output_tokens + $3, error_code = NULL, error_summary = NULL, finished_at = NULL",
   "WHERE id = $1 AND status = 'running'",
 ].join(' ');
 
@@ -105,6 +105,8 @@ export interface AgentRunExecutionState {
   targetType: string;
   targetId: string;
   inputSummaryJson: Record<string, unknown>;
+  /** 创建任务时固定的工作流版本；恢复时不能被当前进程环境变量改写。 */
+  graphVersion?: string;
   status: string;
   shouldExecute: boolean;
 }
@@ -155,6 +157,7 @@ interface AgentRunRow {
   target_type: string;
   target_id: string;
   input_summary_json: Record<string, unknown> | null;
+  graph_version: string;
   status: string;
   retry_count: number;
   trace_id: string;
@@ -168,6 +171,7 @@ function toExecutionState(row: AgentRunRow, shouldExecute: boolean): AgentRunExe
     targetType: row.target_type,
     targetId: row.target_id,
     inputSummaryJson: row.input_summary_json ?? {},
+    graphVersion: row.graph_version,
     status: row.status,
     shouldExecute,
   };
@@ -321,6 +325,7 @@ export class PgAgentRunRepository {
       questions: Record<string, unknown>;
       expiresAt: string;
     };
+    usage: { inputTokens: number; outputTokens: number };
   }): Promise<void> {
     await this.inTransaction(async (client) => {
       const row = await this.getLockedRun(client, input.runId);
@@ -338,7 +343,11 @@ export class PgAgentRunRepository {
         JSON.stringify(input.review.questions),
         input.review.expiresAt,
       ]);
-      await client.query(SQL_MARK_WAITING_FOR_HUMAN, [row.id]);
+      await client.query(SQL_MARK_WAITING_FOR_HUMAN, [
+        row.id,
+        Math.max(0, input.usage.inputTokens),
+        Math.max(0, input.usage.outputTokens),
+      ]);
       await this.appendEvent(client, row.id, 'run.waiting_for_human', {
         review_id: input.review.reviewId,
         thread_id: input.review.threadId,
